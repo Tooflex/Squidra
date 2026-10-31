@@ -160,5 +160,26 @@
   "SQD-008": {
     "kind": "xctest",
     "filter": "^SquidraSecurityTests\\.ActionGatewayTests/"
+  },
+  "SQD-009-UNIT": {
+    "kind": "xctest",
+    "filter": "^SquidraSecurityTests\\.ApprovalTests/"
+  },
+  "SQD-009-SQL": {
+    "kind": "xctest",
+    "filter": "^SquidraSecurityTests\\.ApprovalSQLTests/"
+  },
+  "SQD-009-PERSISTENCE": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-approvals"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "approval_contracts",
+      "durable_approvals"
+    ]
   }
 }
