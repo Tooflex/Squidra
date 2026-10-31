@@ -725,3 +725,41 @@ contradictory/inferred observations, source-confidence corruption, a foreign
 frame, backwards recording time, and 129 legitimate observations. No migration,
 package upgrade, spatial transform, business HTTP tool or external provider is
 added. Automatic scheduling/recovery and evidence rendering remain later tasks.
+
+## Bounded location changes (SQD-015)
+
+```bash
+bash Scripts/test-issue.sh SQD-015-UNIT
+bash Scripts/test-issue.sh SQD-015
+```
+
+`WorldChangesQuery` requires a finite positive half-open valid-time window and
+an explicit independent knowledge time. Subject and location filters are
+actor-scoped. Location matches either the current location or supporting prior
+location; for a correction, prior means the replaced fact. Results distinguish
+an initial/repeated observation, a supported location-state change and a late
+correction. An unknown prior, inferred evidence, conflicting locations and a
+projection behind its journal are explicit. These are source-backed state
+changes, not proof of a physical trajectory. Each result carries current/prior
+facts and their supporting event IDs.
+
+Pages contain at most 128 changes, ordered by effective valid time and fact ID
+so equal-time observations have a stable tie-breaker. A typed cursor binds actor,
+window, knowledge time and filters, plus the captured projected/available journal
+watermarks. Later appends are excluded. When a correction was recorded before
+knownAt but projected after capture, its immutable correcting-event sequence
+lets the reader retain the old transaction visibility for the captured prefix.
+A fresh query sees the correction; continuing the old query neither loses the
+replaced fact nor changes its prior evidence. Missing closing provenance fails
+instead of guessing. SQL uses fixed private fragments and typed parameter
+bindings; no query value is interpolated as SQL grammar.
+
+The reader uses a repeatable-read snapshot per page, bounded deadlines, and at
+most 128 supporting predecessors per result. Excess support fails instead of
+truncating. Changed filters, foreign/future cursors and unknown scoped entities
+reject. An empty interval is invalid; an empty result means no matching recorded
+change in that snapshot, not proof an object never moved. No HTTP/business tool,
+geometry inference, package upgrade, migration or provider is introduced here.
+The SQL suite qualifies exact endpoints, origin/destination/replaced-location
+filters, equal-time paging, late projection catch-up, new appends, inferred/
+conflicting evidence and the 129-predecessor failure case.
