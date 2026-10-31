@@ -62,6 +62,10 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-020-OFFLINE
       - name: Verify bounded entity association and ambiguous identity handling
         run: bash Scripts/test-issue.sh SQD-021-UNIT
+      - name: Qualify bounded private OpenTelemetry spans
+        run: bash Scripts/test-issue.sh SQD-030-UNIT
+      - name: Qualify private model/tool/world tracing decorators
+        run: bash Scripts/test-issue.sh SQD-030-PORTS
       - name: Run grounded answer provenance tests
         run: bash Scripts/test-issue.sh SQD-019
       - name: Qualify strict timestamp wire dates
@@ -161,6 +165,9 @@ jobs:
       - name: Verify durable actor-scoped entity association
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-021-SQL
+      - name: Verify private tracing against actual PostgreSQL evidence
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh SQD-030-SQL
       - name: Verify empty selections fail
         run: |
           if bash Scripts/test-issue.sh T01 --filter '^MissingSuite/'; then
