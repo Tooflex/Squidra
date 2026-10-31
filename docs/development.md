@@ -94,7 +94,7 @@ case counts to catch selection mismatches.
 | Local macOS ARM64 (macOS 27), Swift 6.4.2 | `swift build`, 4 Domain tests, 8 runner checks, and executable smoke passed on 31 October 2026 |
 | Ubuntu 24.04 x86_64, Swift 6.4.2 | Build, Domain tests, runner checks, negative selection, executable smoke and lockfile check passed in run 41193634931 |
 | macOS 15 ARM64 hosted runner, Swift 6.4.2, Xcode 26.3 | Build, Domain tests, runner checks, negative selection, executable smoke and lockfile check passed in run 41193896734 |
-| Windows x86_64 | Unqualified: the first hosted probe found no Swift executable (run 41193488750) |
+| Windows x86_64 | Excluded from CI at the maintainer’s request; unqualified |
 | Linux ARM64, macOS x86_64 outside the observed CI runner | Not tested by this bootstrap |
 | Windows ARM64 | Deferred |
 
@@ -107,13 +107,12 @@ for the Domain tests. Package fetching requires network access once.
 
 `.github/workflows/bootstrap.yml` runs the Linux/macOS build, issue tests,
 empty-selection negative check, executable smoke test, and lockfile check.
-Windows qualification is reported separately and cannot certify support
-by being marked nonblocking. Workflows declare `contents: read`, do not
+Windows is excluded from CI and remains unqualified. Workflows declare `contents: read`, do not
 persist checkout credentials, and never use `pull_request_target`.
 
 After the real Linux/macOS jobs run successfully, their observed check
 names can be made required on `main`. Do not require invented check
-names or the nonblocking Windows probe. The maintainer requested no
+names or Windows checks. The maintainer requested no
 mandatory GitHub reviewers; the PR and history protections in
 [the bootstrap workflow](github-bootstrap.md) remain in effect.
 

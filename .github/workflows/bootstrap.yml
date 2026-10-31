@@ -140,33 +140,6 @@ jobs:
       - name: Verify lockfile remained unchanged
         run: git diff --exit-code -- Package.resolved
 
-  windows-probe:
-    name: Windows x86_64 qualification probe
-    runs-on: windows-2025
-    timeout-minutes: 30
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Probe installed toolchain, build, and Domain tests
-        id: probe
-        shell: pwsh
-        run: |
-          $swiftCommand = Get-Command swift -ErrorAction SilentlyContinue
-          if (-not $swiftCommand) { throw 'Swift unavailable: Windows remains unqualified' }
-          swift --version
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          swift build --force-resolved-versions
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          swift test --force-resolved-versions --disable-swift-testing
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Report qualification separately
-        if: always()
-        shell: pwsh
-        run: |
-          'Windows probe outcome: ${{ steps.probe.outcome }}. This nonblocking probe does not establish general Windows support.' >> $env:GITHUB_STEP_SUMMARY
-
   world-database:
     name: PostgreSQL 17 / PostGIS + pgvector
     runs-on: ubuntu-24.04
