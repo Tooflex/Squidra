@@ -260,5 +260,9 @@
   "T13-TIME": {
     "kind": "xctest",
     "filter": "^SquidraDomainTests\\.RFC3339Tests/"
+  },
+  "T13-LOCATION": {
+    "kind": "xctest",
+    "filter": "^SquidraToolsTests\\.WorldLocationToolTests/"
   }
 }
