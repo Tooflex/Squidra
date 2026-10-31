@@ -132,6 +132,9 @@ jobs:
       - name: Verify world read tools against real PostgreSQL
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh T13-READS
+      - name: Verify durable actor-scoped entity association
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh SQD-021-SQL
       - name: Verify empty selections fail
         run: |
           if bash Scripts/test-issue.sh T01 --filter '^MissingSuite/'; then

@@ -32,7 +32,7 @@ let package = Package(
             (name == "SquidraSecurity" ? [.product(name: "Crypto", package: "swift-crypto")] : []) +
             (name == "SquidraTools" ? [.byName(name: "SquidraWorld"), .byName(name: "SquidraSecurity"), .product(name: "JSONSchema", package: "swift-json-schema"), .product(name: "Crypto", package: "swift-crypto")] : []))
     } + [
-        .target(name: "SquidraPostgres", dependencies: ["SquidraDomain", "SquidraWorld", "SquidraAgentRuntime", "SquidraTools", "SquidraSecurity", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
+        .target(name: "SquidraPostgres", dependencies: ["SquidraDomain", "SquidraWorld", "SquidraAgentRuntime", "SquidraTools", "SquidraSecurity", "SquidraPerception", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
         .target(name: "SquidraMeta", dependencies: ["SquidraDomain", "SquidraCognition", "SquidraPerception", .product(name: "Crypto", package: "swift-crypto")]),
         .executableTarget(
             name: "SquidraServer",
@@ -50,7 +50,7 @@ let package = Package(
         .testTarget(name: "SquidraSecurityTests", dependencies: ["SquidraSecurity", "SquidraTools", "SquidraDomain", "SquidraTemporal", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
         .testTarget(name: "SquidraToolsTests", dependencies: ["SquidraDomain", "SquidraWorld", "SquidraSecurity", "SquidraTools", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
         .testTarget(name: "SquidraProtocolsTests", dependencies: ["SquidraProtocols", "SquidraCognition", "SquidraDomain", "SquidraWorld", .product(name: "JSONSchema", package: "swift-json-schema"), .product(name: "Crypto", package: "swift-crypto")]),
-        .testTarget(name: "SquidraPerceptionTests", dependencies: ["SquidraDomain", "SquidraPerception", "SquidraMeta", .product(name: "Crypto", package: "swift-crypto")]),
+        .testTarget(name: "SquidraPerceptionTests", dependencies: ["SquidraDomain", "SquidraPerception", "SquidraMeta", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log"), .product(name: "Crypto", package: "swift-crypto")]),
         .testTarget(name: "SquidraProviderContractTests", dependencies: ["SquidraDomain", .product(name: "JSONSchema", package: "swift-json-schema"), .product(name: "Crypto", package: "swift-crypto")]),
         .testTarget(name: "SquidraDomainTests", dependencies: ["SquidraDomain"]),
         .testTarget(name: "SquidraTemporalTests", dependencies: ["SquidraDomain", "SquidraTemporal"]),
