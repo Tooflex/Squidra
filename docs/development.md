@@ -163,3 +163,29 @@ The local database owner is a trusted development superuser; these
 triggers are not claimed to resist a database administrator who can
 disable them. Production role grants and the Swift storage adapter are
 separate work. No model embedding dimension is invented by this schema.
+
+## Runtime persistence (T03)
+
+```bash
+bash Scripts/test-issue.sh T03
+```
+
+This suite repeats the eleven world checks and verifies nine runtime
+persistence groups against real PostgreSQL. Runs use actor-scoped optimistic
+versions, monotonic counters and immutable terminal records. The action
+ledger reserves `(actor, tool, idempotency key)` atomically, preserves the
+original command, rejects conflicting reuse and returns an existing result
+on replay, including replay from another run belonging to the same actor.
+Scopes are sorted and deduplicated before comparison. Failed and unknown
+provider outcomes remain distinct; reserving a row does not execute a tool.
+
+The concurrency check holds the first reservation transaction open, observes
+the second database session blocked on a lock, then commits the first and
+verifies one created reservation and one replay of the same ledger ID.
+Approval records bind immutable command hashes and expiry metadata; outbox
+rows enforce actor-scoped deduplication. A rolled-back reservation leaves no
+row. These are SQL persistence primitives: the full legal run transition
+matrix, authenticated approval resolution using server time, tool gateway,
+outbox dispatcher, provider reconciliation and Swift storage adapter remain
+separate backlog work. Database access is trusted; arbitrary SQL access is
+not an application authorization boundary.

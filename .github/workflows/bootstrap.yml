@@ -96,3 +96,5 @@ jobs:
         run: bash Scripts/dev-db.sh build
       - name: Verify real database migrations and constraints
         run: bash Scripts/test-issue.sh T02
+      - name: Verify runtime ledger concurrency and recovery primitives
+        run: bash Scripts/test-issue.sh T03
