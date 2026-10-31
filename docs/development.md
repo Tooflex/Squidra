@@ -993,3 +993,21 @@ resume, empty-cache rebuild, stable current/historical facts, provenance,
 actor isolation, event-limit prefix/resume and invalid-cache checks. Test-only
 cache removal is scoped to the isolated actor. Two actual application-process
 restarts and HTTP response equivalence are qualified separately by SQD-025.
+
+`bash Scripts/test-issue.sh SQD-025` proves persistence with two actual
+`squidra serve` processes against one isolated migrated PostgreSQL database.
+Separate nonempty Swift seed/reset/verify suites write an immutable movement
+and correction, retain an unrelated actor, remove only the primary actor's
+mutable cache between processes and verify the rebuilt database afterwards.
+The first server starts from an empty projection; the second must rebuild again.
+
+The driver compares four canonical HTTP bodies: corrected location, historical
+knowledge, full change evidence and explicit no-evidence state. It independently
+checks actual source IDs, original timestamps, confidence, zone, watermarks and
+correction references, and rejects missing/altered counterexamples. Transport
+request IDs must be fresh and remain outside semantic comparison. SIGTERM and
+SIGINT both stop their owned process cleanly. Credentials stay in environment
+or private temporary files; both children and the loopback database are cleaned
+up on failure. The run prints its actual canonical evidence digest, not a fixed
+cross-run golden value (fixture UUIDs are freshly generated). No model/provider
+or production-data reset is involved.

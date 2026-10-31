@@ -341,5 +341,35 @@
       "projection_recovery_contracts",
       "durable_projection_recovery"
     ]
+  },
+  "SQD-025-SEED": {
+    "kind": "xctest",
+    "filter": "^SquidraIntegrationTests\\.RestartFixtureTests/testSeedDurableJournalAndPrivateDescriptor$"
+  },
+  "SQD-025-RESET": {
+    "kind": "xctest",
+    "filter": "^SquidraIntegrationTests\\.RestartFixtureTests/testRemoveOnlyOwnedProjectionCacheAfterFirstProcessStops$"
+  },
+  "SQD-025-VERIFY": {
+    "kind": "xctest",
+    "filter": "^SquidraIntegrationTests\\.RestartFixtureTests/testVerifySecondProcessRebuiltSameFactsAndUntouchedSources$"
+  },
+  "SQD-025": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/test-restart.sh"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "restart_fixture_seeded",
+      "first_process_read",
+      "restart_comparison_guards",
+      "first_process_shutdown",
+      "projection_cache_cleared",
+      "second_process_rebuilt_same_evidence",
+      "restart_database_verified",
+      "second_process_shutdown"
+    ]
   }
 }

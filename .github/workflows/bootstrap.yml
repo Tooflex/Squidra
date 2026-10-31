@@ -137,6 +137,9 @@ jobs:
       - name: Verify durable actor projection recovery
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-025-RECOVERY
+      - name: Verify two real server processes and rebuilt world evidence
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh SQD-025
       - name: Verify empty selections fail
         run: |
           if bash Scripts/test-issue.sh T01 --filter '^MissingSuite/'; then

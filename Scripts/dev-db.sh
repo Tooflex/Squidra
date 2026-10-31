@@ -109,7 +109,7 @@ case "${1:-}" in
   down)
     assert_owned; "$container_engine" rm -f "$db_container" >/dev/null
     echo 'Container removed; development data volume retained.' ;;
-  test-client|test-server|test-run-store|test-ledger|test-approvals|test-journal|test-projection|test-changes|test-world-tools|test-read-runs|test-recovery)
+  test-client|test-server|test-run-store|test-ledger|test-approvals|test-journal|test-projection|test-changes|test-world-tools|test-read-runs|test-recovery|test-restart)
     # Explicit integration-only exception: ephemeral TCP port on loopback, never 0.0.0.0.
     db_container="squidra-client-test-$(python3 -c 'import uuid;print(uuid.uuid4().hex[:12])')"
     credentials="$(mktemp)"; created=false
@@ -128,7 +128,9 @@ case "${1:-}" in
     test_port="${BASH_REMATCH[1]}"
     echo 'SQUIDRA_TEST_PASS:client_loopback_boundary'
     apply_migrations
-    if [[ "$1" == test-recovery ]]; then
+    if [[ "$1" == test-restart ]]; then
+      python3 Scripts/run-restart-tests.py "$credentials" "$test_port"
+    elif [[ "$1" == test-recovery ]]; then
       bash Scripts/test-issue.sh SQD-025-UNIT
       echo 'SQUIDRA_TEST_PASS:projection_recovery_contracts'
       python3 Scripts/run-db-client-tests.py "$credentials" "$test_port" SQD-025-RECOVERY-SWIFT
@@ -220,5 +222,5 @@ PY
       python3 Tests/SquidraPostgresTests/concurrency.py "$container_engine" "$db_container"
     fi
     ;;
-  *) echo 'Usage: Scripts/dev-db.sh build|up|up-local|migrate|test|test-runtime|test-client|test-server|test-run-store|test-ledger|test-approvals|test-journal|test-projection|test-changes|test-world-tools|test-read-runs|test-recovery|down' >&2; exit 2 ;;
+  *) echo 'Usage: Scripts/dev-db.sh build|up|up-local|migrate|test|test-runtime|test-client|test-server|test-run-store|test-ledger|test-approvals|test-journal|test-projection|test-changes|test-world-tools|test-read-runs|test-recovery|test-restart|down' >&2; exit 2 ;;
 esac
