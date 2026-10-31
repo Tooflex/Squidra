@@ -63,6 +63,8 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-009-UNIT
       - name: Run tool catalog contract tests
         run: bash Scripts/test-issue.sh SQD-006
+      - name: Run approval dispatch, routes and durable wait tests
+        run: bash Scripts/test-issue.sh SQD-009
       - name: Run fail-closed action gateway tests
         run: bash Scripts/test-issue.sh SQD-008
       - name: Run HTTP boundary tests

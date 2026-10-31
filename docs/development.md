@@ -364,7 +364,7 @@ Active accounting uses the injected monotonic clock and rounds consumed
 fractions up to milliseconds at checkpoints. Wall-clock jumps do not exhaust
 this budget; persisted UTC deadlines are advisory transport/correlation
 values. The dispatch permit also has an absolute monotonic deadline, which
-the future gateway must enforce. Timeouts and limit terminal reasons are
+the gateway must enforce. Timeouts and limit terminal reasons are
 computed from counters; callers cannot forge an unexhausted timeout/limit.
 A lost write acknowledgement detaches the controller so an unconfirmed
 checkpoint cannot issue another permit.
@@ -446,7 +446,7 @@ behavior. Original published schemas retain their standard minLength/
 maxLength keywords; no third-party checkout is patched.
 
 Execution requires a non-Codable grant whose initializer is internal to the
-tools module. The future gateway must mint it only after policy, approval
+tools module. The gateway mints it only after policy, approval
 and ledger checks. It binds actor/run, the full immutable definition, exact
 validated arguments, scope, idempotency key and monotonic deadline. Changed
 definitions/arguments are denied; R4 is always refused. There is currently
@@ -524,9 +524,9 @@ actor/tool/capability/target match with unexpired host permission and a nonempty
 requested scope contained in that permission. Delegation may reduce this scope.
 Policy exceptions become a static error. Authorization is bounded by the action
 and tool deadlines, checked again immediately before adapter invocation, and
-cannot waive R2–R4 approval. Until SQD-009 supplies verified approval resolution,
-these risks return approval-required without executing. R4 extra controls are
-also unimplemented and cannot be enabled by a caller boolean.
+cannot waive R2–R4 approval. SQD-009 enables R2/R3 only through a verified durable
+approval of the exact command. R4 extra controls remain unimplemented and cannot
+be enabled by a caller boolean or an approval ID.
 
 R1 and every non-read-only strategy require the ledger. Replays do not execute
 again. Revocation after claiming but before execution persists a known
@@ -570,6 +570,52 @@ host/database time, and proof verification also checks storage-observed time,
 so moving the host clock backwards cannot hide database-observed expiry. The
 adapter recomputes the persisted digest on every load and bounds each operation
 to five seconds or less. No applied migration changes. Crypto 5.0.3 remains pinned.
-This persistence slice does not yet enable sensitive tool dispatch or expose an
-approval route: the gateway/HTTP/runtime continuation must integrate it before
-SQD-009 is complete. No model-generated text constitutes an approval.
+The gateway, authenticated routes and runtime continuation below integrate this
+port. No model-generated text constitutes an approval.
+
+
+## Approval dispatch, API and continuation (SQD-009)
+
+```bash
+bash Scripts/test-issue.sh SQD-009
+```
+
+The host calls `ActionGateway.requestApproval` to reserve the exact command and
+persist a request, without executing or holding a human-waiting task. Later it
+supplies the returned approval ID to a fresh `GatewayAction`. R2/R3 and policy-
+required lower-risk calls verify the approved record before claiming the reserved
+ledger version. A guarded dispatcher rechecks policy, identity and expiry directly
+before the adapter. Concurrent approved calls have one claim winner. Pending or
+unknown records never grant a new permit; a failed pre-effect recheck records
+`notApplied` where storage is available. R4 stays denied. Merely supplying an ID,
+changing arguments/run/target/scope, or approving a different digest grants nothing.
+
+The live server mounts authenticated routes:
+
+- `GET /api/v1/approvals/:approval` returns a version-1 preview with tool/version,
+  target, exact `argumentsJSON` text, scope, fingerprint, digest and UTC RFC 3339
+  request/expiry times. Preserving arguments as text avoids preview rounding of
+  large integers or decimals. Internal provider receipts/results are not exposed.
+- `POST /api/v1/approvals/:approval/decision` accepts exactly three string members:
+  `schemaVersion: "1"`, `decision: "approved" | "denied" | "withdrawn"`, and the
+  displayed 64-character lowercase hex `digest`. This closed JSON grammar rejects
+  duplicate/escaped keys, extra fields, identities, timestamps, non-string values
+  and bodies over 1,024 bytes. Content-Type must be application/json.
+
+Actor and approver come exclusively from the authenticated boundary. Unknown or
+cross-actor approvals return 404; digest/opposite-decision/expiry conflicts return
+409. Repeated equal decisions preserve their version. An expired approved replay
+cannot authorize execution. The route persists a decision only; it does not run a
+tool or automatically start a continuation. HTTP errors retain the boundary's
+sanitized envelope, no-store, host request ID and origin checks.
+
+`ApprovalWait.suspend` verifies the request exists and binds the run's proposal
+fingerprint before durably entering WAITING_APPROVAL. `resume` loads that request
+and restores only a waiting run. Pending returns immediately; approved returns a
+controller in VALIDATING with its active budget intact; denied, withdrawn or
+expired fails without tool calls. It never mints a tool grant or bypasses budget
+accounting. A host/orchestrator must schedule continuation and then revalidate
+policy/budgets through the gateway. Automatic recovery of active crashed runs
+remains SQD-028. Tests cover controller restart with fixture stores; the separate
+SQL suites qualify durable run and approval reload/CAS on real PostgreSQL. No live
+external communication or destructive provider is registered by this integration.

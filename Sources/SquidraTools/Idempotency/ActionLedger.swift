@@ -20,6 +20,26 @@ public struct ActionLedger: Sendable {
         }
         return classify(reservation.record)
     }
+    // Gateway-only approval path. An existing reserved row may be claimed only
+    // after Security verifies its durable exact-command approval. Pending and
+    // unknown records never produce another permit, including after a crash.
+    func reserveForApproval(_ command: ActionCommand, deadline: ContinuousClock.Instant) async throws -> ActionRecord {
+        try Task.checkCancellation()
+        let reservation = try await store.reserve(command,deadline:deadline)
+        guard reservation.record.command.fingerprint == command.fingerprint,
+              reservation.record.command.idempotencyKey == command.idempotencyKey else { throw ActionLedgerError.conflict }
+        return reservation.record
+    }
+    func claimApproved(_ record: ActionRecord, deadline: ContinuousClock.Instant) async throws -> ActionPreparation {
+        try Task.checkCancellation()
+        guard record.status == .reserved else { return classify(record) }
+        do {
+            let claimed = try await store.update(record,to:.pending,result:nil,providerReference:nil,deadline:deadline)
+            return .dispatch(ActionDispatchPermit(record:claimed))
+        } catch ActionLedgerError.versionConflict {
+            return classify(try await store.load(actorID:record.command.actorID,id:record.id,deadline:deadline))
+        }
+    }
     public func complete(_ permit: ActionDispatchPermit, result: ActionResult, providerReference: String? = nil,
                          deadline: ContinuousClock.Instant) async throws -> ActionRecord {
         try result.validate()

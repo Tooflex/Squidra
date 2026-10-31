@@ -23,8 +23,10 @@ public struct GatewayAction: Sendable {
     public let scope: Set<String>
     public let idempotencyKey: String
     public let deadline: ContinuousClock.Instant
+    public let approvalID: UUID?
     public init(actorID: UUID, runID: UUID, tool: ToolID, target: String, arguments: Data,
-                scope: Set<String>, idempotencyKey: String, deadline: ContinuousClock.Instant) {
+                scope: Set<String>, idempotencyKey: String, deadline: ContinuousClock.Instant, approvalID: UUID? = nil) {
+        self.approvalID = approvalID
         self.actorID = actorID; self.runID = runID; self.tool = tool; self.target = target
         self.arguments = arguments; self.scope = scope; self.idempotencyKey = idempotencyKey; self.deadline = deadline
     }
@@ -43,95 +45,151 @@ public struct ActionGateway: Sendable {
     private let registrations: [ToolID:GatewayToolRegistration]
     private let policy: any PolicyEngine
     private let ledger: ActionLedger?
-    public init(tools: [GatewayToolRegistration], policy: any PolicyEngine = DenyAllActionPolicy(), ledger: ActionLedger? = nil) throws {
+    private let approvals: ApprovalCoordinator?
+    public init(tools: [GatewayToolRegistration], policy: any PolicyEngine = DenyAllActionPolicy(),
+                ledger: ActionLedger? = nil, approvals: ApprovalCoordinator? = nil) throws {
         guard tools.count <= 256, tools.allSatisfy({ $0.surface == .bounded }) else { throw ActionGatewayError.denied }
         catalog = try ToolCatalog(definitions: tools.map(\.definition))
         registrations = Dictionary(uniqueKeysWithValues: tools.map { ($0.definition.id,$0) })
-        self.policy = policy; self.ledger = ledger
+        self.policy = policy; self.ledger = ledger; self.approvals = approvals
+    }
+    private struct Prepared: Sendable {
+        let registration: GatewayToolRegistration
+        let context: ActionPolicyContext
+        let command: ActionCommand
+    }
+    private struct ApprovalReference: Sendable { let id: UUID; let binding: ApprovalBinding }
+
+    /// Persists a request and returns immediately. No worker waits for a decision.
+    public func requestApproval(_ action: GatewayAction) async throws -> ApprovalRecord {
+        let prepared = try prepare(action),context = prepared.context
+        let decision = try await evaluate(context)
+        guard context.definition.risk != .r4 else { throw ActionGatewayError.denied }
+        guard requiresApproval(context,decision:decision), let approvals, let ledger else { throw ActionGatewayError.denied }
+        let reserved = try await ledger.reserveForApproval(prepared.command,deadline:databaseDeadline(context.deadline))
+        guard reserved.status == .reserved else { throw ActionGatewayError.outcomeUnconfirmed }
+        let binding = try approvalBinding(reserved,action:action)
+        return try await approvals.request(binding,deadline:databaseDeadline(context.deadline))
     }
     public func invoke(_ action: GatewayAction) async throws -> GatewayActionResult {
-        try Task.checkCancellation()
-        guard let registration = registrations[action.tool] else { throw ToolError.unknownTool }
-        let definition = registration.definition
-        let now = ContinuousClock.now
-        guard action.deadline > now else { throw ActionGatewayError.timedOut }
-        let deadline = min(action.deadline, now.advanced(by: .milliseconds(definition.timeoutMilliseconds)))
-        let input = try catalog.validateInput(action.arguments, for: action.tool)
-        do {
-            guard try registration.resolveTarget(input) == action.target else { throw ActionGatewayError.denied }
-        } catch { throw ActionGatewayError.denied }
-        let command = try ActionCommand(actorID: action.actorID, runID: action.runID, tool: action.tool,
-            idempotencyKey: action.idempotencyKey, target: action.target, arguments: input, scope: Array(action.scope))
-        guard !action.scope.isEmpty else { throw ActionGatewayError.denied }
-        let context = ActionPolicyContext(actorID: action.actorID, runID: action.runID, definition: definition,
-            target: action.target, arguments: input, scope: action.scope, idempotencyKey: action.idempotencyKey, deadline: deadline)
-        try await authorize(context)
-        // Mandatory approval cannot be waived by a permissive/custom policy.
-        // SQD-009 supplies verified approvals; R4 also needs extra tool controls.
-        guard definition.risk.rawValue < ToolRisk.r2.rawValue else { throw ActionGatewayError.approvalRequired }
-        let needsLedger = definition.risk != .r0 || definition.idempotency != .readOnly
-        var permit: ActionDispatchPermit?
+        let prepared = try prepare(action),context = prepared.context
+        let decision = try await evaluate(context)
+        // Approval cannot waive missing R4 tool-specific extra controls.
+        guard context.definition.risk != .r4 else { throw ActionGatewayError.approvalRequired }
+        let needsApproval = requiresApproval(context,decision:decision)
+        let needsLedger = needsApproval || context.definition.risk != .r0 || context.definition.idempotency != .readOnly
+        var permit: ActionDispatchPermit?,reference: ApprovalReference?
         if needsLedger {
-            guard let ledger else { throw ActionGatewayError.denied }
-            switch try await ledger.prepare(command, deadline: databaseDeadline(deadline)) {
+            guard let ledger else { throw needsApproval ? ActionGatewayError.approvalRequired : .denied }
+            let preparation: ActionPreparation
+            if needsApproval {
+                guard let approvals, let id = action.approvalID else { throw ActionGatewayError.approvalRequired }
+                let record = try await ledger.reserveForApproval(prepared.command,deadline:databaseDeadline(context.deadline))
+                let binding = try approvalBinding(record,action:action)
+                _ = try await approvals.verify(actorID:action.actorID,id:id,binding:binding,deadline:databaseDeadline(context.deadline))
+                reference = ApprovalReference(id:id,binding:binding)
+                preparation = try await ledger.claimApproved(record,deadline:databaseDeadline(context.deadline))
+            } else { preparation = try await ledger.prepare(prepared.command,deadline:databaseDeadline(context.deadline)) }
+            switch preparation {
             case .dispatch(let claimed): permit = claimed
             case .replay(let record):
                 if let result = record.result, result.status == .succeeded {
                     guard let payload = result.payload else { throw ActionLedgerError.corruptRecord }
-                    _ = try catalog.validateOutput(payload, for: action.tool)
+                    _ = try catalog.validateOutput(payload,for:action.tool)
                 }
                 return .replay(record)
             case .inProgress(let record): return .inProgress(record)
             case .reconciliationRequired(let record): return .reconciliationRequired(record)
             }
         }
-        do { try await authorize(context) }
-        catch {
-            // No executor has run: a durable not-applied result is justified.
-            // If cancellation/storage prevents this write, pending remains safe.
-            if let permit, let ledger {
-                _ = try? await ledger.complete(permit, result: .failed(.notApplied), deadline: databaseDeadline(deadline))
+        let grant = ToolExecutionGrant(actorID:action.actorID,runID:action.runID,definition:context.definition,
+            target:action.target,input:context.arguments,scope:action.scope,idempotencyKey:action.idempotencyKey,deadline:context.deadline)
+        let state = DispatchState(),approvedReference = reference
+        let executor = GuardedExecutor(base:prepared.registration.executor,state:state,before:{
+            let current = try await evaluate(context)
+            if requiresApproval(context,decision:current) {
+                guard let approvals,let approvedReference else { throw ActionGatewayError.approvalRequired }
+                _ = try await approvals.verify(actorID:action.actorID,id:approvedReference.id,binding:approvedReference.binding,
+                    deadline:databaseDeadline(context.deadline))
             }
-            throw error
-        }
-        let grant = ToolExecutionGrant(actorID: action.actorID, runID: action.runID, definition: definition, target: action.target,
-            input: input, scope: action.scope, idempotencyKey: action.idempotencyKey, deadline: deadline)
+            try Task.checkCancellation()
+            guard ContinuousClock.now < context.deadline else { throw ActionGatewayError.timedOut }
+        })
         let result: UntrustedToolResult
-        do { result = try await catalog.invoke(action.tool, input: input, grant: grant, executor: registration.executor) }
+        do { result = try await catalog.invoke(action.tool,input:context.arguments,grant:grant,executor:executor) }
         catch {
-            if let permit, let ledger {
-                _ = try? await ledger.markUnknown(permit, deadline: databaseDeadline(deadline))
+            let (began,rejection) = await state.snapshot()
+            if let permit,let ledger {
+                if began { _ = try? await ledger.markUnknown(permit,deadline:databaseDeadline(context.deadline)) }
+                else { _ = try? await ledger.complete(permit,result:.failed(.notApplied),deadline:databaseDeadline(context.deadline)) }
             }
-            throw error
+            throw rejection ?? error
         }
-        if let permit, let ledger {
-            do {
-                _ = try await ledger.complete(permit, result: .succeeded(result, for: action.tool), deadline: databaseDeadline(deadline))
-            } catch is CancellationError { throw CancellationError() }
+        if let permit,let ledger {
+            do { _ = try await ledger.complete(permit,result:.succeeded(result,for:action.tool),deadline:databaseDeadline(context.deadline)) }
+            catch is CancellationError { throw CancellationError() }
             catch { throw ActionGatewayError.outcomeUnconfirmed }
         }
         return .completed(result)
     }
-    private func databaseDeadline(_ deadline: ContinuousClock.Instant) -> ContinuousClock.Instant {
-        min(deadline, .now.advanced(by: .seconds(4)))
+    private func prepare(_ action: GatewayAction) throws -> Prepared {
+        try Task.checkCancellation()
+        guard let registration = registrations[action.tool] else { throw ToolError.unknownTool }
+        let now = ContinuousClock.now
+        guard action.deadline > now else { throw ActionGatewayError.timedOut }
+        let deadline = min(action.deadline,now.advanced(by:.milliseconds(registration.definition.timeoutMilliseconds)))
+        let input = try catalog.validateInput(action.arguments,for:action.tool)
+        do { guard try registration.resolveTarget(input) == action.target else { throw ActionGatewayError.denied } }
+        catch { throw ActionGatewayError.denied }
+        let command = try ActionCommand(actorID:action.actorID,runID:action.runID,tool:action.tool,idempotencyKey:action.idempotencyKey,
+            target:action.target,arguments:input,scope:Array(action.scope))
+        guard !action.scope.isEmpty else { throw ActionGatewayError.denied }
+        let context = ActionPolicyContext(actorID:action.actorID,runID:action.runID,definition:registration.definition,
+            target:action.target,arguments:input,scope:action.scope,idempotencyKey:action.idempotencyKey,deadline:deadline)
+        return Prepared(registration:registration,context:context,command:command)
     }
-    private func authorize(_ context: ActionPolicyContext) async throws {
+    private func approvalBinding(_ record: ActionRecord, action: GatewayAction) throws -> ApprovalBinding {
+        guard record.command.actorID == action.actorID,record.command.runID == action.runID else { throw ApprovalError.conflict }
+        return try ApprovalBinding(actorID:action.actorID,runID:action.runID,ledgerID:record.id,commandHash:record.command.fingerprint)
+    }
+    private func requiresApproval(_ context: ActionPolicyContext, decision: ActionPolicyDecision) -> Bool {
+        context.definition.risk.rawValue >= ToolRisk.r2.rawValue || decision == .requiresApproval
+    }
+    private func databaseDeadline(_ deadline: ContinuousClock.Instant) -> ContinuousClock.Instant { min(deadline,.now.advanced(by:.seconds(4))) }
+    private func evaluate(_ context: ActionPolicyContext) async throws -> ActionPolicyDecision {
         do {
-            let decision = try await withThrowingTaskGroup(of: ActionPolicyDecision.self) { group in
+            let decision = try await withThrowingTaskGroup(of:ActionPolicyDecision.self) { group in
                 group.addTask { try await policy.evaluate(context) }
-                group.addTask { try await Task.sleep(until: context.deadline); throw ActionGatewayError.timedOut }
-                defer { group.cancelAll() }
-                return try await group.next()!
+                group.addTask { try await Task.sleep(until:context.deadline);throw ActionGatewayError.timedOut }
+                defer { group.cancelAll() };return try await group.next()!
             }
             try Task.checkCancellation()
             guard ContinuousClock.now < context.deadline else { throw ActionGatewayError.timedOut }
-            switch decision {
-            case .allow: return
-            case .deny: throw ActionGatewayError.denied
-            case .requiresApproval: throw ActionGatewayError.approvalRequired
-            }
+            guard decision != .deny else { throw ActionGatewayError.denied }
+            return decision
         } catch is CancellationError { throw CancellationError() }
         catch let error as ActionGatewayError { throw error }
         catch { throw ActionGatewayError.policyUnavailable }
+    }
+}
+
+private actor DispatchState {
+    private var began = false
+    private var rejection: (any Error)?
+    func begin() { began = true }
+    func reject(_ error: any Error) { rejection = error }
+    func snapshot() -> (Bool,(any Error)?) { (began,rejection) }
+}
+private struct GuardedExecutor: ToolExecutor {
+    let base: any ToolExecutor
+    let state: DispatchState
+    let before: @Sendable () async throws -> Void
+    func execute(_ call: ToolCall) async throws -> Data {
+        do { try await before() }
+        catch { await state.reject(error);throw error }
+        await state.begin()
+        try Task.checkCancellation()
+        guard ContinuousClock.now < call.deadline else { throw ToolError.timedOut }
+        return try await base.execute(call)
     }
 }
