@@ -58,6 +58,8 @@ jobs:
         run: bash Scripts/test-issue.sh T05-CONTRACTS
       - name: Qualify bounded private OpenTelemetry spans
         run: bash Scripts/test-issue.sh SQD-030-UNIT
+      - name: Qualify private model/tool/world tracing decorators
+        run: bash Scripts/test-issue.sh SQD-030-PORTS
       - name: Run grounded answer provenance tests
         run: bash Scripts/test-issue.sh SQD-019
       - name: Qualify strict timestamp wire dates

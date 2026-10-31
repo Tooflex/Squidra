@@ -53,7 +53,9 @@ internal struct TraceScope: Sendable {
     let depth: Int
     @TaskLocal static var current: TraceScope?
 }
+internal enum TraceAmbient { @TaskLocal static var session: TraceSession? }
 public struct TraceSession: Sendable {
+    public static var current: TraceSession? { TraceAmbient.session }
     public let correlation: TraceCorrelation
     internal let recorder: PrivateTraceRecorder
     internal let traceToken: UUID?
@@ -66,7 +68,9 @@ public struct TraceSession: Sendable {
         let child = await recorder.startChild(traceToken:traceToken,parent:parent,stage:stage,depth:depth)
         let scope = traceToken.map { TraceScope(traceToken:$0,spanToken:child,depth:depth) }
         do {
-            let value = try await TraceScope.$current.withValue(scope) { try await operation() }
+            let value = try await TraceAmbient.$session.withValue(self) {
+                try await TraceScope.$current.withValue(scope) { try await operation() }
+            }
             await recorder.finishChild(traceToken:traceToken,spanToken:child,outcome:Task.isCancelled ? .cancelled : .ok)
             return value
         } catch {

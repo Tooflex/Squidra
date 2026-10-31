@@ -304,5 +304,9 @@
   "SQD-030-UNIT": {
     "kind": "xctest",
     "filter": "^SquidraObservabilityTests\\.PrivateTracingTests/"
+  },
+  "SQD-030-PORTS": {
+    "kind": "xctest",
+    "filter": "^SquidraObservabilityTests\\.PortTracingTests/"
   }
 }

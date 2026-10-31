@@ -29,7 +29,9 @@ public actor PrivateTraceRecorder {
         let session = begin(correlation)
         let scope = session.traceToken.flatMap { trace in session.rootToken.map { TraceScope(traceToken:trace,spanToken:$0,depth:1) } }
         do {
-            let value = try await TraceScope.$current.withValue(scope) { try await operation(session) }
+            let value = try await TraceAmbient.$session.withValue(session) {
+                try await TraceScope.$current.withValue(scope) { try await operation(session) }
+            }
             finish(session.traceToken,outcome:Task.isCancelled ? .cancelled : .ok)
             return value
         } catch {
@@ -91,6 +93,7 @@ public actor PrivateTraceRecorder {
             if let value { span.setAttribute(key:key,value:value.uuidString.lowercased()) }
         }
     }
+    internal func noteDroppedSpan() { dropped += 1 }
     public func snapshot(clear:Bool = false) -> TraceSnapshot {
         let exported = exporter.snapshot(clear:clear), droppedCount = dropped+exported.dropped
         if clear { dropped = 0 }

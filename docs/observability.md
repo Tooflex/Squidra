@@ -81,3 +81,31 @@ and any optional remote exporter remain separate tasks under SQD-030. A future
 exporter must preserve the same content restrictions and require explicit host
 configuration. Rollback removes this isolated foundation and its dependency pin;
 no database migration or server behavior changes here.
+
+## Opt-in port decorators
+
+`TracedLanguageModel`, `TracedToolExecutor`, `TracedWorldRepository` and
+`TracedWorldProjector` use the current task-local private session when present.
+They are explicit composition choices; the server does not install them here.
+Every underlying operation executes once with its original values, error and
+cancellation semantics. Calls without a session remain unrecorded. Nested and
+concurrent sessions restore their own context; no SDK global context is used.
+
+A tool's granted run ID must match the session's host run ID to be recorded.
+A mismatch delegates normally and increments the dropped-span counter, avoiding
+false run attribution. Neither tracing context nor a decorator can create a tool
+grant or bypass gateway policy, catalog validation, approvals or the ledger.
+
+Provider/executor success means that the physical port returned. ModelRouter or
+the tool catalog can still reject that returned value. Host request IDs identify each attempt. Bounded provider-reported usage is
+recorded after response identity checks; those values are not measured spend
+or a validated business result. Confirmed journal
+appends record their event UUID and sequence; page spans record their snapshot
+watermark, and projection spans record applied event/checkpoint references.
+Prompts, model/tool identity strings, targets, idempotency keys, source labels,
+raw output, payloads and exception descriptions remain excluded.
+
+Run `bash Scripts/test-issue.sh SQD-030-PORTS` for actual ModelRouter/ActionGateway
+composition and controlled journal/projection qualification. Server activation,
+durable PostgreSQL trace composition and run/HTTP end-to-end tracing remain open
+under SQD-030.

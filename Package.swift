@@ -30,7 +30,7 @@ let package = Package(
             (name == "SquidraCognition" ? [.byName(name: "SquidraWorld"), .byName(name: "SquidraTools")] : []) +
             (name == "SquidraAgentRuntime" ? [.byName(name: "SquidraSecurity"), .byName(name: "SquidraCognition"), .byName(name: "SquidraTools")] : []) +
             (name == "SquidraProtocols" ? [.byName(name: "SquidraCognition")] : []) +
-            (name == "SquidraObservability" ? [.product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"), .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"), .product(name: "NIOConcurrencyHelpers", package: "swift-nio")] : []) +
+            (name == "SquidraObservability" ? [.byName(name: "SquidraCognition"), .byName(name: "SquidraWorld"), .byName(name: "SquidraTools"), .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"), .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"), .product(name: "NIOConcurrencyHelpers", package: "swift-nio")] : []) +
             (name == "SquidraSecurity" ? [.product(name: "Crypto", package: "swift-crypto")] : []) +
             (name == "SquidraTools" ? [.byName(name: "SquidraWorld"), .byName(name: "SquidraSecurity"), .product(name: "JSONSchema", package: "swift-json-schema"), .product(name: "Crypto", package: "swift-crypto")] : []))
     } + [
@@ -52,7 +52,7 @@ let package = Package(
         .testTarget(name: "SquidraSecurityTests", dependencies: ["SquidraSecurity", "SquidraTools", "SquidraDomain", "SquidraTemporal", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
         .testTarget(name: "SquidraToolsTests", dependencies: ["SquidraDomain", "SquidraWorld", "SquidraSecurity", "SquidraTools", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
         .testTarget(name: "SquidraProtocolsTests", dependencies: ["SquidraProtocols", "SquidraCognition", "SquidraDomain", "SquidraWorld", .product(name: "JSONSchema", package: "swift-json-schema"), .product(name: "Crypto", package: "swift-crypto")]),
-        .testTarget(name: "SquidraObservabilityTests", dependencies: ["SquidraObservability", .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"), .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core")]),
+        .testTarget(name: "SquidraObservabilityTests", dependencies: ["SquidraObservability", "SquidraDomain", "SquidraCognition", "SquidraSecurity", "SquidraTools", "SquidraWorld", .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"), .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core")]),
         .testTarget(name: "SquidraDomainTests", dependencies: ["SquidraDomain"]),
         .testTarget(name: "SquidraTemporalTests", dependencies: ["SquidraDomain", "SquidraTemporal"]),
         .testTarget(name: "SquidraCognitionTests", dependencies: ["SquidraDomain", "SquidraCognition", "SquidraTools", "SquidraSecurity", "SquidraWorld", "SquidraMeta"]),
