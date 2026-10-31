@@ -172,7 +172,7 @@ public actor RunController {
     }
     private func accountIteration(_ candidate: inout RunSnapshot, iteration: IterationCheckpoint, progress: HostVerifiedProgress) {
         switch progress {
-        case .newEvidence, .confirmedEffect:
+        case .newEvidence, .confirmedEffect, .validatedResponse:
             candidate.noProgressRepetitions = 0; candidate.lastNoProgressIteration = nil
         case .none:
             candidate.noProgressRepetitions = candidate.lastNoProgressIteration == iteration ? candidate.noProgressRepetitions + 1 : 1

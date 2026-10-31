@@ -907,3 +907,28 @@ then the grounded validator, plus deliberately corrupted host DTOs under
 test-only visibility. Decoding verifies consistency and scope; the producer's
 PostgreSQL source validation is qualified separately by T13-READS. It grants no
 execution rights and is not a cryptographic source-authentication mechanism.
+
+`ReadRunEngine` implements one durable, read-only iteration for T14: persisted
+validation/context/planning states, a ModelRouter-validated ReadPlanner proposal,
+host ActionCommand digest, persisted attempt reservation, ActionGateway read,
+scoped evidence decoding, structured answer routing, grounded validation and
+only then completion. It has no executor port, effectful tool, retry loop or
+active-crash recovery shortcut. Host identity/scope, model consent/options,
+freshness policy and tighter RunBudget values remain explicit inputs.
+
+The caller deadline tightens the active budget. One absolute monotonic deadline
+bounds planning, tool and answer waits; two model routes share a single
+conservative cost-reservation ceiling. Provider/source text stays outside system
+instructions. Partial or unknown answers remain explicit; invalid citations
+cannot complete a run. HostVerifiedProgress.validatedResponse records a completed
+grounding check, including a legitimate unknown, without claiming new evidence
+or a confirmed effect. It is not persisted or supplied by model text. Existing
+no-progress loop bookkeeping still applies to unvalidated iterations.
+
+Cancellation uses owned, awaited cleanup with the existing bounded RunStore I/O
+contract. Ambiguous checkpoint writes detach the controller and grant no further
+dispatch; the engine reports recoveryRequired rather than inventing a terminal
+state. The facade does not resume such a run. `T14-RUN` qualifies actual
+planner/router/gateway/decoder/validator composition with controlled model,
+read-port and store fixtures; its reported token/cost values are fixture data.
+Real PostgreSQL run composition and HTTP integration require separate checks.
