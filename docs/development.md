@@ -862,3 +862,14 @@ preserves the SQD-015 snapshot contract without claiming that a user-editable
 cursor is tamper-proof. `T13-CHANGES` qualifies the real gateway with controlled
 query fixtures; SQD-015 separately qualifies PostgreSQL pagination. No HTTP
 route, production registration or durable watch tool is introduced here.
+
+`bash Scripts/test-issue.sh T13-READS` qualifies both world read tools through
+ActionGateway and a real isolated PostgreSQL journal/projection. Its scenario
+uses a late correction to compare frozen continuation, fresh corrected reads
+and historical knowledge, while asserting retained source references,
+confidence, IANA zone, unknown occurrence time and fractional timestamp
+normalization. It also verifies explicit no-evidence/not-found results and
+policy denial. The helper uses an ephemeral loopback-only container, temporary
+credentials outside command arguments and existing migration/cleanup guards.
+Linux CI runs it; macOS runs the deterministic tool suites. This is read-path
+composition evidence, not provider, HTTP orchestration or watch qualification.
