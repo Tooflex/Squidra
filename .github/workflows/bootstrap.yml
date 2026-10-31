@@ -60,6 +60,8 @@ jobs:
         run: bash Scripts/test-issue.sh T11-CONTRACTS
       - name: Verify consent-bound offline frame imports
         run: bash Scripts/test-issue.sh SQD-020-OFFLINE
+      - name: Verify bounded entity association and ambiguous identity handling
+        run: bash Scripts/test-issue.sh SQD-021-UNIT
       - name: Run grounded answer provenance tests
         run: bash Scripts/test-issue.sh SQD-019
       - name: Qualify strict timestamp wire dates

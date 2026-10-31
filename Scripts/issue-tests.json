@@ -308,5 +308,9 @@
   "SQD-020-OFFLINE": {
     "kind": "xctest",
     "filter": "^SquidraPerceptionTests\\.FrameImportTests/"
+  },
+  "SQD-021-UNIT": {
+    "kind": "xctest",
+    "filter": "^SquidraPerceptionTests\\.EntityAssociationTests/"
   }
 }
