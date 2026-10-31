@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:squidra:tool:fixture.echo@1.0.0:output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "entityId", "message"],
+  "properties": {
+    "schemaVersion": {"type":"string", "const":"1", "maxLength":1},
+    "entityId": {"type":"string", "format":"uuid", "maxLength":36},
+    "message": {"type":"string", "maxLength":128}
+  }
+}

@@ -131,5 +131,9 @@
   "SQD-005-SQL": {
     "kind": "xctest",
     "filter": "^SquidraAgentRuntimeTests\\.RunSQLTests/"
+  },
+  "SQD-006": {
+    "kind": "xctest",
+    "filter": "^SquidraToolsTests\\.ToolCatalogTests/"
   }
 }

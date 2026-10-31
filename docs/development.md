@@ -395,3 +395,70 @@ query on a closed channel with an unresumed promise. The same guarded path
 is used by readiness. The issue command reports three groups; nested reports
 record the 19 unit cases and one SQL scenario separately. CI runs unit policy
 checks on macOS and the complete SQL integration on Linux.
+
+## Tool catalog and strict schemas (SQD-006)
+
+```bash
+bash Scripts/test-issue.sh SQD-006
+```
+
+The standalone JSONSchema runtime is pinned to
+[swift-json-schema 0.14.2](https://github.com/ajevans99/swift-json-schema/releases/tag/v0.14.2).
+Its SwiftSyntax transitive revision is locked too; the application does not
+use the macro/builder products. Existing dependency pins are preserved and
+Domain gains no SDK dependency. Shared identity, SemVer, risk and definition
+values live in Domain so policy and the gateway can share them without a
+Tools/Security dependency cycle. This qualification covers the restricted
+Squidra profile below, not complete JSON Schema standards conformance.
+
+`ToolCatalog` is an immutable registry keyed by namespace, name and exact
+SemVer; it never selects an implicit latest version. Definitions include
+capability, R0–R4 risk, idempotency strategy, timeout and input/output byte
+limits. Root input/output schemas use Draft 2020-12, an exact tool/version
+URN and required string `schemaVersion:"1"`. Every object explicitly sets
+`additionalProperties:false`. Unknown versions, keywords and formats fail
+registration rather than silently weakening validation.
+
+The profile supports typed objects/arrays/strings/numbers/integers/booleans/
+null, required fields, enum/const, numeric bounds and bounded anyOf/oneOf/
+allOf branches. Strings need maxLength, arrays maxItems and numeric types
+minimum/maximum. Only uuid and date-time formats are supported and asserted.
+All references, pattern evaluation and dynamic/unlisted features are rejected;
+no schema reference triggers a network request. Catalogs have at most 256
+definitions; schemas are at most 32 KiB, 256 nodes and depth 8, with at most
+64 object properties or four branches per composition. Arrays allow at most
+256 items; schema string limits allow at most 16,384 Unicode code points.
+
+Payload scanning rejects duplicate decoded keys (including escaped aliases),
+invalid UTF-8/JSON, depth over 32, more than 4,096 nodes, non-finite numbers
+and number tokens longer than 128 bytes. Descriptor byte limits are capped
+at 1 MiB. Validation and the adapter consume the same compact serialized
+JSON tree. Its number tokens/order are preserved; these bytes are not claimed
+to implement RFC-8785 canonicalization for semantic fingerprinting.
+
+Qualification found that SDK 0.14.2 counts graphemes for string lengths.
+The adapter translates those assertions to registered, checked-Sendable
+string validators that count Unicode scalars and preserve the selected
+format assertion. This happens inside the schema engine so composition
+semantics remain correct. The committed tests cover combining characters
+under both min/max length and oneOf, plus anyOf/allOf, enum, null and boolean
+behavior. Original published schemas retain their standard minLength/
+maxLength keywords; no third-party checkout is patched.
+
+Execution requires a non-Codable grant whose initializer is internal to the
+tools module. The future gateway must mint it only after policy, approval
+and ledger checks. It binds actor/run, the full immutable definition, exact
+validated arguments, scope, idempotency key and monotonic deadline. Changed
+definitions/arguments are denied; R4 is always refused. There is currently
+no production grant issuer or real tool registered. Calls are deadline-bound
+and cooperative; validation alone does not provide sandboxing, durable
+idempotency, approval or external-effect confirmation.
+
+Output passes its schema before becoming an `UntrustedToolResult`. Unknown
+instruction fields are rejected; schema-allowed instruction-like text stays
+untrusted data and is never interpreted. Public errors use static codes and
+messages without provider details. A timeout/invalid output/failure confirms
+no result, including when an external effect might remain uncertain. The
+sixteen tests run offline with fixture executors and cover zero invocation
+for invalid input/denied grants, cancellation, timeout and error redaction.
+No model calls, costs or real side effects are measured by this suite.
