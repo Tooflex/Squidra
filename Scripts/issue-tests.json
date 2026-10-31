@@ -10,5 +10,26 @@
   "SQD-003": {
     "kind": "xctest",
     "filter": "^SquidraCognitionTests\\.ModelRouterTests/"
+  },
+  "T02": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test"
+    ],
+    "tests": [
+      "network_boundary",
+      "repeatable_migration",
+      "checksum_guard",
+      "transactional_rollback",
+      "extensions",
+      "tables",
+      "confidence",
+      "intervals",
+      "foreign_keys",
+      "journal_immutable",
+      "pagination"
+    ]
   }
 }

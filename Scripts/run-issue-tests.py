@@ -11,6 +11,36 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def run_command_suite(issue, suite):
+    """Count explicit assertion markers emitted by a real integration command."""
+    expected = suite.get("tests", [])
+    command = suite.get("command", [])
+    if (not expected or len(set(expected)) != len(expected)
+            or not all(isinstance(name, str) and re.fullmatch(r"[a-z][a-z0-9_]*", name) for name in expected)
+            or not command or not all(isinstance(arg, str) for arg in command)):
+        raise ValueError("Invalid integration suite mapping")
+    output = ROOT / ".build/issue-tests" / issue
+    output.mkdir(parents=True, exist_ok=True)
+    summary_path = output / "summary.json"
+    summary_path.unlink(missing_ok=True)
+    (output / "results.xml").unlink(missing_ok=True)
+    result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+    print(result.stdout, end="")
+    print(result.stderr, file=sys.stderr, end="")
+    prefix = "SQUIDRA_TEST_PASS:"
+    markers = [line[len(prefix):] for line in result.stdout.splitlines() if line.startswith(prefix)]
+    valid = len(markers) == len(set(markers)) and set(markers).issubset(set(expected))
+    passed = len(markers) if valid else 0
+    status = ("execution_failed" if result.returncode else
+              "invalid_report" if not valid else
+              "passed" if passed == len(expected) else "incomplete_execution")
+    summary = {"issue": issue, "selected": len(expected), "passed": passed,
+               "failed": 0, "skipped": 0, "not_executed": len(expected) - passed, "status": status}
+    summary_path.write_text(json.dumps(summary, indent=2) + "\n")
+    print(json.dumps(summary), flush=True)
+    return result.returncode or (0 if status == "passed" else 1)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("issue")
@@ -18,8 +48,14 @@ def main():
     args = parser.parse_args()
     manifest = json.loads((ROOT / "Scripts/issue-tests.json").read_text())
     suite = manifest.get(args.issue)
-    if suite is None or suite.get("kind") != "xctest":
-        parser.error("Issue has no executable XCTest mapping; no test was run")
+    if suite is None:
+        parser.error("Issue has no executable mapping; no test was run")
+    if suite.get("kind") == "command":
+        if args.filter is not None:
+            parser.error("Integration suites require all mapped assertion names; filters are not supported")
+        return run_command_suite(args.issue, suite)
+    if suite.get("kind") != "xctest":
+        parser.error("Unsupported test suite kind; no test was run")
     pattern = args.filter if args.filter is not None else suite["filter"]
     try:
         regex = re.compile(pattern)

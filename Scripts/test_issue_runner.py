@@ -104,6 +104,41 @@ class RunnerTests(unittest.TestCase):
             env=self.env, capture_output=True)
         self.assertEqual(result.returncode, 2)
 
+    def command_fixture(self, markers, code=0):
+        command = self.root / "command.py"
+        command.write_text("import sys\n" + "\n".join("print(" + repr(line) + ")" for line in markers)
+                           + f"\nsys.exit({code})\n")
+        manifest_path = self.root / "Scripts/issue-tests.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["T02"] = {"kind": "command", "command": [sys.executable, str(command)], "tests": ["first", "second"]}
+        manifest_path.write_text(json.dumps(manifest))
+        result = subprocess.run([sys.executable, str(self.root / "Scripts/run-issue-tests.py"), "T02"],
+                                env=self.env, text=True, capture_output=True)
+        summary = json.loads((self.root / ".build/issue-tests/T02/summary.json").read_text())
+        return result.returncode, summary
+
+    def test_command_suite_requires_all_real_assertion_markers(self):
+        code, summary = self.command_fixture(["SQUIDRA_TEST_PASS:first", "SQUIDRA_TEST_PASS:second"])
+        self.assertEqual(code, 0)
+        self.assertEqual(summary["passed"], 2)
+
+    def test_command_partial_report_cannot_pass(self):
+        code, summary = self.command_fixture(["SQUIDRA_TEST_PASS:first"])
+        self.assertEqual(code, 1)
+        self.assertEqual(summary["not_executed"], 1)
+
+    def test_command_duplicate_or_unknown_markers_fail(self):
+        for markers in [["SQUIDRA_TEST_PASS:first"] * 2, ["SQUIDRA_TEST_PASS:other"]]:
+            with self.subTest(markers=markers):
+                code, summary = self.command_fixture(markers)
+                self.assertEqual(code, 1)
+                self.assertEqual(summary["status"], "invalid_report")
+
+    def test_command_preserves_process_failure(self):
+        code, summary = self.command_fixture(["SQUIDRA_TEST_PASS:first"], code=7)
+        self.assertEqual(code, 7)
+        self.assertEqual(summary["status"], "execution_failed")
+
 
 if __name__ == "__main__":
     unittest.main()
