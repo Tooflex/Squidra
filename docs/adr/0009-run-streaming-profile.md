@@ -98,7 +98,35 @@ cancellation, precise/scoped/expired cursors, SSE injection resistance and limit
 Official fixture expectations are preserved; profile diagnostics use Squidra's
 typed errors rather than copying SDK error descriptions.
 
-No route, stream server, database migration, background worker or reconnect
-integration is implemented by this contract PR. T05 stays open for those steps.
-No package version changes are needed. Rollback removes the isolated producer,
-its tests and immutable qualification artifacts.
+The initial contract qualification adds no HTTP route or worker. Durable storage
+is qualified separately below; T05 stays open for transport and execution
+integration. No package version changes are needed. Reverting only the producer
+contracts removes their tests and immutable qualification artifacts.
+
+## Durable replay store (T05 persistence)
+
+The actor-bound `PostgresRunEventStore` stores publication metadata independently
+of the runtime FSM. This permits acceptance before worker creation without
+conferring dispatch authority. Identical creation preserves its original expiry;
+a changed binding or retention period conflicts. Atomic append requires the next
+sequence and validates the complete stored chronology before publication.
+
+Limits are 128 events and 1 MiB of canonical JSON per run, 64 KiB per event,
+16 events / 256 KiB per append, 32 events per page and 1–604800 seconds retention.
+Overflows fail without truncation or partial writes. Owned stream lookup precedes
+cursor decoding; another actor cannot probe cursor validity. Reopening a client
+replays the same persisted SSE frames and never calls a model, tool or worker.
+Malformed chronology, missing rows or inconsistent counters fail closed.
+
+Expiry is logical: expired streams cannot be read, appended or revived. Physical
+purging, backup retention and restore remain T12 work. Event UPDATE is forbidden;
+DELETE is reserved for future authorized retention maintenance, and any premature
+hole invalidates replay. Partial history pruning is not yet supported.
+
+`bash Scripts/test-issue.sh T05-SQL` qualifies two-client replay, ownership,
+creation/append conflicts, concurrent CAS, transactional database-error rollback,
+immutable events, corruption, byte/event/batch limits, expiry and cancellation.
+Migration `runtime/002_run_events.sql` is forward-only. Deploy its matching schema
+manifest and binary together: reverting only the binary fails schema readiness.
+No HTTP endpoint, worker ownership or atomic runtime/result publication is added
+by this persistence change; T05 remains open for those integrations.

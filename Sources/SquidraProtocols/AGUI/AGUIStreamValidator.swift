@@ -29,6 +29,13 @@ public struct AGUIStreamValidator: Sendable {
         try next.consume(json,sequence:sequence)
         self = next
     }
+    /// Restore a read-only frame after structural validation. This cannot mint
+    /// a producer event or a GroundedAnswer proof for a subsequent append.
+    public mutating func acceptStored(_ json: Data, sequence: Int64) throws -> AGUIReplayRecord {
+        guard let binding else { throw AGUIError.invalidEvent }
+        try accept(json,sequence:sequence)
+        return AGUIReplayRecord(binding:binding,sequence:sequence,json:json)
+    }
     private mutating func consume(_ json: Data, sequence: Int64) throws {
         guard sequence == nextSequence,sequence <= Self.maximumEvents,!isTerminal else { throw AGUIError.invalidSequence }
         guard json.count <= AGUIEvent.maximumBytes else { throw AGUIError.eventTooLarge }

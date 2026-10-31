@@ -316,5 +316,21 @@
       "client_loopback_boundary",
       "durable_grounded_read_runs"
     ]
+  },
+  "T05-SQL-SWIFT": {
+    "kind": "xctest",
+    "filter": "^SquidraProtocolsTests\\.RunEventSQLTests/"
+  },
+  "T05-SQL": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-run-events"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "durable_scoped_run_replay"
+    ]
   }
 }

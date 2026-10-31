@@ -129,6 +129,9 @@ jobs:
       - name: Verify durable grounded read runs against PostgreSQL
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh T14-SQL
+      - name: Verify bounded durable AG-UI replay
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh T05-SQL
       - name: Verify empty selections fail
         run: |
           if bash Scripts/test-issue.sh T01 --filter '^MissingSuite/'; then
