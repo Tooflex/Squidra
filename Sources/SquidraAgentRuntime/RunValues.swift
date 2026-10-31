@@ -79,7 +79,9 @@ public enum AttemptOutcome: String, Codable, Sendable { case confirmed, retryabl
 
 /// Only trusted host code supplies these after contract-specific verification.
 /// Provider text, new IDs, transitions and ledger reservations are not progress.
-public enum HostVerifiedProgress: Sendable { case none, newEvidence, confirmedEffect }
+/// validatedResponse requires a completed host grounding check, including a
+/// legitimate unknown answer; it does not claim new evidence or an effect.
+public enum HostVerifiedProgress: Sendable { case none, newEvidence, confirmedEffect, validatedResponse }
 
 struct InvocationCheckpoint: Codable, Equatable, Sendable {
     var key: String

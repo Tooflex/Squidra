@@ -292,5 +292,9 @@
   "T14-EVIDENCE": {
     "kind": "xctest",
     "filter": "^SquidraCognitionTests\\.WorldReadEvidenceDecoderTests/"
+  },
+  "T14-RUN": {
+    "kind": "xctest",
+    "filter": "^SquidraAgentRuntimeTests\\.ReadRunEngineTests/"
   }
 }
