@@ -109,7 +109,7 @@ case "${1:-}" in
   down)
     assert_owned; "$container_engine" rm -f "$db_container" >/dev/null
     echo 'Container removed; development data volume retained.' ;;
-  test-client|test-server|test-run-store|test-ledger|test-approvals|test-journal|test-projection|test-changes|test-world-tools|test-read-runs|test-recovery|test-restart|test-run-events|test-run-publication|test-run-workers|test-run-http)
+  test-client|test-server|test-run-store|test-ledger|test-approvals|test-journal|test-projection|test-changes|test-world-tools|test-read-runs|test-recovery|test-restart|test-run-events|test-run-publication|test-run-workers|test-run-http|test-associations)
     # Explicit integration-only exception: ephemeral TCP port on loopback, never 0.0.0.0.
     db_container="squidra-client-test-$(python3 -c 'import uuid;print(uuid.uuid4().hex[:12])')"
     credentials="$(mktemp)"; created=false
@@ -150,6 +150,13 @@ case "${1:-}" in
     elif [[ "$1" == test-run-events ]]; then
       python3 Scripts/run-db-client-tests.py "$credentials" "$test_port" T05-SQL-SWIFT
       echo 'SQUIDRA_TEST_PASS:durable_scoped_run_replay'
+    elif [[ "$1" == test-associations ]]; then
+      apply_migrations
+      echo 'SQUIDRA_TEST_PASS:repeatable_association_migration'
+      bash Scripts/test-issue.sh SQD-021-UNIT
+      echo 'SQUIDRA_TEST_PASS:association_contracts'
+      python3 Scripts/run-db-client-tests.py "$credentials" "$test_port" SQD-021-SQL-SWIFT
+      echo 'SQUIDRA_TEST_PASS:durable_association_cas'
     elif [[ "$1" == test-world-tools ]]; then
       python3 Scripts/run-db-client-tests.py "$credentials" "$test_port" T13-READS-SQL
       echo 'SQUIDRA_TEST_PASS:gateway_postgres_evidence'
@@ -234,5 +241,5 @@ PY
       python3 Tests/SquidraPostgresTests/concurrency.py "$container_engine" "$db_container"
     fi
     ;;
-  *) echo 'Usage: Scripts/dev-db.sh build|up|up-local|migrate|test|test-runtime|test-client|test-server|test-run-store|test-ledger|test-approvals|test-journal|test-projection|test-changes|test-world-tools|test-read-runs|test-recovery|test-restart|test-run-events|test-run-publication|test-run-workers|test-run-http|down' >&2; exit 2 ;;
+  *) echo 'Usage: Scripts/dev-db.sh build|up|up-local|migrate|test|test-runtime|test-client|test-server|test-run-store|test-ledger|test-approvals|test-journal|test-projection|test-changes|test-world-tools|test-read-runs|test-recovery|test-restart|test-run-events|test-run-publication|test-run-workers|test-run-http|test-associations|down' >&2; exit 2 ;;
 esac

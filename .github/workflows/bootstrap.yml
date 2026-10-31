@@ -56,6 +56,12 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-003
       - name: Verify pinned AG-UI producer and bounded SSE replay contracts
         run: bash Scripts/test-issue.sh T05-CONTRACTS
+      - name: Verify documented provider matrix and authored offline fixtures
+        run: bash Scripts/test-issue.sh T11-CONTRACTS
+      - name: Verify consent-bound offline frame imports
+        run: bash Scripts/test-issue.sh SQD-020-OFFLINE
+      - name: Verify bounded entity association and ambiguous identity handling
+        run: bash Scripts/test-issue.sh SQD-021-UNIT
       - name: Run grounded answer provenance tests
         run: bash Scripts/test-issue.sh SQD-019
       - name: Qualify strict timestamp wire dates
@@ -152,6 +158,9 @@ jobs:
       - name: Verify authenticated run acceptance and bounded SSE replay
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh T05-HTTP
+      - name: Verify durable actor-scoped entity association
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh SQD-021-SQL
       - name: Verify empty selections fail
         run: |
           if bash Scripts/test-issue.sh T01 --filter '^MissingSuite/'; then

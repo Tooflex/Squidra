@@ -435,5 +435,35 @@
       "client_loopback_boundary",
       "authenticated_bounded_run_transport"
     ]
+  },
+  "T11-CONTRACTS": {
+    "kind": "xctest",
+    "filter": "^SquidraProviderContractTests\\.ProviderContractTests/"
+  },
+  "SQD-020-OFFLINE": {
+    "kind": "xctest",
+    "filter": "^SquidraPerceptionTests\\.FrameImportTests/"
+  },
+  "SQD-021-UNIT": {
+    "kind": "xctest",
+    "filter": "^SquidraPerceptionTests\\.EntityAssociationTests/"
+  },
+  "SQD-021-SQL-SWIFT": {
+    "kind": "xctest",
+    "filter": "^SquidraPerceptionTests\\.AssociationSQLTests/"
+  },
+  "SQD-021-SQL": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-associations"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "repeatable_association_migration",
+      "association_contracts",
+      "durable_association_cas"
+    ]
   }
 }
