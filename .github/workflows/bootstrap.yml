@@ -83,3 +83,16 @@ jobs:
         shell: pwsh
         run: |
           'Windows probe outcome: ${{ steps.probe.outcome }}. This nonblocking probe does not establish general Windows support.' >> $env:GITHUB_STEP_SUMMARY
+
+  world-database:
+    name: PostgreSQL 17 / PostGIS + pgvector
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build pinned database image
+        run: bash Scripts/dev-db.sh build
+      - name: Verify real database migrations and constraints
+        run: bash Scripts/test-issue.sh T02

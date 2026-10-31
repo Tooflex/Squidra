@@ -69,11 +69,11 @@ fail. Skipped tests are counted separately and never counted as passed.
 A fully skipped selection fails. Reports are under
 `.build/issue-tests/<issue>/`; stale reports are removed before discovery.
 
-`Scripts/issue-tests.json` currently maps only T01. A future issue must
-add a real suite before using the runner; unmapped issues fail explicitly.
-The runner currently supports XCTest only. SQL, browser, documentation,
-and Swift Testing suites require explicit future runner support, rather
-than being reported as executed by this bootstrap.
+`Scripts/issue-tests.json` registers explicit XCTest or integration-command
+suites. Unmapped issues fail. Command suites must emit every unique mapped
+`SQUIDRA_TEST_PASS:<name>` marker after executing its assertion; partial,
+unknown, duplicate, or missing markers cannot pass, and process failures
+are preserved. Swift Testing requires separate discovery/report support.
 
 Negative checks:
 
@@ -116,3 +116,50 @@ names can be made required on `main`. Do not require invented check
 names or the nonblocking Windows probe. The maintainer requested no
 mandatory GitHub reviewers; the PR and history protections in
 [the bootstrap workflow](github-bootstrap.md) remain in effect.
+
+## PostgreSQL world schema (T02)
+
+The database image pins the multiarchitecture PostgreSQL base by manifest
+digest and PGDG extension package versions. Qualified locally on Linux
+ARM64 in Podman: PostgreSQL 17.11, PostGIS 3.6.4 and pgvector 0.8.7.
+The Linux CI database job separately verifies AMD64. Debian transitive
+packages come from signed repositories; the final built image itself is
+not published or claimed bit-for-bit reproducible.
+
+```bash
+bash Scripts/dev-db.sh build
+bash Scripts/test-issue.sh T02
+bash Scripts/dev-db.sh up
+bash Scripts/dev-db.sh migrate
+bash Scripts/dev-db.sh down
+```
+
+Docker or Podman must already be running. `SQUIDRA_CONTAINER_ENGINE` can
+select an explicit engine executable. The helper never initializes or
+resets a VM, publishes a host port, or deletes the development data volume.
+The integration test uses a unique, labelled, network-isolated container,
+a random credential file, and temporary data; cleanup targets only that
+container. Development credentials are generated into the gitignored
+`infra/.env.squidra-db` with mode 0600 and never printed.
+
+The Compose alternative also publishes no host ports and requires a
+random `SQUIDRA_DB_PASSWORD` supplied outside version control. Its named
+volume is separate from the CLI helper's volume; do not switch between
+these interfaces expecting automatic data/credential migration.
+
+Migrations in `Migrations/world` and then `Migrations/runtime` execute
+inside one advisory-locked transaction. Applied filenames and SHA-256
+checksums are recorded. Repeating the same migrations does nothing;
+editing an applied migration fails and rolls back. Add a forward
+migration instead. Tests verify a forced DDL failure leaves neither the
+new table nor migration metadata behind.
+
+World tables enforce actor-scoped foreign keys, bounded confidence,
+finite timestamps, positive stored fact/transaction intervals, and
+append-only journal/link rows. Journal entity arrays are authoritative;
+derived links are inserted atomically and cannot add undeclared entities.
+Correction uses a new event and may update projections, never raw history.
+The local database owner is a trusted development superuser; these
+triggers are not claimed to resist a database administrator who can
+disable them. Production role grants and the Swift storage adapter are
+separate work. No model embedding dimension is invented by this schema.

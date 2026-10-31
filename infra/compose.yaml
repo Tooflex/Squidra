@@ -1,0 +1,21 @@
+services:
+  postgres:
+    build:
+      context: .
+      dockerfile: postgres.Dockerfile
+    image: localhost/squidra-postgres:17-postgis3.6.4-vector0.8.7
+    environment:
+      POSTGRES_DB: squidra
+      POSTGRES_USER: squidra
+      POSTGRES_PASSWORD: ${SQUIDRA_DB_PASSWORD:?Set a random local password outside version control}
+    # No host port is published. Use exec, or add an explicit loopback-only override.
+    ports: []
+    volumes:
+      - squidra-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U squidra -d squidra']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+volumes:
+  squidra-postgres-data:
