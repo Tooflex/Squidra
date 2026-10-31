@@ -1,0 +1,6 @@
+{
+  "T01": {
+    "kind": "xctest",
+    "filter": "^SquidraDomainTests\\.ConfidenceTests/"
+  }
+}
