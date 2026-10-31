@@ -189,3 +189,47 @@ matrix, authenticated approval resolution using server time, tool gateway,
 outbox dispatcher, provider reconciliation and Swift storage adapter remain
 separate backlog work. Database access is trusted; arbitrary SQL access is
 not an application authorization boundary.
+
+## Local HTTP boundary (T04)
+
+```bash
+bash Scripts/test-issue.sh T04
+```
+
+`HTTPBoundary` wraps the complete router before route matching, with
+`BoundaryContext` carrying a fresh host-generated request UUID and the
+configured actor UUID. The host must inject a credential generated from
+32 cryptographically random bytes, encoded as lowercase hexadecimal. It is
+never supplied by source defaults or returned by configuration diagnostics.
+The token's syntax is validated; syntax alone cannot prove entropy. The
+configuration supplies `127.0.0.1` as its listener host. HTTP startup and
+configuration loading are composed in SQD-001; the bootstrap executable
+still does not serve HTTP.
+
+Every data/action route, including unknown paths, requires exactly one
+valid Bearer header. An actor header cannot change identity. Resource
+handlers must call `context.requireActor` before accessing an actor-scoped
+resource and pass that authenticated identity to storage. Only exact GET
+requests for the four ADR-006 probes bypass authentication; their handlers
+must produce minimal, secret-free bodies. They do not bypass origin policy.
+
+An approved UI origin is mandatory and matched exactly. Remote origins
+require HTTPS; HTTP is limited to local UI hosts. Wildcards, null origins,
+userinfo, paths, queries and fragments are rejected. Preflights allow only
+listed methods and headers. CORS never grants cookie credentials. Nonbrowser
+clients without an Origin still require authentication for protected routes.
+The streaming body collector checks actual bytes without relying on
+Content-Length, restores bounded content for route decoding, and runs under
+the same monotonic deadline as the handler. Cancellation is cooperative:
+adapters and handlers must release I/O on cancellation; this does not kill
+uncooperative code or undo an external effect. SSE needs its own bounded
+streaming contract in T05 rather than this buffered request/response path.
+
+Errors use the strict ADR-007 v1 envelope and static public messages, never
+raw exceptions. Details are omitted pending route-specific filtered schemas.
+All responses carry `X-Request-ID` and `Cache-Control: no-store`. PageRequest
+validates a default limit of 50, maximum 100, and a positive Int64 journal
+cursor; each listing handler must apply it to an actor-filtered query.
+T04 tests execute Hummingbird's in-memory router adapter, not a live network
+listener. Probe tests use minimal fixtures; they do not certify dependency
+readiness, which belongs to SQD-001.
