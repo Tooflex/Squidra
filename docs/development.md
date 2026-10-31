@@ -970,3 +970,26 @@ against the strict Squidra RFC 3339 profile before target authorization.
 `T13-HTTP` covers real router and live HTTP requests. T13-READS qualifies actual
 PostgreSQL cursor rejection; T04, SQD-009 and SQD-001 regress boundary,
 approval and real process/signal lifecycle behavior.
+
+`WorldProjectionRecovery` replays a frozen actor journal snapshot from the last
+valid location-projection checkpoint. Defaults are pages of 64, at most 10,000
+visited events and 30 seconds; callers may tighten or explicitly configure the
+bounded limits. It validates version, actor, event identity/order, cursor,
+watermark and checkpoint progress. A committed prefix survives a failed replay
+and can resume; no success report is returned for an incomplete snapshot.
+A concurrent later append is outside the captured snapshot and remains explicit
+projection lag in subsequent reads.
+
+Live composition runs recovery through Hummingbird's beforeServerStarts hook:
+the owned database client runs, but HTTP cannot precede replay. Unsupported,
+corrupt or over-limit recovery fails startup with the existing static error.
+An empty projection cache can rebuild entirely from the immutable journal;
+a missing checkpoint with orphaned rows fails instead of overwriting data.
+Arbitrary cache-corruption repair is not claimed. Recovery itself deletes
+neither cache nor source data.
+
+`SQD-025-RECOVERY` runs bounded/cancellation contract tests and real PostgreSQL
+resume, empty-cache rebuild, stable current/historical facts, provenance,
+actor isolation, event-limit prefix/resume and invalid-cache checks. Test-only
+cache removal is scoped to the isolated actor. Two actual application-process
+restarts and HTTP response equivalence are qualified separately by SQD-025.

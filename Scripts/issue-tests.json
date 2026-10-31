@@ -320,5 +320,26 @@
   "T13-HTTP": {
     "kind": "xctest",
     "filter": "^SquidraServerTests\\.WorldReadRouteTests/"
+  },
+  "SQD-025-UNIT": {
+    "kind": "xctest",
+    "filter": "^SquidraWorldTests\\.WorldRecoveryTests/"
+  },
+  "SQD-025-RECOVERY-SWIFT": {
+    "kind": "xctest",
+    "filter": "^SquidraWorldTests\\.WorldRecoverySQLTests/"
+  },
+  "SQD-025-RECOVERY": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-recovery"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "projection_recovery_contracts",
+      "durable_projection_recovery"
+    ]
   }
 }

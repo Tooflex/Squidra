@@ -16,14 +16,18 @@ enum ServerComposition {
         let approvals = ApprovalCoordinator(store:PostgresApprovalStore(client:client),clock:SystemClock(timeZone:try! IANATimeZone(identifier:"Etc/UTC")))
         let world = PostgresLocationProjection(actorID:configuration.boundary.actorID,client:client)
         let worldReads = try WorldReadRoutes(actorID:configuration.boundary.actorID,world:world,changes:world)
+        let recovery = WorldProjectionRecovery(actorID:configuration.boundary.actorID,
+            repository:PostgresWorldRepository(client:client),projector:world)
         return application(configuration: configuration, readiness: { try await readiness.check() }, client: client,
-            approvals:approvals,ledger:PostgresActionLedger(client:client),worldReads:worldReads)
+            approvals:approvals,ledger:PostgresActionLedger(client:client),worldReads:worldReads,
+            beforeServing:{ _ = try await recovery.recover() })
     }
 
     static func application(configuration: ServerConfiguration,
                             readiness: @escaping @Sendable () async throws -> DatabaseReadiness,
                             client: PostgresClient? = nil, approvals: ApprovalCoordinator? = nil, ledger: (any ActionLedgerStore)? = nil,
-                            worldReads: WorldReadRoutes? = nil) -> some ApplicationProtocol {
+                            worldReads: WorldReadRoutes? = nil,
+                            beforeServing: (@Sendable () async throws -> Void)? = nil) -> some ApplicationProtocol {
         let router = Router(context: BoundaryContext.self)
         for path in ["/health/live", "/health"] {
             router.get(RouterPath(path)) { _, _ in json(.ok, "{\"status\":\"alive\"}") }
@@ -49,6 +53,7 @@ enum ServerComposition {
             },
             logger: Logger(label: "squidra.server", factory: { _ in SwiftLogNoOpLogHandler() }))
         if let client { app.addServices(client) }
+        if let beforeServing { app.beforeServerStarts(perform:beforeServing) }
         return app
     }
 
