@@ -296,5 +296,9 @@
   "T14-RUN": {
     "kind": "xctest",
     "filter": "^SquidraAgentRuntimeTests\\.ReadRunEngineTests/"
+  },
+  "T05-CONTRACTS": {
+    "kind": "xctest",
+    "filter": "^SquidraProtocolsTests\\.AGUIContractTests/"
   }
 }

@@ -1,7 +1,8 @@
 # SQUIDRA Architecture Decision Records
 
-T00 contract-resolution record. All ADRs below are **Accepted** following
+T00 contract-resolution record. ADR-000 through ADR-008 are **Accepted** following
 explicit maintainer approval on 31 October 2026, per T00 acceptance criteria.
+Later implementation ADRs state their own acceptance status.
 
 ## Sources (verified)
 
@@ -13,7 +14,7 @@ explicit maintainer approval on 31 October 2026, per T00 acceptance criteria.
 Full fingerprints are in the plan's `sources.json`. The SRS is written in
 French; citations below give the exact section and a short English gloss.
 
-**Numbering note.** This repo series (`ADR-000`–`ADR-008`) is distinct from
+**Numbering note.** This repo series (`ADR-000`–`ADR-009`) is distinct from
 the SDD's own §14 table (`ADR-001`–`ADR-010`). References to the latter are
 always written `SDD §14 ADR-00X`.
 
@@ -30,6 +31,7 @@ always written `SDD §14 ADR-00X`.
 | [ADR-006](0006-health-routes.md) | Health and readiness routes | Canonical routes + SRS aliases |
 | [ADR-007](0007-envelopes-cancellation-deadlines.md) | Envelopes, cancellation, deadlines | Error envelope, 3-clock model |
 | [ADR-008](0008-time-conventions.md) | Time conventions | UTC/RFC 3339, IANA zones, `[start, end)` intervals |
+| [ADR-009](0009-run-streaming-profile.md) | Bounded AG-UI producer and replay | Official 1.0 snapshot, grounded text, scoped SSE cursors; acceptance on PR merge |
 
 ## Master mapping table (SRS ↔ SDD)
 
