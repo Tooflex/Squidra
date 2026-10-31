@@ -56,6 +56,8 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-003
       - name: Verify pinned AG-UI producer and bounded SSE replay contracts
         run: bash Scripts/test-issue.sh T05-CONTRACTS
+      - name: Qualify bounded private OpenTelemetry spans
+        run: bash Scripts/test-issue.sh SQD-030-UNIT
       - name: Run grounded answer provenance tests
         run: bash Scripts/test-issue.sh SQD-019
       - name: Qualify strict timestamp wire dates

@@ -1,5 +1,5 @@
 {
-  "originHash" : "fffb15c245b5638018e85c0d9225400addd4a0b5c25ef2c10980939d90cae61b",
+  "originHash" : "2fd574bd1a778210d1d7bf2113a007c046c2568b7a031838d0b8a99f4cd5baab",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -17,6 +17,15 @@
       "state" : {
         "revision" : "341e11f65d8e24cf87e9aae427c040f0084ada4e",
         "version" : "2.28.1"
+      }
+    },
+    {
+      "identity" : "opentelemetry-swift-core",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/open-telemetry/opentelemetry-swift-core.git",
+      "state" : {
+        "revision" : "c6fcee77cfc21ba400366f12475217c7b6e1d605",
+        "version" : "2.6.0"
       }
     },
     {

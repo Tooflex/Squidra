@@ -20,6 +20,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", exact: "1.16.2"),
         .package(url: "https://github.com/ajevans99/swift-json-schema.git", exact: "0.14.2"),
         .package(url: "https://github.com/apple/swift-crypto.git", exact: "5.0.3"),
+        .package(url: "https://github.com/apple/swift-nio.git", exact: "2.104.0"),
+        .package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git", exact: "2.6.0"),
     ],
     targets: [
         .target(name: "SquidraDomain"),
@@ -28,6 +30,7 @@ let package = Package(
             (name == "SquidraCognition" ? [.byName(name: "SquidraWorld"), .byName(name: "SquidraTools")] : []) +
             (name == "SquidraAgentRuntime" ? [.byName(name: "SquidraSecurity"), .byName(name: "SquidraCognition"), .byName(name: "SquidraTools")] : []) +
             (name == "SquidraProtocols" ? [.byName(name: "SquidraCognition")] : []) +
+            (name == "SquidraObservability" ? [.product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"), .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"), .product(name: "NIOConcurrencyHelpers", package: "swift-nio")] : []) +
             (name == "SquidraSecurity" ? [.product(name: "Crypto", package: "swift-crypto")] : []) +
             (name == "SquidraTools" ? [.byName(name: "SquidraWorld"), .byName(name: "SquidraSecurity"), .product(name: "JSONSchema", package: "swift-json-schema"), .product(name: "Crypto", package: "swift-crypto")] : []))
     } + [
@@ -49,6 +52,7 @@ let package = Package(
         .testTarget(name: "SquidraSecurityTests", dependencies: ["SquidraSecurity", "SquidraTools", "SquidraDomain", "SquidraTemporal", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
         .testTarget(name: "SquidraToolsTests", dependencies: ["SquidraDomain", "SquidraWorld", "SquidraSecurity", "SquidraTools", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
         .testTarget(name: "SquidraProtocolsTests", dependencies: ["SquidraProtocols", "SquidraCognition", "SquidraDomain", "SquidraWorld", .product(name: "JSONSchema", package: "swift-json-schema"), .product(name: "Crypto", package: "swift-crypto")]),
+        .testTarget(name: "SquidraObservabilityTests", dependencies: ["SquidraObservability", .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"), .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core")]),
         .testTarget(name: "SquidraDomainTests", dependencies: ["SquidraDomain"]),
         .testTarget(name: "SquidraTemporalTests", dependencies: ["SquidraDomain", "SquidraTemporal"]),
         .testTarget(name: "SquidraCognitionTests", dependencies: ["SquidraDomain", "SquidraCognition", "SquidraTools", "SquidraSecurity", "SquidraWorld", "SquidraMeta"]),
