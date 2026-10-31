@@ -31,5 +31,35 @@
       "journal_immutable",
       "pagination"
     ]
+  },
+  "T03": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-runtime"
+    ],
+    "tests": [
+      "network_boundary",
+      "repeatable_migration",
+      "checksum_guard",
+      "transactional_rollback",
+      "extensions",
+      "tables",
+      "confidence",
+      "intervals",
+      "foreign_keys",
+      "journal_immutable",
+      "pagination",
+      "runtime_tables",
+      "ledger_replay",
+      "ledger_conflict",
+      "scoped_keys",
+      "optimistic_runs",
+      "approval_constraints",
+      "outbox_unique",
+      "reservation_rollback",
+      "concurrent_reservation"
+    ]
   }
 }

@@ -89,7 +89,7 @@ case "${1:-}" in
   down)
     assert_owned; "$container_engine" rm -f "$db_container" >/dev/null
     echo 'Container removed; development data volume retained.' ;;
-  test)
+  test|test-runtime)
     db_container="squidra-test-$(python3 -c 'import uuid;print(uuid.uuid4().hex[:12])')"
     credentials="$(mktemp)"; failure_root="$(mktemp -d)"; created=false
     cleanup() {
@@ -127,6 +127,10 @@ PY
     [[ "$intact" == t ]] || { echo 'Failed migration left changes behind' >&2; exit 1; }
     echo 'SQUIDRA_TEST_PASS:transactional_rollback'
     sql < Tests/SquidraPostgresTests/world.sql
+    if [[ "$1" == test-runtime ]]; then
+      sql < Tests/SquidraPostgresTests/runtime.sql
+      python3 Tests/SquidraPostgresTests/concurrency.py "$container_engine" "$db_container"
+    fi
     ;;
-  *) echo 'Usage: Scripts/dev-db.sh build|up|migrate|test|down' >&2; exit 2 ;;
+  *) echo 'Usage: Scripts/dev-db.sh build|up|migrate|test|test-runtime|down' >&2; exit 2 ;;
 esac
