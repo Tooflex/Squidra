@@ -135,6 +135,9 @@ jobs:
       - name: Verify owned bounded read workers and joined shutdown
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh T05-WORKERS
+      - name: Verify authenticated run acceptance and bounded SSE replay
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh T05-HTTP
       - name: Verify empty selections fail
         run: |
           if bash Scripts/test-issue.sh T01 --filter '^MissingSuite/'; then

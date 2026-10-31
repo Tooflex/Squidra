@@ -348,5 +348,21 @@
       "client_loopback_boundary",
       "owned_bounded_read_workers"
     ]
+  },
+  "T05-HTTP-SWIFT": {
+    "kind": "xctest",
+    "filter": "^SquidraServerTests\\.RunRoutesSQLTests/"
+  },
+  "T05-HTTP": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-run-http"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "authenticated_bounded_run_transport"
+    ]
   }
 }

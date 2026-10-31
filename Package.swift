@@ -15,6 +15,7 @@ let package = Package(
         .executable(name: "squidra", targets: ["SquidraServer"]),
     ],
     dependencies: [
+        .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", exact: "2.13.0"),
         .package(url: "https://github.com/hummingbird-project/hummingbird.git", exact: "2.28.1"),
         .package(url: "https://github.com/vapor/postgres-nio.git", exact: "1.33.2"),
         .package(url: "https://github.com/apple/swift-log.git", exact: "1.16.2"),
@@ -40,10 +41,11 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "PostgresNIO", package: "postgres-nio"),
                 .product(name: "Hummingbird", package: "hummingbird"),
+                .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
             ]
         ),
         .testTarget(name: "SquidraPostgresSwiftTests", dependencies: ["SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
-        .testTarget(name: "SquidraServerTests", dependencies: ["SquidraServer", "SquidraAgentRuntime", "SquidraCognition", "SquidraWorld", "SquidraProtocols", "SquidraDomain", "SquidraSecurity", "SquidraTools", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log"), .product(name: "HummingbirdTesting", package: "hummingbird")], exclude: ["server_process.py"]),
+        .testTarget(name: "SquidraServerTests", dependencies: ["SquidraTemporal", "SquidraServer", "SquidraAgentRuntime", "SquidraCognition", "SquidraWorld", "SquidraProtocols", "SquidraDomain", "SquidraSecurity", "SquidraTools", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log"), .product(name: "HummingbirdTesting", package: "hummingbird")], exclude: ["server_process.py"]),
         .testTarget(name: "SquidraAgentRuntimeTests", dependencies: ["SquidraDomain", "SquidraAgentRuntime", "SquidraCognition", "SquidraWorld", "SquidraTools", "SquidraSecurity", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
         .testTarget(name: "SquidraWorldTests", dependencies: ["SquidraDomain", "SquidraWorld", "SquidraPostgres", .product(name: "Crypto", package: "swift-crypto"), .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")], exclude: ["Fixtures"]),
         .testTarget(name: "SquidraSecurityTests", dependencies: ["SquidraSecurity", "SquidraTools", "SquidraDomain", "SquidraTemporal", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),

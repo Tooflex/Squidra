@@ -1,6 +1,6 @@
 # ADR-009: Bounded AG-UI producer and resumable run transport
 
-- Status: Proposed in the linked PR; acceptance occurs on its authorized merge.
+- Status: Initial protocol profile accepted by the authorized merge of [PR #134](https://github.com/Tooflex/Squidra/pull/134). Later implementation sections follow their own linked PR qualification.
 - Date: 2026-10-31
 - Sources: T05 / SRS §3,8; ADR-001/002/007/008; official AG-UI 1.0.
 
@@ -82,9 +82,9 @@ explicit expiration response (planned 410). A fresh read cannot silently begin
 mid-history. Reconnect only replays persisted events and never dispatches an
 action or starts another run.
 
-The future HTTP implementation must preserve the existing bearer/origin/body
-boundary and bounded connection deadline. Add Last-Event-ID to preflight handling
-only with its route and tests. A closed SSE connection alone does not mean a run
+The HTTP implementation must preserve the existing bearer/origin/body boundary
+and bounded handler deadline. Last-Event-ID preflight support is qualified with
+its route and tests below. A closed SSE connection alone does not mean a run
 failed; a transport/replay error must not fabricate a RUN_ERROR terminal event.
 Durable worker ownership, event retention, replay authorization, atomic status/
 event publication and process-restart behavior require separate qualification.
@@ -215,3 +215,65 @@ This adds no HTTP route, provider activation, automatic recovery scanner or
 application lifecycle wiring. The future host composition must own a run trace
 for the worker's full lifetime; inheriting an already closed HTTP trace scope
 does not qualify end-to-end tracing. T05 and SQD-030 remain open for that work.
+
+## Authenticated HTTP transport (T05 HTTP)
+
+The custom version-1 transport exposes:
+
+- `POST /api/v1/runs`: with host-configured submission, accept the closed JSON
+  object `schemaVersion` (string `"1"`), `question`, `entityId` and `intent`
+  (`historical`, `latest_observation`, `current`). The decoded question is at most
+  4096 UTF-8 bytes; the body is at most 32768 bytes, including JSON escapes. Reject
+  duplicate/unknown fields, nulls, invalid types and unpermitted entity IDs.
+  Identity, effective scope, model/consent/cost settings and fresh run/thread/
+  request/trace IDs come from the authenticated host. Return 202 only after a
+  durable claim and worker registration, with relative status/events links.
+- `GET /api/v1/runs/:run`: return actor-owned publication phase, terminal/output-
+  ready flags, retention/sequence metadata and optional runtime diagnostics. The
+  runtime checkpoint's frozen state names are preserved. Runtime `Completed`
+  alone is not output completion: only publication `succeeded` makes
+  `outputReady` true. Never return questions, owner nonces or raw errors.
+- `GET /api/v1/runs/:run/events`: return one finite bounded SSE batch (at most
+  32 retained events, 1100000 encoded bytes), with existing canonical event IDs.
+  Authenticated clients reconnect using `Last-Event-ID`; it is not an auth grant.
+  Perform owned lookup before cursor validation. Empty nonterminal reads may
+  long-poll for at most 20 seconds, then return a heartbeat comment with no ID.
+  Bound all handler I/O to 25 seconds within the default 30-second HTTP boundary.
+  Bodies are already bounded/materialized when headers are returned; there is no
+  unbounded body-writer task. Socket delivery still uses the server's normal
+  transport backpressure/idle lifecycle, not a claimed absolute transfer SLA.
+
+This is finite GET-SSE replay/long polling with POST-202 acceptance, not a drop-in
+AG-UI HttpAgent POST-SSE adapter. Native EventSource cannot supply the required
+bearer header; a client needs authenticated fetch/stream parsing and reconnection.
+Advance the cursor only after processing an event. A fresh view can read from the
+start; a consumer must not discard its presentation state while keeping a cursor
+past the grounded-answer event. GET/status/reconnection and transport failures
+never dispatch, resume, cancel or fabricate a business RUN_ERROR.
+
+Malformed/future/foreign cursors return 400; unknown owned-scope IDs return 404;
+expired retention returns 410/EXPIRED. Corrupt/unavailable storage fails closed.
+Private errors retain the fixed filtered envelope and fresh host request ID;
+503 now has UNAVAILABLE, and 410 has EXPIRED. Add Last-Event-ID only to the existing
+single-approved-origin preflight allowlist; no cookies, wildcard origin or URL
+credential is introduced. All responses retain no-store.
+
+Default live composition exposes authenticated read-only persisted status/replay.
+POST remains 503/UNAVAILABLE until a host supplies its permitted entities and a
+bounded read coordinator; this change activates no model/provider or fixture
+fallback. The worker service is registered after the database client. Hummingbird
+appends its HTTP service last; ServiceLifecycle gracefully stops them in reverse
+order, so HTTP admission stops, worker cleanup/publication is joined, then the
+client stops. The explicit ServiceLifecycle root declaration uses the already
+locked 2.13.0; no package version or lockfile change is needed.
+
+`bash Scripts/test-issue.sh T05-HTTP` qualifies real PostgreSQL transport with
+controlled local model responses through ReadRunEngine/ModelRouter/gateway/world
+projection, plus independent cooperative lifecycle fixtures. Checks include fresh
+identity and scoped input, grounded provenance/unknown occurrence, exact SSE
+ordering/resume, cursor/retention errors, no extra model/read on reconnect,
+preflight, actual loopback client cancellation and joined shutdown with an active
+worker. These fixtures do not measure live model quality, tokens or cloud cost.
+There is no new migration, raw prompt persistence or automatic restart/recovery.
+Parent T05 still needs host/provider activation, worker-owned tracing and wider
+process-restart qualification.
