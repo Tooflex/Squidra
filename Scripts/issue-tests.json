@@ -284,5 +284,9 @@
       "client_loopback_boundary",
       "gateway_postgres_evidence"
     ]
+  },
+  "T14-PLANNING": {
+    "kind": "xctest",
+    "filter": "^SquidraCognitionTests\\.ReadPlannerTests/"
   }
 }
