@@ -25,10 +25,11 @@ public enum ToolError: String, Error, Sendable {
 
 /// Only the host gateway in this module can mint grants after policy/approval/
 /// ledger checks. No Codable conformance or public initializer can mint one.
-public struct ToolExecutionGrant: Sendable {
+struct ToolExecutionGrant: Sendable {
     public let actorID: UUID, runID: UUID
     public let definition: ToolDefinition
     public var tool: ToolID { definition.id }
+    public let target: String
     public let input: Data
     public let scope: Set<String>
     public let idempotencyKey: String
@@ -37,6 +38,7 @@ public struct ToolExecutionGrant: Sendable {
 public struct ToolCall: Sendable {
     public let actorID: UUID, runID: UUID
     public let tool: ToolID
+    public let target: String
     public let input: Data
     public let scope: Set<String>
     public let idempotencyKey: String

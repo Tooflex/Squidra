@@ -60,6 +60,8 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-007-UNIT
       - name: Run tool catalog contract tests
         run: bash Scripts/test-issue.sh SQD-006
+      - name: Run fail-closed action gateway tests
+        run: bash Scripts/test-issue.sh SQD-008
       - name: Run HTTP boundary tests
         run: bash Scripts/test-issue.sh T04
       - name: Build isolated database for Swift adapter
