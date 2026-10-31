@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "1",
+  "observedOn": "2026-10-31",
+  "defaultProfile": "offline",
+  "liveQualified": false,
+  "inferenceCallsMade": 0,
+  "inferenceCost": "not_measured",
+  "providers": [
+    {
+      "family": "Spark",
+      "documentedId": "muse-spark-1.3",
+      "mode": "hosted",
+      "documentationStatus": "verified",
+      "accountAccess": "untested",
+      "runtimeCompatibility": "untested",
+      "liveInference": "untested",
+      "liveQualified": false,
+      "immutableRevisionSource": null,
+      "inputModalities": [
+        "text",
+        "image",
+        "audio",
+        "video",
+        "pdf"
+      ],
+      "outputContract": "text",
+      "blockers": [
+        "model_api_key_not_configured",
+        "account_model_access_untested",
+        "privacy_retention_not_qualified",
+        "cost_and_latency_unmeasured"
+      ]
+    },
+    {
+      "family": "Wonder",
+      "documentedId": "muse-wonder-1.0",
+      "mode": "hosted",
+      "documentationStatus": "verified",
+      "accountAccess": "untested",
+      "runtimeCompatibility": "untested",
+      "liveInference": "untested",
+      "liveQualified": false,
+      "immutableRevisionSource": null,
+      "inputModalities": [
+        "text",
+        "image",
+        "audio",
+        "video",
+        "pdf"
+      ],
+      "outputContract": "text",
+      "blockers": [
+        "model_api_key_not_configured",
+        "account_model_access_untested",
+        "privacy_retention_not_qualified",
+        "cost_and_latency_unmeasured"
+      ]
+    },
+    {
+      "family": "Glimmer",
+      "documentedId": "meta-models/Muse-Glimmer-30B",
+      "mode": "self_hosted",
+      "documentationStatus": "verified",
+      "accountAccess": "untested",
+      "runtimeCompatibility": "untested",
+      "liveInference": "untested",
+      "liveQualified": false,
+      "immutableRevisionSource": "glimmer-weights",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputContract": "text",
+      "blockers": [
+        "weights_not_downloaded",
+        "runtime_not_installed_or_qualified",
+        "resource_cost_and_latency_unmeasured"
+      ]
+    },
+    {
+      "family": "SAM",
+      "documentedId": "sam-3.1",
+      "mode": "hosted",
+      "documentationStatus": "verified",
+      "accountAccess": "untested",
+      "runtimeCompatibility": "untested",
+      "liveInference": "untested",
+      "liveQualified": false,
+      "immutableRevisionSource": null,
+      "inputModalities": [
+        "image",
+        "video",
+        "text_prompt"
+      ],
+      "outputContract": "special_token_segmentation",
+      "blockers": [
+        "model_api_key_not_configured",
+        "account_model_access_untested",
+        "wire_decoder_not_qualified",
+        "privacy_retention_not_qualified",
+        "cost_and_latency_unmeasured"
+      ]
+    }
+  ]
+}
