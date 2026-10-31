@@ -70,9 +70,9 @@ Do not test force-push/deletion rejection destructively on `main`.
    and merges manually. No agent auto-merge or direct push to `main`.
 6. Update the issue/Project only to reflect observed completion.
 
-For T00, ADRs remain Proposed until explicitly accepted by the maintainer.
-T01 depends on that contract decision; do not represent proposed ADRs as
-accepted simply because files or a Draft PR exist.
+The maintainer explicitly accepted T00 on 31 October 2026; PR #57 was
+merged with Accepted ADRs. Future proposed ADRs still require explicit
+maintainer acceptance; files or a Draft PR alone do not establish it.
 
 ## CI and credentials
 
@@ -94,8 +94,8 @@ installed by this task.
 - [x] Maintainer explicitly chose ownership without mandatory reviewers.
 - [x] Active ruleset and effective `main` rules verified by API.
 - [x] Auto-merge disabled and Actions read-only defaults verified.
-- [ ] CODEOWNERS and PR template checked and merged by the maintainer.
-- [ ] Maintainer validates this bootstrap checklist.
+- [x] CODEOWNERS and PR template checked; maintainer authorized integration.
+- [x] Maintainer approved this bootstrap checklist on 31 October 2026.
 
 A completed checkbox records evidence, not a promise. T10 remains open
 until the maintainer validates and integrates these files. There are no
