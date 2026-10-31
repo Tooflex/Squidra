@@ -300,5 +300,21 @@
   "T05-CONTRACTS": {
     "kind": "xctest",
     "filter": "^SquidraProtocolsTests\\.AGUIContractTests/"
+  },
+  "T14-SQL-SWIFT": {
+    "kind": "xctest",
+    "filter": "^SquidraAgentRuntimeTests\\.ReadRunEngineSQLTests/"
+  },
+  "T14-SQL": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-read-runs"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "durable_grounded_read_runs"
+    ]
   }
 }
