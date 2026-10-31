@@ -493,5 +493,21 @@
   "SQD-022-CONTRACTS": {
     "kind": "xctest",
     "filter": "^SquidraSpatialTests\\.CalibratedRelationTests/"
+  },
+  "SQD-020-PUBLISH-SWIFT": {
+    "kind": "xctest",
+    "filter": "^SquidraPerceptionTests\\.FrameIngestionSQLTests/"
+  },
+  "SQD-020-PUBLISH": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-frame-ingestion"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "durable_frame_grounded_answers"
+    ]
   }
 }

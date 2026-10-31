@@ -11,47 +11,72 @@ public struct PostgresWorldRepository: WorldRepository {
         guard expectedVersion >= 0,expectedVersion < Int64.max,!idempotencyKey.isEmpty,idempotencyKey.utf8.count <= 256,
               idempotencyKey.trimmingCharacters(in:.whitespacesAndNewlines) == idempotencyKey,
               !idempotencyKey.unicodeScalars.contains(where:CharacterSet.controlCharacters.contains) else { throw WorldJournalError.invalidEvent }
+        return try await transaction(deadline:deadline) { connection in
+            try await append(event,expectedVersion:expectedVersion,idempotencyKey:idempotencyKey,connection:connection)
+        }
+    }
+    /// Internal frame publication only: one bounded stream, one transaction,
+    /// all-new or all-replayed. Never expose a partial publication as success.
+    func appendFrame(_ events: [WorldEventDraft], coordinateFrameID: UUID,
+                     deadline: ContinuousClock.Instant) async throws -> [JournalAppend] {
+        guard (2...17).contains(events.count), let first = events.first,
+              first.type == "perception.frame_imported", first.id == first.streamID,
+              events.allSatisfy({ $0.actorID == first.actorID && $0.streamID == first.streamID }),
+              events.reduce(0,{ $0 + $1.payload.bytes.count }) <= 262_144 else { throw WorldJournalError.invalidEvent }
+        return try await transaction(deadline:deadline) { connection in
+            let frames = try await BoundedPostgresQuery.rows(connection,
+                "SELECT id FROM coordinate_frames WHERE actor_id=\(first.actorID) AND id=\(coordinateFrameID) FOR KEY SHARE")
+            guard frames.count == 1 else { throw WorldJournalError.notFound }
+            var results: [JournalAppend] = []
+            for (index,event) in events.enumerated() {
+                try Task.checkCancellation()
+                results.append(try await append(event,expectedVersion:Int64(index),idempotencyKey:"frame:\(index)",connection:connection))
+            }
+            guard results.allSatisfy({ $0.created == results[0].created }) else { throw WorldJournalError.corruptRecord }
+            return results
+        }
+    }
+    private func append(_ event: WorldEventDraft, expectedVersion: Int64, idempotencyKey: String,
+                        connection: PostgresConnection) async throws -> JournalAppend {
         let raw = String(decoding:event.payload.bytes,as:UTF8.self)
         let occurredSeconds = event.times.occurredMicroseconds.map { Double($0/1_000_000) }
         let occurredFraction = event.times.occurredMicroseconds.map { $0%1_000_000 }
         let observed = event.times.observedMicroseconds,zone = event.times.timeZone.identifier
-        return try await transaction(deadline:deadline) { connection in
-            // Hold through COMMIT: qualified appends for one actor become visible
-            // in sequence order, including across streams. Hash collisions only
-            // serialize unrelated actors; they cannot merge their scopes.
-            _ = try await BoundedPostgresQuery.rows(connection,"SELECT pg_advisory_xact_lock(hashtextextended(\(event.actorID.uuidString.lowercased()),1936818035))")
-            let canonical = try await BoundedPostgresQuery.rows(connection,"SELECT \(raw)::jsonb::text")
-            guard let row = canonical.first else { throw WorldJournalError.invalidEvent }
-            let payload = try row.decode(String.self)
-            do { _ = try JSONDocument(Data(payload.utf8),maximumBytes:65_536) }
-            catch { throw WorldJournalError.invalidEvent }
-            let existing = try await BoundedPostgresQuery.rows(connection,"""
-                SELECT event_id,(entity_ids=\(event.entityIDs) AND event_type=\(event.type)
-                    AND occurred_at IS NOT DISTINCT FROM (to_timestamp(\(occurredSeconds))+\(occurredFraction)*interval '1 microsecond')
-                    AND observed_at=to_timestamp(\(Double(observed/1_000_000)))+\(observed%1_000_000)*interval '1 microsecond'
-                    AND source_id=\(event.sourceID) AND confidence=\(event.confidence.value) AND payload_version=\(event.payloadVersion)
-                    AND payload=jsonb_build_object('journalSchemaVersion','1','timeZone',\(zone)::text,'data',\(payload)::jsonb)
-                    AND causation_id IS NOT DISTINCT FROM \(event.causationID)) AS matches
-                FROM world_events WHERE actor_id=\(event.actorID) AND stream_id=\(event.streamID) AND idempotency_key=\(idempotencyKey)
-                """)
-            if let row = existing.first {
-                let (id,matches) = try row.decode((UUID,Bool).self)
-                guard matches else { throw WorldJournalError.idempotencyConflict }
-                return try await JournalAppend(event:select(connection,actorID:event.actorID,id:id),created:false)
-            }
-            let versions = try await BoundedPostgresQuery.rows(connection,"SELECT coalesce(max(stream_version),0)::bigint FROM world_events WHERE actor_id=\(event.actorID) AND stream_id=\(event.streamID)")
-            guard let row = versions.first,try row.decode(Int64.self) == expectedVersion else { throw WorldJournalError.versionConflict }
-            _ = try await BoundedPostgresQuery.rows(connection,"""
-                INSERT INTO world_events(event_id,actor_id,stream_id,stream_version,idempotency_key,entity_ids,event_type,
-                    occurred_at,observed_at,source_id,confidence,payload_version,payload,causation_id,correlation_id)
-                VALUES(\(event.id),\(event.actorID),\(event.streamID),\(expectedVersion+1),\(idempotencyKey),\(event.entityIDs),\(event.type),
-                    to_timestamp(\(occurredSeconds))+\(occurredFraction)*interval '1 microsecond',
-                    to_timestamp(\(Double(observed/1_000_000)))+\(observed%1_000_000)*interval '1 microsecond',
-                    \(event.sourceID),\(event.confidence.value),\(event.payloadVersion),
-                    jsonb_build_object('journalSchemaVersion','1','timeZone',\(zone)::text,'data',\(payload)::jsonb),\(event.causationID),\(event.correlationID))
-                """)
-            return try await JournalAppend(event:select(connection,actorID:event.actorID,id:event.id),created:true)
+        // Hold through COMMIT: qualified appends for one actor become visible
+        // in sequence order, including across streams. Hash collisions only
+        // serialize unrelated actors; they cannot merge their scopes.
+        _ = try await BoundedPostgresQuery.rows(connection,"SELECT pg_advisory_xact_lock(hashtextextended(\(event.actorID.uuidString.lowercased()),1936818035))")
+        let canonical = try await BoundedPostgresQuery.rows(connection,"SELECT \(raw)::jsonb::text")
+        guard let row = canonical.first else { throw WorldJournalError.invalidEvent }
+        let payload = try row.decode(String.self)
+        do { _ = try JSONDocument(Data(payload.utf8),maximumBytes:65_536) }
+        catch { throw WorldJournalError.invalidEvent }
+        let existing = try await BoundedPostgresQuery.rows(connection,"""
+            SELECT event_id,(entity_ids=\(event.entityIDs) AND event_type=\(event.type)
+                AND occurred_at IS NOT DISTINCT FROM (to_timestamp(\(occurredSeconds))+\(occurredFraction)*interval '1 microsecond')
+                AND observed_at=to_timestamp(\(Double(observed/1_000_000)))+\(observed%1_000_000)*interval '1 microsecond'
+                AND source_id=\(event.sourceID) AND confidence=\(event.confidence.value) AND payload_version=\(event.payloadVersion)
+                AND payload=jsonb_build_object('journalSchemaVersion','1','timeZone',\(zone)::text,'data',\(payload)::jsonb)
+                AND causation_id IS NOT DISTINCT FROM \(event.causationID)) AS matches
+            FROM world_events WHERE actor_id=\(event.actorID) AND stream_id=\(event.streamID) AND idempotency_key=\(idempotencyKey)
+            """)
+        if let row = existing.first {
+            let (id,matches) = try row.decode((UUID,Bool).self)
+            guard matches else { throw WorldJournalError.idempotencyConflict }
+            return try await JournalAppend(event:select(connection,actorID:event.actorID,id:id),created:false)
         }
+        let versions = try await BoundedPostgresQuery.rows(connection,"SELECT coalesce(max(stream_version),0)::bigint FROM world_events WHERE actor_id=\(event.actorID) AND stream_id=\(event.streamID)")
+        guard let row = versions.first,try row.decode(Int64.self) == expectedVersion else { throw WorldJournalError.versionConflict }
+        _ = try await BoundedPostgresQuery.rows(connection,"""
+            INSERT INTO world_events(event_id,actor_id,stream_id,stream_version,idempotency_key,entity_ids,event_type,
+                occurred_at,observed_at,source_id,confidence,payload_version,payload,causation_id,correlation_id)
+            VALUES(\(event.id),\(event.actorID),\(event.streamID),\(expectedVersion+1),\(idempotencyKey),\(event.entityIDs),\(event.type),
+                to_timestamp(\(occurredSeconds))+\(occurredFraction)*interval '1 microsecond',
+                to_timestamp(\(Double(observed/1_000_000)))+\(observed%1_000_000)*interval '1 microsecond',
+                \(event.sourceID),\(event.confidence.value),\(event.payloadVersion),
+                jsonb_build_object('journalSchemaVersion','1','timeZone',\(zone)::text,'data',\(payload)::jsonb),\(event.causationID),\(event.correlationID))
+            """)
+        return try await JournalAppend(event:select(connection,actorID:event.actorID,id:event.id),created:true)
     }
     public func page(actorID: UUID, afterSequence: Int64 = 0, cursor: JournalCursor? = nil, limit: Int = 64,
                      deadline: ContinuousClock.Instant) async throws -> JournalPage {
