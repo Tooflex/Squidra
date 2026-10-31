@@ -46,6 +46,8 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-013
       - name: Run model routing tests
         run: bash Scripts/test-issue.sh SQD-003
+      - name: Run HTTP boundary tests
+        run: bash Scripts/test-issue.sh T04
       - name: Verify empty selections fail
         run: |
           if bash Scripts/test-issue.sh T01 --filter '^MissingSuite/'; then

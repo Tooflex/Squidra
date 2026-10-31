@@ -61,5 +61,9 @@
       "reservation_rollback",
       "concurrent_reservation"
     ]
+  },
+  "T04": {
+    "kind": "xctest",
+    "filter": "^SquidraServerTests\\.HTTPBoundaryTests/"
   }
 }

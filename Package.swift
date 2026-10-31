@@ -29,6 +29,7 @@ let package = Package(
                 .product(name: "Hummingbird", package: "hummingbird"),
             ]
         ),
+        .testTarget(name: "SquidraServerTests", dependencies: ["SquidraServer", "SquidraProtocols", .product(name: "HummingbirdTesting", package: "hummingbird")]),
         .testTarget(name: "SquidraDomainTests", dependencies: ["SquidraDomain"]),
         .testTarget(name: "SquidraTemporalTests", dependencies: ["SquidraDomain", "SquidraTemporal"]),
         .testTarget(name: "SquidraCognitionTests", dependencies: ["SquidraDomain", "SquidraCognition", "SquidraMeta"]),
