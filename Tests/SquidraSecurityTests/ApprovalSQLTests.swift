@@ -87,7 +87,10 @@ final class ApprovalSQLTests: XCTestCase, @unchecked Sendable {
             // A persisted approved fixture has now expired according to DB time.
             // The host clock deliberately remains before expiry.
             let ancientBinding = try await binding("server-expired")
-            let now = Int64((try clock.now().secondsSince1970*1_000).rounded(.down))
+            // PostgreSQL may run in a VM with a different wall clock. Anchor this
+            // server-expired fixture to the clock whose expiry check it exercises.
+            let databaseTime = try await client.query("SELECT floor(extract(epoch FROM clock_timestamp())*1000)::bigint").collect()
+            let now = try databaseTime[0].decode(Int64.self)
             let ancient = try ApprovalRecord(id:UUID(),binding:ancientBinding,requestedAtMilliseconds:now-600_001,
                 expiresAtMilliseconds:now-1,decision:.approved,approverID:actor,decidedAtMilliseconds:now-600_000,version:2)
             let hash = ancientBinding.commandHash.map { String(format:"%02x",$0) }.joined()
