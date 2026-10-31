@@ -25,6 +25,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Select pinned macOS SDK
+        if: runner.os == 'macOS'
+        run: echo "DEVELOPER_DIR=/Applications/Xcode_26.3.app/Contents/Developer" >> "$GITHUB_ENV"
       - name: Install official Swift 6.4.2 toolchain
         run: bash Scripts/install-ci-swift.sh
       - name: Record toolchain and host
@@ -32,6 +35,7 @@ jobs:
           swift --version
           python3 --version
           uname -a
+          if [[ "$RUNNER_OS" == macOS ]]; then xcrun --show-sdk-version; fi
       - name: Verify test-runner failure handling
         run: python3 Scripts/test_issue_runner.py
       - name: Build pinned dependencies and modules
