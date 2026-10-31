@@ -62,22 +62,9 @@ public struct WorldLocationTool: ToolExecutor {
         func contains(_ interval: FactInterval, _ micros: Int64) -> Bool {
             interval.fromMicroseconds <= micros && (interval.toMicroseconds.map { micros < $0 } ?? true)
         }
-        func interval(_ value: FactInterval) throws -> [String: Any] {
-            ["from": try RFC3339.format(value.from), "to": try value.to.map(RFC3339.format) as Any? ?? NSNull()]
-        }
         let facts: [[String: Any]] = try snapshot.facts.sorted { $0.id.uuidString < $1.id.uuidString }.map { fact in
-            guard fact.actorID == call.actorID, fact.subjectID == request.entityId, fact.id == fact.sourceEventID,
-                  !fact.sourceID.isEmpty, fact.sourceID.utf8.count <= 256,
-                  !fact.sourceID.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),
-                  contains(fact.valid,times.observedMicroseconds), contains(fact.transaction,times.occurredMicroseconds!),
-                  fact.transaction.from == fact.timestamps.recordedAt else { throw ToolError.invalidOutput }
-            return ["id": fact.id.uuidString.lowercased(), "subjectId": fact.subjectID.uuidString.lowercased(),
-                "locationId": fact.locationID.uuidString.lowercased(), "frameId": fact.frameID.uuidString.lowercased(),
-                "sourceEventId": fact.sourceEventID.uuidString.lowercased(), "source": fact.sourceID,
-                "confidence": fact.confidence.value, "basis": fact.basis.rawValue,
-                "occurredAt": try fact.timestamps.occurredAt.map(RFC3339.format) as Any? ?? NSNull(),
-                "observedAt": try RFC3339.format(fact.timestamps.observedAt), "recordedAt": try RFC3339.format(fact.timestamps.recordedAt),
-                "timeZone": fact.timestamps.timeZone.identifier, "valid": try interval(fact.valid), "transaction": try interval(fact.transaction)]
+            guard contains(fact.valid,times.observedMicroseconds), contains(fact.transaction,times.occurredMicroseconds!) else { throw ToolError.invalidOutput }
+            return try WorldFactWire.encode(fact, actor: call.actorID, subject: request.entityId)
         }
         // Derive uncertainty from the retained facts rather than trusting a
         // supplied summary that could hide contradictory or inferred evidence.

@@ -1,0 +1,392 @@
+import Foundation
+
+/// Embedded deployment schemas with checked repository copies.
+public enum WorldChangesSchemas {
+    public static let inputSchema = Data(#"""
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:squidra:tool:world.get_changes@1.0.0:input",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "maxLength": 1,
+      "const": "1"
+    },
+    "from": {
+      "type": "string",
+      "maxLength": 35,
+      "format": "date-time"
+    },
+    "to": {
+      "type": "string",
+      "maxLength": 35,
+      "format": "date-time"
+    },
+    "knownAt": {
+      "type": "string",
+      "maxLength": 35,
+      "format": "date-time"
+    },
+    "subjectId": {
+      "type": "string",
+      "maxLength": 36,
+      "format": "uuid"
+    },
+    "locationId": {
+      "type": "string",
+      "maxLength": 36,
+      "format": "uuid"
+    },
+    "cursor": {
+      "type": "string",
+      "maxLength": 2048,
+      "minLength": 1
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "from",
+    "to",
+    "knownAt",
+    "limit"
+  ],
+  "additionalProperties": false
+}
+"""#.utf8)
+    public static let outputSchema = Data(#"""
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:squidra:tool:world.get_changes@1.0.0:output",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "maxLength": 1,
+      "const": "1"
+    },
+    "actorId": {
+      "type": "string",
+      "maxLength": 36,
+      "format": "uuid"
+    },
+    "from": {
+      "type": "string",
+      "maxLength": 35,
+      "format": "date-time"
+    },
+    "to": {
+      "type": "string",
+      "maxLength": 35,
+      "format": "date-time"
+    },
+    "knownAt": {
+      "type": "string",
+      "maxLength": 35,
+      "format": "date-time"
+    },
+    "subjectId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "locationId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 36,
+          "format": "uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "changes": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 36,
+            "format": "uuid"
+          },
+          "subjectId": {
+            "type": "string",
+            "maxLength": 36,
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "maxLength": 16,
+            "enum": [
+              "observation",
+              "location_changed",
+              "correction"
+            ]
+          },
+          "effectiveAt": {
+            "type": "string",
+            "maxLength": 35,
+            "format": "date-time"
+          },
+          "currentFactId": {
+            "type": "string",
+            "maxLength": 36,
+            "format": "uuid"
+          },
+          "previousFactIds": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "type": "string",
+              "maxLength": 36,
+              "format": "uuid"
+            }
+          },
+          "supportingEventIds": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "type": "string",
+              "maxLength": 36,
+              "format": "uuid"
+            }
+          },
+          "uncertainty": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+              "type": "string",
+              "maxLength": 24,
+              "enum": [
+                "priorStateUnknown",
+                "conflictingLocations",
+                "inferredEvidence",
+                "projectionBehind"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "subjectId",
+          "kind",
+          "effectiveAt",
+          "currentFactId",
+          "previousFactIds",
+          "supportingEventIds",
+          "uncertainty"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "facts": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 36,
+            "format": "uuid"
+          },
+          "subjectId": {
+            "type": "string",
+            "maxLength": 36,
+            "format": "uuid"
+          },
+          "locationId": {
+            "type": "string",
+            "maxLength": 36,
+            "format": "uuid"
+          },
+          "frameId": {
+            "type": "string",
+            "maxLength": 36,
+            "format": "uuid"
+          },
+          "sourceEventId": {
+            "type": "string",
+            "maxLength": 36,
+            "format": "uuid"
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "basis": {
+            "type": "string",
+            "maxLength": 8,
+            "enum": [
+              "observed",
+              "inferred"
+            ]
+          },
+          "occurredAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 35,
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "observedAt": {
+            "type": "string",
+            "maxLength": 35,
+            "format": "date-time"
+          },
+          "recordedAt": {
+            "type": "string",
+            "maxLength": 35,
+            "format": "date-time"
+          },
+          "timeZone": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1
+          },
+          "valid": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string",
+                "maxLength": 35,
+                "format": "date-time"
+              },
+              "to": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 35,
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ],
+            "additionalProperties": false
+          },
+          "transaction": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string",
+                "maxLength": 35,
+                "format": "date-time"
+              },
+              "to": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 35,
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "subjectId",
+          "locationId",
+          "frameId",
+          "sourceEventId",
+          "source",
+          "confidence",
+          "basis",
+          "occurredAt",
+          "observedAt",
+          "recordedAt",
+          "timeZone",
+          "valid",
+          "transaction"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "projectedThroughSequence": {
+      "type": "string",
+      "maxLength": 19,
+      "minLength": 1
+    },
+    "availableThroughSequence": {
+      "type": "string",
+      "maxLength": 19,
+      "minLength": 1
+    },
+    "projectionBehind": {
+      "type": "boolean"
+    },
+    "next": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 2048,
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "actorId",
+    "from",
+    "to",
+    "knownAt",
+    "subjectId",
+    "locationId",
+    "changes",
+    "facts",
+    "projectedThroughSequence",
+    "availableThroughSequence",
+    "projectionBehind",
+    "next"
+  ],
+  "additionalProperties": false
+}
+"""#.utf8)
+}

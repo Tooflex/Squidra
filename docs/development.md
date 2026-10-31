@@ -840,3 +840,25 @@ Its schemas are embedded and checked against `Schemas/tools/world` by
 `bash Scripts/test-issue.sh T13-LOCATION`. This suite exercises the real gateway
 with controlled read-port fixtures; PostgreSQL qualification is the independent
 SQD-014 integration suite. Change and watch tools remain tracked by T13.
+
+`WorldChangesTool` adds `world.get_changes@1.0.0` over `WorldChangesQuerying`.
+An entity filter resolves to its exact `entity:<uuid>` policy target; an actor-wide
+read requires the explicit `world:changes` target and `world.changes.read`
+capability. The gateway supplies the actor and reauthorizes every call. Inputs
+use finite RFC 3339 window/knowledge times, optional subject/touched-location
+filters, a page limit of 1–8 and optional continuation. Output contains source
+facts once by ID, current/prior references for each change, corrections,
+uncertainty, projection watermarks and the next continuation. Up to 32 unique
+source facts must fit 128 KiB and structural JSON limits; excess fails without
+truncation. Empty pages invent no observations or movements.
+
+The versioned base64 continuation captures query digest, watermarks and exact
+internal position. Its digest binds the actor and normalized query values but
+is not a signature, secret or authorization grant. Changing the request invalidates
+continuation reuse; the backend still rejects future watermarks against its
+actual journal/projection state. The wrapper verifies page ordering, retained
+watermarks, exact next position, source scope and supporting intervals. This
+preserves the SQD-015 snapshot contract without claiming that a user-editable
+cursor is tamper-proof. `T13-CHANGES` qualifies the real gateway with controlled
+query fixtures; SQD-015 separately qualifies PostgreSQL pagination. No HTTP
+route, production registration or durable watch tool is introduced here.
