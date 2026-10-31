@@ -27,10 +27,10 @@ Closes #<!-- issue number -->
 - Tool-manifest hash: <!-- value, unavailable, or not applicable -->
 - Models / tokens / cost: <!-- measured values or “not measured” -->
 
-## Maintainer integration
+## Integration
 
 - [ ] No secrets or sensitive data in code, fixtures, logs, or this description.
-- [ ] Draft until ready for maintainer validation.
-- [ ] Maintainer validates contracts and merges manually; no auto-merge.
+- [ ] Regular PR, scoped diff reviewed, actual required CI results verified on the head commit.
+- [ ] Merge through the PR API after passing checks under the maintainer’s standing authorization; no protection bypass or direct main push.
 
 <!-- Tooflex owns the code. Mandatory GitHub reviewers are intentionally disabled. -->
