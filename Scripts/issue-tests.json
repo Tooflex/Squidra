@@ -252,5 +252,9 @@
       "bounded_change_contracts",
       "stable_change_evidence"
     ]
+  },
+  "SQD-019": {
+    "kind": "xctest",
+    "filter": "^SquidraCognitionTests\\.AnswerEvidenceTests/"
   }
 }
