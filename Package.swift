@@ -18,10 +18,14 @@ let package = Package(
         .package(url: "https://github.com/hummingbird-project/hummingbird.git", exact: "2.28.1"),
         .package(url: "https://github.com/vapor/postgres-nio.git", exact: "1.33.2"),
         .package(url: "https://github.com/apple/swift-log.git", exact: "1.16.2"),
+        .package(url: "https://github.com/ajevans99/swift-json-schema.git", exact: "0.14.2"),
     ],
     targets: [
         .target(name: "SquidraDomain"),
-    ] + applicationModules.map { .target(name: $0, dependencies: ["SquidraDomain"]) } + [
+    ] + applicationModules.map { name in
+        .target(name: name, dependencies: [.byName(name: "SquidraDomain")] +
+            (name == "SquidraTools" ? [.product(name: "JSONSchema", package: "swift-json-schema")] : []))
+    } + [
         .target(name: "SquidraPostgres", dependencies: ["SquidraDomain", "SquidraWorld", "SquidraAgentRuntime", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
         .target(name: "SquidraMeta", dependencies: ["SquidraDomain", "SquidraCognition", "SquidraPerception"]),
         .executableTarget(
@@ -36,6 +40,7 @@ let package = Package(
         .testTarget(name: "SquidraPostgresSwiftTests", dependencies: ["SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
         .testTarget(name: "SquidraServerTests", dependencies: ["SquidraServer", "SquidraProtocols", "SquidraPostgres", .product(name: "HummingbirdTesting", package: "hummingbird")], exclude: ["server_process.py"]),
         .testTarget(name: "SquidraAgentRuntimeTests", dependencies: ["SquidraDomain", "SquidraAgentRuntime", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
+        .testTarget(name: "SquidraToolsTests", dependencies: ["SquidraTools"]),
         .testTarget(name: "SquidraDomainTests", dependencies: ["SquidraDomain"]),
         .testTarget(name: "SquidraTemporalTests", dependencies: ["SquidraDomain", "SquidraTemporal"]),
         .testTarget(name: "SquidraCognitionTests", dependencies: ["SquidraDomain", "SquidraCognition", "SquidraMeta"]),

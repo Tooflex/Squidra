@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:squidra:tool:fixture.echo@1.0.0:input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "entityId", "at", "message", "limit"],
+  "properties": {
+    "schemaVersion": {"type":"string", "const":"1", "maxLength":1},
+    "entityId": {"type":"string", "format":"uuid", "maxLength":36},
+    "at": {"type":"string", "format":"date-time", "maxLength":64},
+    "message": {"type":"string", "minLength":1, "maxLength":128},
+    "limit": {"type":"integer", "minimum":1, "maximum":100},
+    "labels": {"type":"array", "maxItems":4, "items":{"type":"string", "maxLength":16}}
+  }
+}
