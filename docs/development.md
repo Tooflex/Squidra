@@ -93,7 +93,7 @@ case counts to catch selection mismatches.
 |---|---|
 | Local macOS ARM64 (macOS 27), Swift 6.4.2 | `swift build`, 4 Domain tests, 8 runner checks, and executable smoke passed on 31 October 2026 |
 | Ubuntu 24.04 x86_64, Swift 6.4.2 | Build, Domain tests, runner checks, negative selection, executable smoke and lockfile check passed in run 41193634931 |
-| macOS 15 hosted runner, Swift 6.4.2 | CI build/test gate; actual architecture is recorded with `uname`; unqualified until its run passes |
+| macOS 15 ARM64 hosted runner, Swift 6.4.2, Xcode 26.3 | Build, Domain tests, runner checks, negative selection, executable smoke and lockfile check passed in run 41193896734 |
 | Windows x86_64 | Unqualified: the first hosted probe found no Swift executable (run 41193488750) |
 | Linux ARM64, macOS x86_64 outside the observed CI runner | Not tested by this bootstrap |
 | Windows ARM64 | Deferred |

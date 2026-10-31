@@ -15,7 +15,7 @@ case "$(uname -s)" in
     url="https://download.swift.org/swift-${swift_version}-release/ubuntu2404/swift-${swift_version}-RELEASE/${archive}.tar.gz"
     curl --fail --location --retry 3 "$url" --output "$install_dir/swift.tar.gz"
     curl --fail --location --retry 3 "$url.sig" --output "$install_dir/swift.tar.gz.sig"
-    curl --fail --location --retry 3 https://www.swift.org/keys/all-keys.asc --output "$install_dir/swift-keys.asc"
+    curl --fail --location --compressed --retry 3 https://www.swift.org/keys/all-keys.asc --output "$install_dir/swift-keys.asc"
     mkdir -m 700 "$install_dir/gnupg"
     gpg --homedir "$install_dir/gnupg" --batch --import "$install_dir/swift-keys.asc"
     gpg --homedir "$install_dir/gnupg" --batch --verify "$install_dir/swift.tar.gz.sig" "$install_dir/swift.tar.gz"
