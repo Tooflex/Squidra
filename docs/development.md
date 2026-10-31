@@ -818,3 +818,25 @@ Output is canonical UTC with six fractional digits, rounded to microseconds.
 precision is not a promise of nanosecond storage. The formatter uses proleptic
 Gregorian arithmetic rather than a calendar that normalizes invalid input.
 Run `bash Scripts/test-issue.sh T13-TIME` for the codec qualification.
+
+`WorldLocationTool` exposes `world.get_entity_location@1.0.0` as an explicitly
+registered R0 read through `ActionGateway`. Its only injected port is
+`WorldStateQuery`; production HTTP registration remains a separate integration.
+Arguments contain schema version, entity UUID, valid time and knowledge time.
+The gateway supplies actor identity, checks the entity target and requires an
+exact host permission for capability `world.location.read` and the caller's
+nonempty scope (the fixture uses `world:read`). No ledger is required for this
+read-only operation. Dates normalize to journal microseconds before querying.
+
+The closed output retains every returned fact, confidence, observed/inferred
+basis, source event, source text as untrusted data, all three timestamps, IANA
+zone, valid/transaction intervals and projection watermarks. Contradictions,
+inference and projection lag remain explicit. Sequence values use decimal
+strings to preserve Int64 precision. No-evidence and not-found are distinct;
+foreign entities share not-found and its unavailable watermarks are null.
+The tool rejects inconsistent results, duplicates or more than 32 facts without
+truncation. Results must also fit 128 KiB and shared JSON structural limits.
+Its schemas are embedded and checked against `Schemas/tools/world` by
+`bash Scripts/test-issue.sh T13-LOCATION`. This suite exercises the real gateway
+with controlled read-port fixtures; PostgreSQL qualification is the independent
+SQD-014 integration suite. Change and watch tools remain tracked by T13.
