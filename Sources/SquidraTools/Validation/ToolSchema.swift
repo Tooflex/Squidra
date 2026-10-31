@@ -1,56 +1,12 @@
 import Foundation
 import JSONSchema
+import SquidraDomain
 
-/// Boundary scanning rejects duplicates and excessive structure before using
-/// the SDK's strict RFC-8259 parser. This scanner does not replace that parser.
+/// Shared structural/duplicate limits precede the SDK's schema parser.
 internal enum BoundedJSON {
-    private struct Frame { var keys: Set<String>?; var expectsKey: Bool }
     static func parse(_ data: Data, maximumBytes: Int) throws -> JSONValue {
-        guard !data.isEmpty, data.count <= maximumBytes else { throw ToolError.invalidInput }
-        let bytes = Array(data)
-        var frames: [Frame] = []
-        var index = 0, nodes = 0
-        while index < bytes.count {
-            let byte = bytes[index]
-            switch byte {
-            case 123, 91: // { [
-                guard frames.count < 32 else { throw ToolError.invalidInput }
-                frames.append(Frame(keys: byte == 123 ? [] : nil, expectsKey: byte == 123))
-                nodes += 1; index += 1
-            case 125, 93:
-                guard !frames.isEmpty else { throw ToolError.invalidInput }
-                frames.removeLast(); index += 1
-            case 44:
-                if !frames.isEmpty, frames[frames.count-1].keys != nil { frames[frames.count-1].expectsKey = true }
-                index += 1
-            case 34:
-                let start = index
-                index += 1
-                while index < bytes.count, bytes[index] != 34 {
-                    if bytes[index] == 92 { index += 1 }
-                    index += 1
-                }
-                guard index < bytes.count else { throw ToolError.invalidInput }
-                index += 1; nodes += 1
-                if !frames.isEmpty, frames[frames.count-1].keys != nil, frames[frames.count-1].expectsKey {
-                    let key = try JSONDecoder().decode(String.self, from: Data(bytes[start..<index]))
-                    guard frames[frames.count-1].keys!.insert(key).inserted else { throw ToolError.invalidInput }
-                    frames[frames.count-1].expectsKey = false
-                }
-            case 45, 48...57:
-                let start = index
-                while index < bytes.count, [45,43,46,69,101].contains(bytes[index]) || (48...57).contains(bytes[index]) { index += 1 }
-                guard index-start <= 128,
-                      let number = Double(String(decoding: bytes[start..<index], as: UTF8.self)), number.isFinite else { throw ToolError.invalidInput }
-                nodes += 1
-            default:
-                if [110,116,102].contains(byte) { nodes += 1 } // null/true/false start
-                index += 1
-            }
-            guard nodes <= 4_096 else { throw ToolError.invalidInput }
-        }
-        guard frames.isEmpty else { throw ToolError.invalidInput }
-        return try JSONValue.parse(data)
+        do { _ = try JSONDocument(data,maximumBytes:maximumBytes);return try JSONValue.parse(data) }
+        catch { throw ToolError.invalidInput }
     }
 }
 

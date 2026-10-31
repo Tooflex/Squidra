@@ -44,6 +44,8 @@ jobs:
         run: swift build --force-resolved-versions
       - name: Run T01 Domain tests
         run: bash Scripts/test-issue.sh T01
+      - name: Run bounded JSON document tests
+        run: bash Scripts/test-issue.sh SQD-016-JSON
       - name: Run temporal contract tests
         run: bash Scripts/test-issue.sh SQD-013
       - name: Run relative local-time tests

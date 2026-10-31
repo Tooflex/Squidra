@@ -619,3 +619,22 @@ policy/budgets through the gateway. Automatic recovery of active crashed runs
 remains SQD-028. Tests cover controller restart with fixture stores; the separate
 SQL suites qualify durable run and approval reload/CAS on real PostgreSQL. No live
 external communication or destructive provider is registered by this integration.
+
+## Shared bounded JSON documents
+
+```bash
+bash Scripts/test-issue.sh SQD-016-JSON
+```
+
+Domain's Foundation-only `JSONDocument` validates one complete UTF-8 document
+and retains its exact bytes. The profile bounds documents to at most 1 MiB,
+containers to depth 32, nodes (including object keys) to 4,096, and numeric tokens
+to 128 bytes within the existing finite-Double interoperability envelope. It
+checks JSON grammar, escapes and Unicode, rejects trailing tokens and decoded
+duplicate keys (including Swift canonical-equivalent key aliases), and reports
+NUL presence for stores such as PostgreSQL JSONB that cannot accept it. This is
+not schema validation or canonicalization; large integers/decimal text are not
+converted into new serialized numbers. Tools now applies this shared boundary
+before its pinned SDK parser/schema evaluator. Domain imports no JSONSchema,
+HTTP or database SDK. Catalog, fingerprint and approval regressions qualify the
+shared change independently of the upcoming journal adapter.
