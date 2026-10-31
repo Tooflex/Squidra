@@ -3,5 +3,6 @@ public enum ExpectedDatabaseSchema {
     public static let migrations: Set<SchemaMigration> = [
         .init(namespace: "world", version: "001_world.sql", checksum: "bb7066871c6eb8823af99da010439e3b4c64f9e9919bb132102e16d8cb57fda1"),
         .init(namespace: "runtime", version: "001_runtime.sql", checksum: "7d77c9f2ce1278e85ed3b4992d5ee54f30031d13ecb8e9f5162b3d8ef96e9a68"),
+        .init(namespace: "runtime", version: "002_run_events.sql", checksum: "801a6ae6729ec2216e3ffb499818ad6fc2cc0ed13e1db5d8c5ef85246a8e6d39"),
     ]
 }
