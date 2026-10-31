@@ -135,5 +135,26 @@
   "SQD-006": {
     "kind": "xctest",
     "filter": "^SquidraToolsTests\\.ToolCatalogTests/"
+  },
+  "SQD-007-UNIT": {
+    "kind": "xctest",
+    "filter": "^SquidraToolsTests\\.ActionFingerprintTests/"
+  },
+  "SQD-007-SQL": {
+    "kind": "xctest",
+    "filter": "^SquidraToolsTests\\.ActionLedgerSQLTests/"
+  },
+  "SQD-007": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-ledger"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "canonical_fingerprints",
+      "swift_action_ledger"
+    ]
   }
 }
