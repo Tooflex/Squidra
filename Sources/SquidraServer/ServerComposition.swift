@@ -2,6 +2,10 @@ import Foundation
 import Hummingbird
 import Logging
 import SquidraPostgres
+import SquidraDomain
+import SquidraSecurity
+import SquidraTemporal
+import SquidraTools
 import PostgresNIO
 
 /// Composition owns dependencies per application. No global runtime or store.
@@ -9,12 +13,14 @@ enum ServerComposition {
     static func live(configuration: ServerConfiguration) -> some ApplicationProtocol {
         let client = configuration.database.makeClient()
         let readiness = PostgresSchemaReadiness(client: client)
-        return application(configuration: configuration, readiness: { try await readiness.check() }, client: client)
+        let approvals = ApprovalCoordinator(store:PostgresApprovalStore(client:client),clock:SystemClock(timeZone:try! IANATimeZone(identifier:"Etc/UTC")))
+        return application(configuration: configuration, readiness: { try await readiness.check() }, client: client,
+            approvals:approvals,ledger:PostgresActionLedger(client:client))
     }
 
     static func application(configuration: ServerConfiguration,
                             readiness: @escaping @Sendable () async throws -> DatabaseReadiness,
-                            client: PostgresClient? = nil) -> some ApplicationProtocol {
+                            client: PostgresClient? = nil, approvals: ApprovalCoordinator? = nil, ledger: (any ActionLedgerStore)? = nil) -> some ApplicationProtocol {
         let router = Router(context: BoundaryContext.self)
         for path in ["/health/live", "/health"] {
             router.get(RouterPath(path)) { _, _ in json(.ok, "{\"status\":\"alive\"}") }
@@ -28,6 +34,7 @@ enum ServerComposition {
                 }
             }
         }
+        if let approvals,let ledger { ApprovalRoutes.mount(router,approvals:approvals,ledger:ledger) }
         var app = Application(responder: HTTPBoundary(inner: router.buildResponder(), configuration: configuration.boundary),
             server: .http1(configuration: .init(idleTimeout: .seconds(30))),
             configuration: .init(address: .hostname(configuration.boundary.listenHost, port: configuration.port), reuseAddress: false),

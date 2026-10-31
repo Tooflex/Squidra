@@ -181,5 +181,9 @@
       "approval_contracts",
       "durable_approvals"
     ]
+  },
+  "SQD-009": {
+    "kind": "xctest",
+    "filter": "^(SquidraSecurityTests\\.ApprovalGatewayTests|SquidraAgentRuntimeTests\\.ApprovalWaitTests|SquidraServerTests\\.ApprovalRouteTests)/"
   }
 }

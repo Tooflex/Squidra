@@ -1,6 +1,7 @@
 import Foundation
 import SquidraDomain
 import SquidraSecurity
+import SquidraTools
 import XCTest
 
 private actor MemoryApprovals: ApprovalStore {
@@ -163,5 +164,156 @@ final class ApprovalTests: XCTestCase, @unchecked Sendable {
         XCTAssertThrowsError(try ApprovalRecord(id:UUID(),binding:binding,requestedAtMilliseconds:Self.instant,expiresAtMilliseconds:Self.instant+600_000,decision:.approved,approverID:binding.actorID,decidedAtMilliseconds:Self.instant+600_000))
         do { _ = try await Self.service(MemoryApprovals()).request(binding,deadline:.now.advanced(by:.seconds(-1)));XCTFail("Expired deadline accepted") }
         catch { XCTAssertEqual(error as? ApprovalError,.unavailable) }
+    }
+}
+
+private actor ApprovalLedgerFixture: ActionLedgerStore {
+    private var records: [UUID:ActionRecord] = [:]
+    func reserve(_ command: ActionCommand, deadline: ContinuousClock.Instant) throws -> ActionReservation {
+        if let record = records.values.first(where:{$0.command.actorID == command.actorID && $0.command.tool.qualifiedName == command.tool.qualifiedName && $0.command.idempotencyKey == command.idempotencyKey}) {
+            guard record.command.fingerprint == command.fingerprint else { throw ActionLedgerError.conflict };return .init(record:record,created:false)
+        }
+        let record = try ActionRecord(id:UUID(),command:command,status:.reserved,version:1,result:nil,providerReference:nil)
+        records[record.id] = record;return .init(record:record,created:true)
+    }
+    func load(actorID: UUID, id: UUID, deadline: ContinuousClock.Instant) throws -> ActionRecord {
+        guard let record = records[id],record.command.actorID == actorID else { throw ActionLedgerError.notFound };return record
+    }
+    func update(_ record: ActionRecord, to status: ActionStatus, result: ActionResult?, providerReference: String?, deadline: ContinuousClock.Instant) throws -> ActionRecord {
+        guard let current = records[record.id],current.version == record.version else { throw ActionLedgerError.versionConflict }
+        guard !current.status.isFinal else { throw ActionLedgerError.versionConflict }
+        let next = try ActionRecord(id:record.id,command:record.command,status:status,version:record.version+1,result:result,providerReference:providerReference)
+        records[record.id] = next;return next
+    }
+}
+private actor ApprovalExecutorFixture: ToolExecutor {
+    private(set) var calls = 0
+    func execute(_ call: ToolCall) -> Data {
+        calls += 1
+        return Data(#"{"schemaVersion":"1","entityId":"00000000-0000-0000-0000-000000000001","message":"fixture effect committed"}"#.utf8)
+    }
+}
+// SAFETY: all mutable state is protected by NSLock, including synchronous now().
+private final class ApprovalClockFixture: SquidraDomain.Clock, @unchecked Sendable {
+    private let lock = NSLock()
+    private var milliseconds: Int64 = 1_700_000_000_000
+    func set(_ value: Int64) { lock.withLock { milliseconds = value } }
+    func now() throws -> UTCInstant { try lock.withLock { try UTCInstant(secondsSince1970:Double(milliseconds)/1_000) } }
+    func timezone() -> IANATimeZone { try! IANATimeZone(identifier:"Etc/UTC") }
+    func monotonicElapsed() -> Duration { .zero }
+}
+private actor ApprovalPolicyFixture: PolicyEngine {
+    let clock: ApprovalClockFixture
+    private var enabled = true
+    private var expiry: Int64?
+    private var count = 0
+    init(clock: ApprovalClockFixture) { self.clock = clock }
+    func revoke() { enabled = false }
+    func expireOnRecheck(_ value: Int64) { expiry = value;count = 0 }
+    func evaluate(_ context: ActionPolicyContext) -> ActionPolicyDecision {
+        guard enabled else { return .deny }
+        count += 1
+        if count == 2,let expiry { clock.set(expiry) }
+        return .requiresApproval
+    }
+}
+
+// SAFETY: stateless suite; mutable fixtures are actors or lock-protected clocks.
+final class ApprovalGatewayTests: XCTestCase, @unchecked Sendable {
+    private struct Fixture {
+        let gateway: ActionGateway, service: ApprovalCoordinator, action: GatewayAction
+        let executor: ApprovalExecutorFixture, ledger: ApprovalLedgerFixture
+        let clock: ApprovalClockFixture, policy: ApprovalPolicyFixture
+    }
+    private static func fixture(_ risk: ToolRisk = .r2) throws -> Fixture {
+        let clock = ApprovalClockFixture(),policy = ApprovalPolicyFixture(clock:clock),executor = ApprovalExecutorFixture(),ledger = ApprovalLedgerFixture()
+        let service = ApprovalCoordinator(store:MemoryApprovals(),clock:clock)
+        let root = URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let definition = try ToolDefinition(id:ToolID(namespace:"fixture",name:"echo",version:"1.0.0"),capability:"fixture.write",risk:risk,idempotency:.durableLedger,
+            inputSchema:Data(contentsOf:root.appendingPathComponent("Schemas/tools/fixture.echo.1.0.0.input.json")),outputSchema:Data(contentsOf:root.appendingPathComponent("Schemas/tools/fixture.echo.1.0.0.output.json")))
+        let gateway = try ActionGateway(tools:[GatewayToolRegistration(definition:definition,surface:.bounded,executor:executor,resolveTarget:{ data in
+            guard let json = try JSONSerialization.jsonObject(with:data) as? [String:Any],let id = json["entityId"] as? String else { throw ApprovalError.invalidRequest };return "entity:"+id
+        })],policy:policy,ledger:ActionLedger(store:ledger),approvals:service)
+        let args = Data(#"{"schemaVersion":"1","entityId":"00000000-0000-0000-0000-000000000001","at":"2026-10-31T12:00:00Z","message":"fixture","limit":1}"#.utf8)
+        let action = GatewayAction(actorID:UUID(),runID:UUID(),tool:definition.id,target:"entity:00000000-0000-0000-0000-000000000001",arguments:args,scope:["fixture:write"],idempotencyKey:"sensitive-key",deadline:.now.advanced(by:.seconds(3)))
+        return Fixture(gateway:gateway,service:service,action:action,executor:executor,ledger:ledger,clock:clock,policy:policy)
+    }
+    private static func approvedAction(_ action: GatewayAction, id: UUID, runID: UUID? = nil, arguments: Data? = nil, target: String? = nil) -> GatewayAction {
+        GatewayAction(actorID:action.actorID,runID:runID ?? action.runID,tool:action.tool,target:target ?? action.target,arguments:arguments ?? action.arguments,
+            scope:action.scope,idempotencyKey:action.idempotencyKey,deadline:.now.advanced(by:.seconds(3)),approvalID:id)
+    }
+    private static func approve(_ fixture: Fixture) async throws -> ApprovalRecord {
+        let pending = try await fixture.gateway.requestApproval(fixture.action)
+        return try await fixture.service.resolve(actorID:fixture.action.actorID,id:pending.id,response:.approve,principalID:fixture.action.actorID,
+            expectedDigest:pending.digest,deadline:.now.advanced(by:.seconds(2)))
+    }
+    func testRequestReturnsWithoutDispatchAndPendingNeverExecutes() async throws {
+        let fixture = try Self.fixture(),pending = try await fixture.gateway.requestApproval(fixture.action)
+        let count = await fixture.executor.calls;XCTAssertEqual(count,0)
+        let record = try await fixture.ledger.load(actorID:fixture.action.actorID,id:pending.binding.ledgerID,deadline:.now.advanced(by:.seconds(1)))
+        XCTAssertEqual(record.status,.reserved)
+        do { _ = try await fixture.gateway.invoke(Self.approvedAction(fixture.action,id:pending.id));XCTFail("Pending executed") }
+        catch { XCTAssertEqual(error as? ApprovalError,.notApproved) }
+        let after = await fixture.executor.calls;XCTAssertEqual(after,0)
+    }
+    func testR2AndR3RequireApprovalAndReplayOneUntrustedEffect() async throws {
+        for risk in [ToolRisk.r2,.r3] {
+            let fixture = try Self.fixture(risk)
+            do { _ = try await fixture.gateway.invoke(fixture.action);XCTFail("Missing approval executed") }
+            catch { XCTAssertEqual(error as? ActionGatewayError,.approvalRequired) }
+            let approved = try await Self.approve(fixture),action = Self.approvedAction(fixture.action,id:approved.id)
+            guard case .completed(let result) = try await fixture.gateway.invoke(action) else { return XCTFail("Approved effect missing") }
+            XCTAssertEqual(result.trust,.untrusted)
+            guard case .replay(let replay) = try await fixture.gateway.invoke(action) else { return XCTFail("Approved result not replayed") }
+            XCTAssertEqual(replay.result?.payload,result.payload)
+            let count = await fixture.executor.calls;XCTAssertEqual(count,1)
+        }
+    }
+    func testConcurrentApprovedCallsClaimOnlyOneEffect() async throws {
+        let fixture = try Self.fixture(),approved = try await Self.approve(fixture),action = Self.approvedAction(fixture.action,id:approved.id)
+        async let a = fixture.gateway.invoke(action)
+        async let b = fixture.gateway.invoke(action)
+        let results = try await [a,b]
+        let completed = results.filter { if case .completed = $0 { return true };return false }
+        XCTAssertEqual(completed.count,1)
+        let count = await fixture.executor.calls;XCTAssertEqual(count,1)
+    }
+    func testChangedArgumentsAndRunCannotBorrowApproval() async throws {
+        let fixture = try Self.fixture(),approved = try await Self.approve(fixture)
+        let changed = Data(String(decoding:fixture.action.arguments,as:UTF8.self).replacingOccurrences(of:"fixture\"",with:"changed\"").utf8)
+        do { _ = try await fixture.gateway.invoke(Self.approvedAction(fixture.action,id:approved.id,arguments:changed));XCTFail("Changed arguments executed") }
+        catch { XCTAssertEqual(error as? ActionLedgerError,.conflict) }
+        do { _ = try await fixture.gateway.invoke(Self.approvedAction(fixture.action,id:approved.id,runID:UUID()));XCTFail("Other run borrowed approval") }
+        catch { XCTAssertEqual(error as? ApprovalError,.conflict) }
+        let count = await fixture.executor.calls;XCTAssertEqual(count,0)
+    }
+    func testExpiredApprovalAndRevokedPolicyNeverExecute() async throws {
+        let fixture = try Self.fixture(),approved = try await Self.approve(fixture)
+        fixture.clock.set(approved.expiresAtMilliseconds)
+        do { _ = try await fixture.gateway.invoke(Self.approvedAction(fixture.action,id:approved.id));XCTFail("Expired approval executed") }
+        catch { XCTAssertEqual(error as? ApprovalError,.expired) }
+        let other = try Self.fixture(),allowed = try await Self.approve(other)
+        await other.policy.revoke()
+        do { _ = try await other.gateway.invoke(Self.approvedAction(other.action,id:allowed.id));XCTFail("Revoked policy executed") }
+        catch { XCTAssertEqual(error as? ActionGatewayError,.denied) }
+        let count = await fixture.executor.calls,otherCount = await other.executor.calls
+        XCTAssertEqual(count,0);XCTAssertEqual(otherCount,0)
+    }
+    func testExpiryAfterClaimIsRecheckedInsideDispatcherBeforeEffect() async throws {
+        let fixture = try Self.fixture(),approved = try await Self.approve(fixture)
+        await fixture.policy.expireOnRecheck(approved.expiresAtMilliseconds)
+        do { _ = try await fixture.gateway.invoke(Self.approvedAction(fixture.action,id:approved.id));XCTFail("Approval expired before effect") }
+        catch { XCTAssertEqual(error as? ApprovalError,.expired) }
+        let count = await fixture.executor.calls;XCTAssertEqual(count,0)
+        let record = try await fixture.ledger.load(actorID:fixture.action.actorID,id:approved.binding.ledgerID,deadline:.now.advanced(by:.seconds(1)))
+        XCTAssertEqual(record.result?.failure,.notApplied)
+    }
+    func testR4ExtraControlsCannotBeEnabledByApprovalID() async throws {
+        let fixture = try Self.fixture(.r4)
+        do { _ = try await fixture.gateway.requestApproval(fixture.action);XCTFail("R4 enabled") }
+        catch { XCTAssertEqual(error as? ActionGatewayError,.denied) }
+        do { _ = try await fixture.gateway.invoke(Self.approvedAction(fixture.action,id:UUID()));XCTFail("R4 executed") }
+        catch { XCTAssertEqual(error as? ActionGatewayError,.approvalRequired) }
+        let count = await fixture.executor.calls;XCTAssertEqual(count,0)
     }
 }
