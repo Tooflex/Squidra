@@ -74,22 +74,42 @@ PY
 case "${1:-}" in
   build)
     "$container_engine" build -f infra/postgres.Dockerfile -t "$db_image" infra ;;
-  up)
+  up|up-local)
+    if [[ "$1" == up-local ]]; then
+      db_container="${SQUIDRA_DB_CONTAINER:-squidra-dev-db-local}"
+      local_port="${SQUIDRA_DB_LOCAL_PORT:-5432}"
+      [[ "$local_port" =~ ^[0-9]{1,5}$ ]] && (( 10#$local_port >= 1 && 10#$local_port <= 65535 )) || exit 2
+      local_port=$((10#$local_port))
+      credentials="$repo_root/infra/.env.squidra-db-local"
+      volume=squidra-postgres-local-data
+      network_args=(--publish "127.0.0.1:$local_port:5432")
+    else
+      credentials="$repo_root/infra/.env.squidra-db"
+      volume=squidra-postgres-data
+      network_args=(--network none)
+    fi
     if "$container_engine" inspect "$db_container" >/dev/null 2>&1; then
       assert_owned; "$container_engine" start "$db_container" >/dev/null
     else
-      credentials="$repo_root/infra/.env.squidra-db"
       [[ -f "$credentials" ]] || write_credentials "$credentials"
       "$container_engine" run -d --name "$db_container" --label io.squidra.database=development \
-        --network none --env-file "$credentials" -v squidra-postgres-data:/var/lib/postgresql/data "$db_image" >/dev/null
+        "${network_args[@]}" --env-file "$credentials" -v "$volume":/var/lib/postgresql/data "$db_image" >/dev/null
     fi
-    ready; apply_migrations; echo 'Squidra development database ready; no host port is published.' ;;
+    binding="$("$container_engine" port "$db_container")"
+    if [[ "$1" == up-local ]]; then
+      [[ "$binding" == "5432/tcp -> 127.0.0.1:$local_port" ]] || { echo 'Unexpected development port binding' >&2; exit 1; }
+    else
+      [[ -z "$binding" ]] || { echo 'Isolated development mode cannot use a published port' >&2; exit 1; }
+    fi
+    ready; apply_migrations
+    if [[ "$1" == up-local ]]; then echo "Squidra local database ready on 127.0.0.1:$local_port."
+    else echo 'Squidra development database ready; no host port is published.'; fi ;;
   migrate)
     ready; apply_migrations ;;
   down)
     assert_owned; "$container_engine" rm -f "$db_container" >/dev/null
     echo 'Container removed; development data volume retained.' ;;
-  test-client)
+  test-client|test-server)
     # Explicit integration-only exception: ephemeral TCP port on loopback, never 0.0.0.0.
     db_container="squidra-client-test-$(python3 -c 'import uuid;print(uuid.uuid4().hex[:12])')"
     credentials="$(mktemp)"; created=false
@@ -108,8 +128,13 @@ case "${1:-}" in
     test_port="${BASH_REMATCH[1]}"
     echo 'SQUIDRA_TEST_PASS:client_loopback_boundary'
     apply_migrations
-    python3 Scripts/run-db-client-tests.py "$credentials" "$test_port"
-    echo 'SQUIDRA_TEST_PASS:swift_client_integration'
+    if [[ "$1" == test-server ]]; then
+      python3 Scripts/run-db-client-tests.py "$credentials" "$test_port" SQD-001-SWIFT "$container_engine" "$db_container"
+      echo 'SQUIDRA_TEST_PASS:swift_server_integration'
+    else
+      python3 Scripts/run-db-client-tests.py "$credentials" "$test_port"
+      echo 'SQUIDRA_TEST_PASS:swift_client_integration'
+    fi
     ;;
   test|test-runtime)
     db_container="squidra-test-$(python3 -c 'import uuid;print(uuid.uuid4().hex[:12])')"
@@ -154,5 +179,5 @@ PY
       python3 Tests/SquidraPostgresTests/concurrency.py "$container_engine" "$db_container"
     fi
     ;;
-  *) echo 'Usage: Scripts/dev-db.sh build|up|migrate|test|test-runtime|test-client|down' >&2; exit 2 ;;
+  *) echo 'Usage: Scripts/dev-db.sh build|up|up-local|migrate|test|test-runtime|test-client|test-server|down' >&2; exit 2 ;;
 esac
