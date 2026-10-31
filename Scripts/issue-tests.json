@@ -6,5 +6,9 @@
   "SQD-013": {
     "kind": "xctest",
     "filter": "^SquidraTemporalTests\\.TemporalTests/"
+  },
+  "SQD-003": {
+    "kind": "xctest",
+    "filter": "^SquidraCognitionTests\\.ModelRouterTests/"
   }
 }
