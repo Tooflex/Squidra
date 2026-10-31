@@ -462,3 +462,43 @@ no result, including when an external effect might remain uncertain. The
 sixteen tests run offline with fixture executors and cover zero invocation
 for invalid input/denied grants, cancellation, timeout and error redaction.
 No model calls, costs or real side effects are measured by this suite.
+
+## Durable action ledger (SQD-007)
+
+```bash
+bash Scripts/test-issue.sh SQD-007-UNIT
+bash Scripts/test-issue.sh SQD-007
+```
+
+The second command requires the existing isolated database image and a running
+Docker/Podman engine. It runs the Swift adapter against real PostgreSQL, with
+concurrent sessions held behind an observed database lock. One successful
+`reserved → pending` compare-and-set grants dispatch; duplicates return a final
+result, an in-progress record, or an explicit reconciliation requirement.
+A reserved or pending record after a crash never grants another dispatch.
+Final results and their minimal outbox notification commit in one transaction;
+a forced outbox collision verifies that the result update rolls back as well.
+The outbox is a durable notification queue; no external delivery worker is
+implemented here.
+
+Fingerprint profile `SQUIDRA-ACTION-1` hashes a UTF-8 prefix followed by a
+canonical object containing actor UUID (lowercase), tool name and exact version,
+target, arguments and sorted/deduplicated scope. It excludes the run UUID and
+idempotency key, allowing the same logical command to replay from another run.
+Object keys sort by UTF-8 bytes; arrays retain order; decoded strings retain
+exact scalar content; decimal numbers normalize without a floating-point
+round-trip (`1`, `1.0`, `1e0` agree; adjacent large integers remain distinct).
+This is a frozen application profile, not an RFC 8785 implementation.
+The bounded parser rejects duplicate keys, nonfinite numbers, NUL strings and
+numbers whose expanded PostgreSQL JSONB text exceeds its 128-byte token limit.
+Swift Crypto 5.0.3 supplies SHA-256; that exact version was already locked.
+
+Results retain the validated catalog output's exact bytes and untrusted-data
+classification. Finalization retries replay the stored result. A pending/unknown
+outcome requires trusted provider or target evidence before reconciliation;
+neither a model assertion nor absence of a receipt authorizes another effect.
+Provider receipts remain internal. This does not promise external exactly-once
+without provider support, perform approval checks, implement crash recovery, or
+expose a business HTTP route. Those callers must use the host gateway and runtime
+budgets before dispatch. No migration is added: the adapter uses T03's ledger,
+run-scoped foreign keys, immutable commands, and outbox.
