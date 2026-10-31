@@ -172,3 +172,46 @@ and binary. `bash Scripts/test-issue.sh T05-PUBLICATION` qualifies concurrent
 claims, opaque/foreign ownership, generic-append isolation, terminal SQL rollback,
 reopened status/replay, expiry recovery and late-completion rejection. Physical
 retention/backup cleanup remains T12.
+
+## Owned read workers (T05 coordinator)
+
+`PublishedReadRunCoordinator` reserves capacity before its first await, binds the
+host actor/request/run/thread, and requires a fresh matching durable claim before
+execution. Default capacity is four (configurable 1–8); retained stream lifetime
+is host-configured, 186–604800 seconds (default 3600). Questions are bounded to
+4096 UTF-8 bytes and effective scope is exactly `world:read`. An uncertain or
+misbound claim never dispatches; no ownership is reconstructed from status.
+
+The narrow `ReadRunAnswerExecuting` port returns only a GroundedAnswer. Its
+production implementation delegates to the existing bounded ReadRunEngine.
+Implementations must cooperate with cancellation and deadlines. The coordinator
+also applies a monotonic timeout, clips the wall deadline to the claim's execution
+deadline, caps active time at 180 seconds and preserves the original smaller
+budget/cost/privacy settings. Actor/request/intent and permitted-subject proof binding are checked again before
+publication. Static errors expose no prompt, exception text or raw model output.
+
+Accepted workers have host-owned tasks, independent of the caller/HTTP connection.
+A completed or failed worker performs cancellation-resistant final publication in
+an owned task and awaits it. Publication uncertainty is resolved through persisted
+status/replay or lease-expiry recovery, never another model/tool execution. A
+worker failure cannot overwrite an already committed terminal outcome.
+
+Shutdown closes admission, cancels active workers, and joins their cooperative
+execution/publication cleanup plus submissions still awaiting claims. The host
+must await shutdown before tearing down database/client services. There is no
+fire-and-forget cleanup or automatic active-run restart. Capacity is released on
+all submission/worker exits; unavailable publication may leave the durable lease
+requiring explicit recovery. No raw question is persisted by this coordinator.
+
+`bash Scripts/test-issue.sh T05-WORKERS` uses real PostgreSQL publication/event
+stores and controlled cooperative executor fixtures. It covers transport/caller
+cancellation after acceptance, capacity, duplicate submission, replay/status
+without another execution, uncertain terminal response, ambiguous/misbound claims,
+shutdown racing a claim, deadlines/cancellation and foreign actor/subject/intent proof rejection.
+These are lifecycle fixtures, not live model-quality tests; existing T14-RUN and
+T14-SQL qualify the underlying model/gateway read engine separately.
+
+This adds no HTTP route, provider activation, automatic recovery scanner or
+application lifecycle wiring. The future host composition must own a run trace
+for the worker's full lifetime; inheriting an already closed HTTP trace scope
+does not qualify end-to-end tracing. T05 and SQD-030 remain open for that work.

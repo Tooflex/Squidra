@@ -332,5 +332,21 @@
       "client_loopback_boundary",
       "single_owner_terminal_publication"
     ]
+  },
+  "T05-WORKERS-SWIFT": {
+    "kind": "xctest",
+    "filter": "^SquidraServerTests\\.RunWorkerSQLTests/"
+  },
+  "T05-WORKERS": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-run-workers"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "owned_bounded_read_workers"
+    ]
   }
 }
