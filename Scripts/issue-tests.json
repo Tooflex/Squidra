@@ -210,5 +210,26 @@
       "journal_rebuild_contracts",
       "durable_journal_snapshot"
     ]
+  },
+  "SQD-014-UNIT": {
+    "kind": "xctest",
+    "filter": "^SquidraWorldTests\\.WorldProjectionTests/"
+  },
+  "SQD-014-SQL": {
+    "kind": "xctest",
+    "filter": "^SquidraWorldTests\\.WorldProjectionSQLTests/"
+  },
+  "SQD-014": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-projection"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "bitemporal_contracts",
+      "durable_bitemporal_state"
+    ]
   }
 }

@@ -66,6 +66,9 @@ jobs:
       - name: Run deterministic journal rebuild tests
         if: runner.os == 'macOS'
         run: bash Scripts/test-issue.sh SQD-016-UNIT
+      - name: Run bitemporal location contract tests
+        if: runner.os == 'macOS'
+        run: bash Scripts/test-issue.sh SQD-014-UNIT
       - name: Run tool catalog contract tests
         run: bash Scripts/test-issue.sh SQD-006
       - name: Run approval dispatch, routes and durable wait tests
@@ -95,6 +98,9 @@ jobs:
       - name: Verify journal CAS and stable snapshot pagination
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-016
+      - name: Verify bitemporal facts and knowledge-time corrections
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh SQD-014
       - name: Verify empty selections fail
         run: |
           if bash Scripts/test-issue.sh T01 --filter '^MissingSuite/'; then
