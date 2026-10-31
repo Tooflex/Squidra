@@ -873,3 +873,21 @@ policy denial. The helper uses an ephemeral loopback-only container, temporary
 credentials outside command arguments and existing migration/cleanup guards.
 Linux CI runs it; macOS runs the deterministic tool suites. This is read-path
 composition evidence, not provider, HTTP orchestration or watch qualification.
+
+`ReadPlanner` prepares a single world-read proposal through `ModelRouter` for
+T14. Host context is limited to 32 unique visible entities, labels of at most
+128 UTF-8 bytes, a 4 KiB question, an explicit global-read proposal gate and a
+finite maximum change window (up to 366 days). The clock supplies the reference
+instant and IANA zone. Model selection, cloud consent, fallback, cost, output
+and deadline bounds remain host-owned and enforced by the router.
+
+A closed model envelope may contain only schemaVersion, exact tool identifier
+and arguments. Only the two supported world read definitions are accepted;
+the catalog and strict timestamp/visibility/window checks run before returning
+an immutable non-Codable proposal. The model cannot supply cursor, actor, run,
+scope, approval or policy. Untrusted labels/context and the question stay in
+user-role messages, separate from fixed system rules. The proposal grants no
+execution or factual certainty: the future RunEngine must charge durable
+budgets, submit it to ActionGateway and validate a grounded response against
+actual evidence. `T14-PLANNING` uses controlled LanguageModel fixtures through
+the real router; no live model access or quality is claimed.
