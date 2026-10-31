@@ -94,7 +94,7 @@ case counts to catch selection mismatches.
 | Local macOS ARM64 (macOS 27), Swift 6.4.2 | `swift build`, 4 Domain tests, 8 runner checks, and executable smoke passed on 31 October 2026 |
 | Ubuntu 24.04 x86_64, Swift 6.4.2 | Build, Domain tests, runner checks, negative selection, executable smoke and lockfile check passed in run 41193634931 |
 | macOS 15 ARM64 hosted runner, Swift 6.4.2, Xcode 26.3 | Build, Domain tests, runner checks, negative selection, executable smoke and lockfile check passed in run 41193896734 |
-| Windows x86_64 | Unqualified: the first hosted probe found no Swift executable (run 41193488750) |
+| Windows x86_64 | Excluded from CI at the maintainer’s request; unqualified |
 | Linux ARM64, macOS x86_64 outside the observed CI runner | Not tested by this bootstrap |
 | Windows ARM64 | Deferred |
 
@@ -107,13 +107,12 @@ for the Domain tests. Package fetching requires network access once.
 
 `.github/workflows/bootstrap.yml` runs the Linux/macOS build, issue tests,
 empty-selection negative check, executable smoke test, and lockfile check.
-Windows qualification is reported separately and cannot certify support
-by being marked nonblocking. Workflows declare `contents: read`, do not
+Windows is excluded from CI and remains unqualified. Workflows declare `contents: read`, do not
 persist checkout credentials, and never use `pull_request_target`.
 
 After the real Linux/macOS jobs run successfully, their observed check
 names can be made required on `main`. Do not require invented check
-names or the nonblocking Windows probe. The maintainer requested no
+names or Windows checks. The maintainer requested no
 mandatory GitHub reviewers; the PR and history protections in
 [the bootstrap workflow](github-bootstrap.md) remain in effect.
 
@@ -944,3 +943,70 @@ An isolated trigger rejects the dispatch-reservation checkpoint and proves that
 recoveryRequired grants no read and invents no terminal state. The helper cleans
 up its temporary loopback database and credentials. This is database composition
 qualification, not process-restart, HTTP or live-model qualification.
+
+Semantic input rejection inside a bounded R0/readOnly adapter remains
+TOOL_INVALID_INPUT, allowing its HTTP adapter to report a static client error
+for actor-bound cursor validation. Effectful or ledger-backed adapter failures
+remain normalized as providerFailure; an unconfirmed effect cannot be recast
+as a harmless input error. The existing SQD-006 suite verifies all combinations.
+
+The authenticated local-owner HTTP API exposes `POST /api/v1/world/location`
+and `POST /api/v1/world/changes` using the exact tool input/output schemas in
+`Schemas/tools/world`. Both require one application/json content type and the
+injected bearer credential; the existing approved-origin/actor-header boundary
+applies. Actor identity and fresh request IDs come from the host. Body fields
+cannot supply identity, scope, tool selection or permission. The host creates
+an exact validated entity/global-read permission with fixed world:read scope;
+live PostgreSQL ports remain bound to that actor.
+
+The endpoints return schema-validated factual evidence and uncertainty with
+no-store headers. They do not generate natural-language answers or mutate the
+world. Invalid dates, malformed/foreign continuations and authoritative future
+watermark rejection return static 400 errors; oversized route bodies return
+413. Missing entity state remains an explicit not_found DTO, while backend
+failure/corruption is redacted. Generic schema timestamps are further checked
+against the strict Squidra RFC 3339 profile before target authorization.
+`T13-HTTP` covers real router and live HTTP requests. T13-READS qualifies actual
+PostgreSQL cursor rejection; T04, SQD-009 and SQD-001 regress boundary,
+approval and real process/signal lifecycle behavior.
+
+`WorldProjectionRecovery` replays a frozen actor journal snapshot from the last
+valid location-projection checkpoint. Defaults are pages of 64, at most 10,000
+visited events and 30 seconds; callers may tighten or explicitly configure the
+bounded limits. It validates version, actor, event identity/order, cursor,
+watermark and checkpoint progress. A committed prefix survives a failed replay
+and can resume; no success report is returned for an incomplete snapshot.
+A concurrent later append is outside the captured snapshot and remains explicit
+projection lag in subsequent reads.
+
+Live composition runs recovery through Hummingbird's beforeServerStarts hook:
+the owned database client runs, but HTTP cannot precede replay. Unsupported,
+corrupt or over-limit recovery fails startup with the existing static error.
+An empty projection cache can rebuild entirely from the immutable journal;
+a missing checkpoint with orphaned rows fails instead of overwriting data.
+Arbitrary cache-corruption repair is not claimed. Recovery itself deletes
+neither cache nor source data.
+
+`SQD-025-RECOVERY` runs bounded/cancellation contract tests and real PostgreSQL
+resume, empty-cache rebuild, stable current/historical facts, provenance,
+actor isolation, event-limit prefix/resume and invalid-cache checks. Test-only
+cache removal is scoped to the isolated actor. Two actual application-process
+restarts and HTTP response equivalence are qualified separately by SQD-025.
+
+`bash Scripts/test-issue.sh SQD-025` proves persistence with two actual
+`squidra serve` processes against one isolated migrated PostgreSQL database.
+Separate nonempty Swift seed/reset/verify suites write an immutable movement
+and correction, retain an unrelated actor, remove only the primary actor's
+mutable cache between processes and verify the rebuilt database afterwards.
+The first server starts from an empty projection; the second must rebuild again.
+
+The driver compares four canonical HTTP bodies: corrected location, historical
+knowledge, full change evidence and explicit no-evidence state. It independently
+checks actual source IDs, original timestamps, confidence, zone, watermarks and
+correction references, and rejects missing/altered counterexamples. Transport
+request IDs must be fresh and remain outside semantic comparison. SIGTERM and
+SIGINT both stop their owned process cleanly. Credentials stay in environment
+or private temporary files; both children and the loopback database are cleaned
+up on failure. The run prints its actual canonical evidence digest, not a fixed
+cross-run golden value (fixture UUIDs are freshly generated). No model/provider
+or production-data reset is involved.

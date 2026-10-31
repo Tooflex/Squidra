@@ -52,10 +52,22 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-017
       - name: Run interval algebra tests
         run: bash Scripts/test-issue.sh SQD-018
+      - name: Qualify conservative calibrated spatial relations
+        run: bash Scripts/test-issue.sh SQD-022-CONTRACTS
       - name: Run model routing tests
         run: bash Scripts/test-issue.sh SQD-003
       - name: Verify pinned AG-UI producer and bounded SSE replay contracts
         run: bash Scripts/test-issue.sh T05-CONTRACTS
+      - name: Verify documented provider matrix and authored offline fixtures
+        run: bash Scripts/test-issue.sh T11-CONTRACTS
+      - name: Verify consent-bound offline frame imports
+        run: bash Scripts/test-issue.sh SQD-020-OFFLINE
+      - name: Verify bounded entity association and ambiguous identity handling
+        run: bash Scripts/test-issue.sh SQD-021-UNIT
+      - name: Qualify bounded private OpenTelemetry spans
+        run: bash Scripts/test-issue.sh SQD-030-UNIT
+      - name: Qualify private model/tool/world tracing decorators
+        run: bash Scripts/test-issue.sh SQD-030-PORTS
       - name: Run grounded answer provenance tests
         run: bash Scripts/test-issue.sh SQD-019
       - name: Qualify strict timestamp wire dates
@@ -64,6 +76,8 @@ jobs:
         run: bash Scripts/test-issue.sh T13-LOCATION
       - name: Qualify bounded world change tool
         run: bash Scripts/test-issue.sh T13-CHANGES
+      - name: Qualify authenticated world-read HTTP routes
+        run: bash Scripts/test-issue.sh T13-HTTP
       - name: Qualify bounded read planning
         run: bash Scripts/test-issue.sh T14-PLANNING
       - name: Qualify world-read evidence decoding
@@ -88,6 +102,9 @@ jobs:
       - name: Run bounded change query contract tests
         if: runner.os == 'macOS'
         run: bash Scripts/test-issue.sh SQD-015-UNIT
+      - name: Run bounded world recovery contracts
+        if: runner.os == 'macOS'
+        run: bash Scripts/test-issue.sh SQD-025-UNIT
       - name: Run tool catalog contract tests
         run: bash Scripts/test-issue.sh SQD-006
       - name: Run approval dispatch, routes and durable wait tests
@@ -129,6 +146,30 @@ jobs:
       - name: Verify durable grounded read runs against PostgreSQL
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh T14-SQL
+      - name: Verify durable actor projection recovery
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh SQD-025-RECOVERY
+      - name: Verify two real server processes and rebuilt world evidence
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh SQD-025
+      - name: Verify bounded durable AG-UI replay
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh T05-SQL
+      - name: Verify single-owner run publication and abandoned-run recovery
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh T05-PUBLICATION
+      - name: Verify owned bounded read workers and joined shutdown
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh T05-WORKERS
+      - name: Verify authenticated run acceptance and bounded SSE replay
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh T05-HTTP
+      - name: Verify durable actor-scoped entity association
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh SQD-021-SQL
+      - name: Verify private tracing against actual PostgreSQL evidence
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh SQD-030-SQL
       - name: Verify empty selections fail
         run: |
           if bash Scripts/test-issue.sh T01 --filter '^MissingSuite/'; then
@@ -139,33 +180,6 @@ jobs:
         run: swift run --skip-build squidra
       - name: Verify lockfile remained unchanged
         run: git diff --exit-code -- Package.resolved
-
-  windows-probe:
-    name: Windows x86_64 qualification probe
-    runs-on: windows-2025
-    timeout-minutes: 30
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Probe installed toolchain, build, and Domain tests
-        id: probe
-        shell: pwsh
-        run: |
-          $swiftCommand = Get-Command swift -ErrorAction SilentlyContinue
-          if (-not $swiftCommand) { throw 'Swift unavailable: Windows remains unqualified' }
-          swift --version
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          swift build --force-resolved-versions
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          swift test --force-resolved-versions --disable-swift-testing
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Report qualification separately
-        if: always()
-        shell: pwsh
-        run: |
-          'Windows probe outcome: ${{ steps.probe.outcome }}. This nonblocking probe does not establish general Windows support.' >> $env:GITHUB_STEP_SUMMARY
 
   world-database:
     name: PostgreSQL 17 / PostGIS + pgvector

@@ -74,6 +74,9 @@ public struct ToolCatalog: ToolRegistry {
         } catch is CancellationError { throw CancellationError() }
         catch ToolError.timedOut { throw ToolError.timedOut }
         catch ToolError.invalidOutput { throw ToolError.invalidOutput }
+        catch ToolError.invalidInput where entry.definition.risk == .r0 && entry.definition.idempotency == .readOnly {
+            throw ToolError.invalidInput
+        }
         catch { throw ToolError.providerFailure }
     }
 }

@@ -66,3 +66,7 @@ always written `SDD §14 ADR-00X`.
       retries; R0–R4; `UNIQUE(actorId, toolName, idempotencyKey)`.
 - [x] Administrative prerequisites confirmed (plan §8: first commit identity,
       default branch, reviewer rules) before dependent work leaves draft.
+
+## Later decisions
+
+- [ADR-010: calibrated spatial relations](0010-calibrated-spatial-relations.md) has its own status; it is not part of the T00 approval above.

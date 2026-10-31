@@ -1,0 +1,138 @@
+{
+  "schemaVersion": "1",
+  "provenance": "authored_synthetic",
+  "liveQualified": false,
+  "modelId": "fixture.vision",
+  "modelVersion": "1.0.0",
+  "coordinateSpace": "source_pixels_xywh_half_open",
+  "maskEncoding": "row_major_binary",
+  "confidenceMeaning": "authored_test_value_not_measured_probability",
+  "frames": [
+    {
+      "caseId": "frame-1",
+      "mediaType": "image/png",
+      "width": 8,
+      "height": 8,
+      "imageBase64": "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAIUlEQVR4nGP4jwMwAPEdOTkgIkUCp1E4JcAm3SFFAisAAHM0sBlm+WSyAAAAAElFTkSuQmCC",
+      "imageSHA256": "41e0529cc7f8e5df0fd2a1d3e3265244739d50e9355aa5a0596db021d6835bb1",
+      "detections": [
+        {
+          "localId": "red",
+          "label": "red square",
+          "confidence": 0.875,
+          "box": {
+            "x": 1,
+            "y": 1,
+            "width": 2,
+            "height": 2
+          },
+          "mask": "0000000001100000011000000000000000000000000000000000000000000000",
+          "appearance": [
+            1,
+            0
+          ]
+        },
+        {
+          "localId": "blue",
+          "label": "blue square",
+          "confidence": 0.875,
+          "box": {
+            "x": 1,
+            "y": 5,
+            "width": 2,
+            "height": 2
+          },
+          "mask": "0000000000000000000000000000000000000000011000000110000000000000",
+          "appearance": [
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "caseId": "frame-2",
+      "mediaType": "image/png",
+      "width": 8,
+      "height": 8,
+      "imageBase64": "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAIUlEQVR4nGP4jwMwwFl35OSAiBQJnEZhkQCbcYcUCawAAKCssBnrPdFbAAAAAElFTkSuQmCC",
+      "imageSHA256": "b0f0b45c331fa7680dfd6ba2fc48d71f3891e194fee5cff1cb42f633bea2bc54",
+      "detections": [
+        {
+          "localId": "red",
+          "label": "red square",
+          "confidence": 0.875,
+          "box": {
+            "x": 3,
+            "y": 1,
+            "width": 2,
+            "height": 2
+          },
+          "mask": "0000000000011000000110000000000000000000000000000000000000000000",
+          "appearance": [
+            1,
+            0
+          ]
+        },
+        {
+          "localId": "blue",
+          "label": "blue square",
+          "confidence": 0.875,
+          "box": {
+            "x": 1,
+            "y": 5,
+            "width": 2,
+            "height": 2
+          },
+          "mask": "0000000000000000000000000000000000000000011000000110000000000000",
+          "appearance": [
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "caseId": "frame-3",
+      "mediaType": "image/png",
+      "width": 8,
+      "height": 8,
+      "imageBase64": "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAIUlEQVR4nGP4jwMwoPHvyMkBESkSOI1CkQDrvkOKBFYAAM4ksBlax3WzAAAAAElFTkSuQmCC",
+      "imageSHA256": "faa37565c5d589cfb1e9d504cb5f0ffd5e4e02063898a5e224f9f6fb76bcb65b",
+      "detections": [
+        {
+          "localId": "red",
+          "label": "red square",
+          "confidence": 0.875,
+          "box": {
+            "x": 5,
+            "y": 1,
+            "width": 2,
+            "height": 2
+          },
+          "mask": "0000000000000110000001100000000000000000000000000000000000000000",
+          "appearance": [
+            1,
+            0
+          ]
+        },
+        {
+          "localId": "blue",
+          "label": "blue square",
+          "confidence": 0.875,
+          "box": {
+            "x": 1,
+            "y": 5,
+            "width": 2,
+            "height": 2
+          },
+          "mask": "0000000000000000000000000000000000000000011000000110000000000000",
+          "appearance": [
+            0,
+            1
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # ADR-009: Bounded AG-UI producer and resumable run transport
 
-- Status: Proposed in the linked PR; acceptance occurs on its authorized merge.
+- Status: Initial protocol profile accepted by the authorized merge of [PR #134](https://github.com/Tooflex/Squidra/pull/134). Later implementation sections follow their own linked PR qualification.
 - Date: 2026-10-31
 - Sources: T05 / SRS §3,8; ADR-001/002/007/008; official AG-UI 1.0.
 
@@ -82,9 +82,9 @@ explicit expiration response (planned 410). A fresh read cannot silently begin
 mid-history. Reconnect only replays persisted events and never dispatches an
 action or starts another run.
 
-The future HTTP implementation must preserve the existing bearer/origin/body
-boundary and bounded connection deadline. Add Last-Event-ID to preflight handling
-only with its route and tests. A closed SSE connection alone does not mean a run
+The HTTP implementation must preserve the existing bearer/origin/body boundary
+and bounded handler deadline. Last-Event-ID preflight support is qualified with
+its route and tests below. A closed SSE connection alone does not mean a run
 failed; a transport/replay error must not fabricate a RUN_ERROR terminal event.
 Durable worker ownership, event retention, replay authorization, atomic status/
 event publication and process-restart behavior require separate qualification.
@@ -98,7 +98,182 @@ cancellation, precise/scoped/expired cursors, SSE injection resistance and limit
 Official fixture expectations are preserved; profile diagnostics use Squidra's
 typed errors rather than copying SDK error descriptions.
 
-No route, stream server, database migration, background worker or reconnect
-integration is implemented by this contract PR. T05 stays open for those steps.
-No package version changes are needed. Rollback removes the isolated producer,
-its tests and immutable qualification artifacts.
+The initial contract qualification adds no HTTP route or worker. Durable storage
+is qualified separately below; T05 stays open for transport and execution
+integration. No package version changes are needed. Reverting only the producer
+contracts removes their tests and immutable qualification artifacts.
+
+## Durable replay store (T05 persistence)
+
+The actor-bound `PostgresRunEventStore` stores publication metadata independently
+of the runtime FSM. This permits acceptance before worker creation without
+conferring dispatch authority. Identical creation preserves its original expiry;
+a changed binding or retention period conflicts. Atomic append requires the next
+sequence and validates the complete stored chronology before publication.
+
+Limits are 128 events and 1 MiB of canonical JSON per run, 64 KiB per event,
+16 events / 256 KiB per append, 32 events per page and 1–604800 seconds retention.
+Overflows fail without truncation or partial writes. Owned stream lookup precedes
+cursor decoding; another actor cannot probe cursor validity. Reopening a client
+replays the same persisted SSE frames and never calls a model, tool or worker.
+Malformed chronology, missing rows or inconsistent counters fail closed.
+
+Expiry is logical: expired streams cannot be read, appended or revived. Physical
+purging, backup retention and restore remain T12 work. Event UPDATE is forbidden;
+DELETE is reserved for future authorized retention maintenance, and any premature
+hole invalidates replay. Partial history pruning is not yet supported.
+
+`bash Scripts/test-issue.sh T05-SQL` qualifies two-client replay, ownership,
+creation/append conflicts, concurrent CAS, transactional database-error rollback,
+immutable events, corruption, byte/event/batch limits, expiry and cancellation.
+Migration `runtime/002_run_events.sql` is forward-only. Deploy its matching schema
+manifest and binary together: reverting only the binary fails schema readiness.
+No HTTP endpoint, worker ownership or atomic runtime/result publication is added
+by this persistence change; T05 remains open for those integrations.
+
+## Single-owner publication (T05 ownership)
+
+`RunPublicationStore` is a publication boundary, not an execution/approval permit.
+A host first creates a stream, then obtains one fresh successful claim before
+starting its bounded worker. Claiming an intact empty unmanaged stream fixes an
+opaque backend owner and atomically publishes RUN_STARTED. Any second claim,
+including one after an ambiguous response, conflicts. Do not dispatch on an
+ambiguous claim error; inspect status and let abandoned ownership expire.
+
+Execution is bounded to 1–180 seconds. A five-second publication grace is added
+to the database-clock lease; the returned execution deadline excludes this grace.
+The host must enforce its worker deadline and join cancellation before publishing
+cancelled completion. Leases cannot be renewed or transferred. Retention must
+outlast the lease. Database wall-clock adjustments can affect when recovery is
+eligible, but they never authorize another execution. Reconnection has no claim,
+model or tool-dispatch path.
+
+Only the backend's opaque claim can publish a managed terminal outcome. A whole
+GroundedAnswer produces its four presentation events plus RUN_FINISHED atomically
+with `succeeded`; a static failure or cancelled finish commits with its matching
+phase. Status never exposes the owner nonce. Generic event append cannot write a
+managed stream. Lease/retention are checked again before the metadata update;
+failed publication rolls back both event rows and phase. An uncertain completion
+must be resolved through persisted status/replay, never by rerunning the model.
+
+An owner-scoped maintenance call may terminalize an expired running lease with
+static RUN_RECOVERY_REQUIRED. It never restores an active runtime or repeats any
+read/action. A late completion conflicts, and retention expiry still prevents
+revival. Recovery is explicit per run; automatic scanning, worker composition,
+HTTP status/cancellation and restart orchestration are separate work. A crash
+after the runtime completed but before its answer was durably published still
+requires recovery; this layer cannot reconstruct a GroundedAnswer proof or claim
+successful output from the runtime checkpoint alone.
+
+Migration `runtime/003_run_publication.sql` adds ownership and constrained phases.
+Existing streams remain `unmanaged`, including previously terminal streams; they
+are not silently labeled successful. It requires the matching schema manifest
+and binary. `bash Scripts/test-issue.sh T05-PUBLICATION` qualifies concurrent
+claims, opaque/foreign ownership, generic-append isolation, terminal SQL rollback,
+reopened status/replay, expiry recovery and late-completion rejection. Physical
+retention/backup cleanup remains T12.
+
+## Owned read workers (T05 coordinator)
+
+`PublishedReadRunCoordinator` reserves capacity before its first await, binds the
+host actor/request/run/thread, and requires a fresh matching durable claim before
+execution. Default capacity is four (configurable 1–8); retained stream lifetime
+is host-configured, 186–604800 seconds (default 3600). Questions are bounded to
+4096 UTF-8 bytes and effective scope is exactly `world:read`. An uncertain or
+misbound claim never dispatches; no ownership is reconstructed from status.
+
+The narrow `ReadRunAnswerExecuting` port returns only a GroundedAnswer. Its
+production implementation delegates to the existing bounded ReadRunEngine.
+Implementations must cooperate with cancellation and deadlines. The coordinator
+also applies a monotonic timeout, clips the wall deadline to the claim's execution
+deadline, caps active time at 180 seconds and preserves the original smaller
+budget/cost/privacy settings. Actor/request/intent and permitted-subject proof binding are checked again before
+publication. Static errors expose no prompt, exception text or raw model output.
+
+Accepted workers have host-owned tasks, independent of the caller/HTTP connection.
+A completed or failed worker performs cancellation-resistant final publication in
+an owned task and awaits it. Publication uncertainty is resolved through persisted
+status/replay or lease-expiry recovery, never another model/tool execution. A
+worker failure cannot overwrite an already committed terminal outcome.
+
+Shutdown closes admission, cancels active workers, and joins their cooperative
+execution/publication cleanup plus submissions still awaiting claims. The host
+must await shutdown before tearing down database/client services. There is no
+fire-and-forget cleanup or automatic active-run restart. Capacity is released on
+all submission/worker exits; unavailable publication may leave the durable lease
+requiring explicit recovery. No raw question is persisted by this coordinator.
+
+`bash Scripts/test-issue.sh T05-WORKERS` uses real PostgreSQL publication/event
+stores and controlled cooperative executor fixtures. It covers transport/caller
+cancellation after acceptance, capacity, duplicate submission, replay/status
+without another execution, uncertain terminal response, ambiguous/misbound claims,
+shutdown racing a claim, deadlines/cancellation and foreign actor/subject/intent proof rejection.
+These are lifecycle fixtures, not live model-quality tests; existing T14-RUN and
+T14-SQL qualify the underlying model/gateway read engine separately.
+
+This adds no HTTP route, provider activation, automatic recovery scanner or
+application lifecycle wiring. The future host composition must own a run trace
+for the worker's full lifetime; inheriting an already closed HTTP trace scope
+does not qualify end-to-end tracing. T05 and SQD-030 remain open for that work.
+
+## Authenticated HTTP transport (T05 HTTP)
+
+The custom version-1 transport exposes:
+
+- `POST /api/v1/runs`: with host-configured submission, accept the closed JSON
+  object `schemaVersion` (string `"1"`), `question`, `entityId` and `intent`
+  (`historical`, `latest_observation`, `current`). The decoded question is at most
+  4096 UTF-8 bytes; the body is at most 32768 bytes, including JSON escapes. Reject
+  duplicate/unknown fields, nulls, invalid types and unpermitted entity IDs.
+  Identity, effective scope, model/consent/cost settings and fresh run/thread/
+  request/trace IDs come from the authenticated host. Return 202 only after a
+  durable claim and worker registration, with relative status/events links.
+- `GET /api/v1/runs/:run`: return actor-owned publication phase, terminal/output-
+  ready flags, retention/sequence metadata and optional runtime diagnostics. The
+  runtime checkpoint's frozen state names are preserved. Runtime `Completed`
+  alone is not output completion: only publication `succeeded` makes
+  `outputReady` true. Never return questions, owner nonces or raw errors.
+- `GET /api/v1/runs/:run/events`: return one finite bounded SSE batch (at most
+  32 retained events, 1100000 encoded bytes), with existing canonical event IDs.
+  Authenticated clients reconnect using `Last-Event-ID`; it is not an auth grant.
+  Perform owned lookup before cursor validation. Empty nonterminal reads may
+  long-poll for at most 20 seconds, then return a heartbeat comment with no ID.
+  Bound all handler I/O to 25 seconds within the default 30-second HTTP boundary.
+  Bodies are already bounded/materialized when headers are returned; there is no
+  unbounded body-writer task. Socket delivery still uses the server's normal
+  transport backpressure/idle lifecycle, not a claimed absolute transfer SLA.
+
+This is finite GET-SSE replay/long polling with POST-202 acceptance, not a drop-in
+AG-UI HttpAgent POST-SSE adapter. Native EventSource cannot supply the required
+bearer header; a client needs authenticated fetch/stream parsing and reconnection.
+Advance the cursor only after processing an event. A fresh view can read from the
+start; a consumer must not discard its presentation state while keeping a cursor
+past the grounded-answer event. GET/status/reconnection and transport failures
+never dispatch, resume, cancel or fabricate a business RUN_ERROR.
+
+Malformed/future/foreign cursors return 400; unknown owned-scope IDs return 404;
+expired retention returns 410/EXPIRED. Corrupt/unavailable storage fails closed.
+Private errors retain the fixed filtered envelope and fresh host request ID;
+503 now has UNAVAILABLE, and 410 has EXPIRED. Add Last-Event-ID only to the existing
+single-approved-origin preflight allowlist; no cookies, wildcard origin or URL
+credential is introduced. All responses retain no-store.
+
+Default live composition exposes authenticated read-only persisted status/replay.
+POST remains 503/UNAVAILABLE until a host supplies its permitted entities and a
+bounded read coordinator; this change activates no model/provider or fixture
+fallback. The worker service is registered after the database client. Hummingbird
+appends its HTTP service last; ServiceLifecycle gracefully stops them in reverse
+order, so HTTP admission stops, worker cleanup/publication is joined, then the
+client stops. The explicit ServiceLifecycle root declaration uses the already
+locked 2.13.0; no package version or lockfile change is needed.
+
+`bash Scripts/test-issue.sh T05-HTTP` qualifies real PostgreSQL transport with
+controlled local model responses through ReadRunEngine/ModelRouter/gateway/world
+projection, plus independent cooperative lifecycle fixtures. Checks include fresh
+identity and scoped input, grounded provenance/unknown occurrence, exact SSE
+ordering/resume, cursor/retention errors, no extra model/read on reconnect,
+preflight, actual loopback client cancellation and joined shutdown with an active
+worker. These fixtures do not measure live model quality, tokens or cloud cost.
+There is no new migration, raw prompt persistence or automatic restart/recovery.
+Parent T05 still needs host/provider activation, worker-owned tracing and wider
+process-restart qualification.

@@ -58,12 +58,25 @@ public struct AGUIStreamRecord: Sendable {
         guard sequence >= 1,sequence <= AGUIStreamValidator.maximumEvents else { throw AGUIError.invalidSequence }
         self.binding = binding;self.sequence = sequence;self.event = event
     }
-    public func encodedSSE() throws -> Data {
-        // Producer JSON is compact. Refuse multiline storage bytes rather than
-        // letting them create SSE control lines through a future restore path.
-        guard !event.json.contains(10),!event.json.contains(13) else { throw AGUIError.invalidEvent }
-        let cursor = try AGUIResumeCursor(actorID:binding.actorID,runID:binding.runID,afterSequence:sequence).encoded()
-        return Data("id: \(cursor)\ndata: \(String(decoding:event.json,as:UTF8.self))\n\n".utf8)
-    }
+    public func encodedSSE() throws -> Data { try AGUISSEFrame.encode(binding:binding,sequence:sequence,json:event.json) }
     public static let heartbeat = Data(": keepalive\n\n".utf8)
+}
+
+/// Structurally checked presentation bytes, not a producer or authorization grant.
+public struct AGUIReplayRecord: Sendable {
+    public let binding: AGUIRunBinding
+    public let sequence: Int64
+    public let json: Data
+    internal init(binding: AGUIRunBinding, sequence: Int64, json: Data) {
+        self.binding = binding;self.sequence = sequence;self.json = json
+    }
+    public func encodedSSE() throws -> Data { try AGUISSEFrame.encode(binding:binding,sequence:sequence,json:json) }
+}
+internal enum AGUISSEFrame {
+    static func encode(binding: AGUIRunBinding, sequence: Int64, json: Data) throws -> Data {
+        // Canonical producer/database JSON remains one physical data line.
+        guard !json.contains(10),!json.contains(13) else { throw AGUIError.invalidEvent }
+        let cursor = try AGUIResumeCursor(actorID:binding.actorID,runID:binding.runID,afterSequence:sequence).encoded()
+        return Data("id: \(cursor)\ndata: \(String(decoding:json,as:UTF8.self))\n\n".utf8)
+    }
 }

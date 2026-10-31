@@ -34,12 +34,12 @@ struct HTTPBoundary<Inner: HTTPResponder>: HTTPResponder where Inner.Context == 
                       ["GET", "POST", "PUT", "PATCH", "DELETE"].contains(method) else { throw HTTPError(.forbidden) }
                 let names = (request.headers[.accessControlRequestHeaders] ?? "").split(separator: ",")
                     .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
-                guard names.allSatisfy({ ["authorization", "content-type", "x-actor-id"].contains($0) }) else {
+                guard names.allSatisfy({ ["authorization", "content-type", "x-actor-id", "last-event-id"].contains($0) }) else {
                     throw HTTPError(.forbidden)
                 }
                 response = Response(status: .noContent, headers: [
                     .accessControlAllowMethods: method,
-                    .accessControlAllowHeaders: "Authorization, Content-Type, X-Actor-ID",
+                    .accessControlAllowHeaders: "Authorization, Content-Type, X-Actor-ID, Last-Event-ID",
                 ])
             } else {
                 let isProbe = request.method == .get && Self.publicProbes.contains(request.uri.path)
@@ -114,6 +114,8 @@ struct HTTPBoundary<Inner: HTTPResponder>: HTTPResponder where Inner.Context == 
         case .badRequest: fields = ("VALIDATION_FAILED", "Invalid request.")
         case .contentTooLarge: fields = ("PAYLOAD_TOO_LARGE", "Request body exceeds the limit.")
         case .conflict: fields = ("CONFLICT", "Request conflicts with current state.")
+        case .gone: fields = ("EXPIRED", "Retained data has expired.")
+        case .serviceUnavailable: fields = ("UNAVAILABLE", "Service is unavailable.")
         case .gatewayTimeout: fields = ("TIMED_OUT", "Request deadline exceeded.")
         default: fields = ("INTERNAL_ERROR", "Request could not be completed.")
         }

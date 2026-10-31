@@ -43,8 +43,8 @@ The repository ruleset `main: pull requests and history protection`
 - Require resolution of review threads before merging.
 - Reject forced/non-fast-forward updates and branch deletion.
 - Required successful checks: `Swift 6.4.2 / ubuntu-24.04` and
-  `Swift 6.4.2 / macos-15`, with the branch up to date.
-- The Windows qualification probe is nonblocking and is not required.
+  `Swift 6.4.2 / macos-15`, and `PostgreSQL 17 / PostGIS + pgvector`, with the branch up to date.
+- Windows is excluded from CI at the maintainer’s request and remains unqualified.
 
 Repository auto-merge is disabled. The default Actions token has read-only
 permissions, and Actions cannot approve pull requests. These settings

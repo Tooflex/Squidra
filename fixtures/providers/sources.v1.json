@@ -1,0 +1,114 @@
+{
+  "schemaVersion": "1",
+  "sources": [
+    {
+      "id": "overview",
+      "url": "https://dev.meta.ai/docs/overview",
+      "effectiveURL": "https://dev.meta.ai/docs/overview",
+      "observedOn": "2026-10-31",
+      "sha256": "b5066c5b0947b98e65698e61b08a3933c9b997f24c6afe28e38d2ff07ef285aa",
+      "bytes": 292309,
+      "digestMeaning": "Observed public response bytes; not a guarantee of immutable hosted model weights."
+    },
+    {
+      "id": "models",
+      "url": "https://dev.meta.ai/docs/models",
+      "effectiveURL": "https://dev.meta.ai/docs/models",
+      "observedOn": "2026-10-31",
+      "sha256": "b3dcc68e03cd4982906cb825b86cdef0c3650fd5d8c1aeae5aaa9a83aaf51274",
+      "bytes": 289219,
+      "digestMeaning": "Observed public response bytes; not a guarantee of immutable hosted model weights."
+    },
+    {
+      "id": "pricing",
+      "url": "https://dev.meta.ai/docs/pricing-rate-limits",
+      "effectiveURL": "https://dev.meta.ai/docs/pricing-rate-limits",
+      "observedOn": "2026-10-31",
+      "sha256": "fdf6a9332776f6fb74edb2caa785de39ca75dba29c0c78ec06605fe55331d77a",
+      "bytes": 199324,
+      "digestMeaning": "Observed public response bytes; not a guarantee of immutable hosted model weights."
+    },
+    {
+      "id": "glimmer",
+      "url": "https://dev.meta.ai/docs/muse-glimmer/",
+      "effectiveURL": "https://dev.meta.ai/docs/muse-glimmer",
+      "observedOn": "2026-10-31",
+      "sha256": "6801bab088c5db862eb5c4eb95d8b073fb59254a4aa5df8904363be19a99830d",
+      "bytes": 145329,
+      "digestMeaning": "Observed public response bytes; not a guarantee of immutable hosted model weights."
+    },
+    {
+      "id": "sam-output",
+      "url": "https://dev.meta.ai/docs/sam/reading-segmentation",
+      "effectiveURL": "https://dev.meta.ai/docs/sam/reading-segmentation",
+      "observedOn": "2026-10-31",
+      "sha256": "03daa99d57c14ab72f6aeb33a067ac7be0c84c88127311ce7c0ff91c843ab03f",
+      "bytes": 218551,
+      "digestMeaning": "Observed public response bytes; not a guarantee of immutable hosted model weights."
+    },
+    {
+      "id": "zdr",
+      "url": "https://dev.meta.ai/help/policies-and-privacy/zero-data-retention",
+      "effectiveURL": "https://dev.meta.ai/help/policies-and-privacy/zero-data-retention",
+      "observedOn": "2026-10-31",
+      "sha256": "ac701b9e74715bd64f53bba9717d5ccdeccd5ee3364ff409ae7727cff72a0038",
+      "bytes": 67549,
+      "digestMeaning": "Observed public response bytes; not a guarantee of immutable hosted model weights."
+    },
+    {
+      "id": "contributor",
+      "url": "https://dev.meta.ai/help/policies-and-privacy/contributor-tier",
+      "effectiveURL": "https://dev.meta.ai/help/policies-and-privacy/contributor-tier",
+      "observedOn": "2026-10-31",
+      "sha256": "bfdc3536df8c2c65354fa006a3740ae7e6bba18055b1be3e427f08b210791b01",
+      "bytes": 59396,
+      "digestMeaning": "Observed public response bytes; not a guarantee of immutable hosted model weights."
+    },
+    {
+      "id": "sam-source",
+      "url": "https://api.github.com/repos/facebookresearch/sam3/commits/main",
+      "effectiveURL": "https://api.github.com/repos/facebookresearch/sam3/commits/main",
+      "observedOn": "2026-10-31",
+      "sha256": "50fc2ee2a0105fe00a2bad47db2c1fd609a8dd9d7f7e392c30906fc644a8ec56",
+      "bytes": 51865,
+      "digestMeaning": "Observed public response bytes; not a guarantee of immutable hosted model weights.",
+      "revision": "f1647e8d0c1d280991f4d1b7d974c2704537fe66"
+    },
+    {
+      "id": "sam3-weights",
+      "url": "https://huggingface.co/api/models/facebook/sam3",
+      "effectiveURL": "https://huggingface.co/api/models/facebook/sam3",
+      "observedOn": "2026-10-31",
+      "sha256": "c910992cf440f0ac1542a9c29e0106c656b2ccf3e9c8787138a954e2f3094653",
+      "bytes": 4915,
+      "digestMeaning": "Observed public response bytes; not a guarantee of immutable hosted model weights.",
+      "revision": "3c879f39826c281e95690f02c7821c4de09afae7",
+      "gated": "manual",
+      "license": "other"
+    },
+    {
+      "id": "sam31-weights",
+      "url": "https://huggingface.co/api/models/facebook/sam3.1",
+      "effectiveURL": "https://huggingface.co/api/models/facebook/sam3.1",
+      "observedOn": "2026-10-31",
+      "sha256": "2e2441fd108397b81305511fe7a045365c03646131460320a92b04227b8197d6",
+      "bytes": 2305,
+      "digestMeaning": "Observed public response bytes; not a guarantee of immutable hosted model weights.",
+      "revision": "daa63191845a41281374e725f4c9e51c7a824460",
+      "gated": "manual",
+      "license": "other"
+    },
+    {
+      "id": "glimmer-weights",
+      "url": "https://huggingface.co/api/models/meta-models/Muse-Glimmer-30B",
+      "effectiveURL": "https://huggingface.co/api/models/meta-models/Muse-Glimmer-30B",
+      "observedOn": "2026-10-31",
+      "sha256": "fd4355f0777cefc69f2135ba594fb0b832e6668cc96e4d45fa05fec0c1ee9203",
+      "bytes": 13364,
+      "digestMeaning": "Observed public response bytes; not a guarantee of immutable hosted model weights.",
+      "revision": "cec94fcfd6512f2cfe708138c32533b346ea4f69",
+      "gated": false,
+      "license": "apache-2.0"
+    }
+  ]
+}
