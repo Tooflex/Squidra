@@ -185,5 +185,9 @@
   "SQD-009": {
     "kind": "xctest",
     "filter": "^(SquidraSecurityTests\\.ApprovalGatewayTests|SquidraAgentRuntimeTests\\.ApprovalWaitTests|SquidraServerTests\\.ApprovalRouteTests)/"
+  },
+  "SQD-016-JSON": {
+    "kind": "xctest",
+    "filter": "^SquidraDomainTests\\.JSONDocumentTests/"
   }
 }
