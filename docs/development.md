@@ -932,3 +932,15 @@ state. The facade does not resume such a run. `T14-RUN` qualifies actual
 planner/router/gateway/decoder/validator composition with controlled model,
 read-port and store fixtures; its reported token/cost values are fixture data.
 Real PostgreSQL run composition and HTTP integration require separate checks.
+
+`bash Scripts/test-issue.sh T14-SQL` qualifies ReadRunEngine with real
+PostgresRunStore, journal and projections plus controlled ModelRouter fixture
+responses. It reloads completed checkpoints through a separate PostgreSQL
+client and compares them to returned snapshots. Historical and late-corrected
+answers retain actual source event IDs, confidence, IANA zone, unknown occurrence
+and explicit staleness. A missing-evidence answer completes under one-step,
+one-call and one-repetition limits; a one-page change answer remains partial.
+An isolated trigger rejects the dispatch-reservation checkpoint and proves that
+recoveryRequired grants no read and invents no terminal state. The helper cleans
+up its temporary loopback database and credentials. This is database composition
+qualification, not process-restart, HTTP or live-model qualification.
