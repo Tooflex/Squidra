@@ -110,5 +110,26 @@
   "SQD-018": {
     "kind": "xctest",
     "filter": "^SquidraTemporalTests\\.IntervalAlgebraTests/"
+  },
+  "SQD-005": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-run-store"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "host_fsm_budgets",
+      "durable_run_store"
+    ]
+  },
+  "SQD-005-UNIT": {
+    "kind": "xctest",
+    "filter": "^SquidraAgentRuntimeTests\\.RunPolicyTests/"
+  },
+  "SQD-005-SQL": {
+    "kind": "xctest",
+    "filter": "^SquidraAgentRuntimeTests\\.RunSQLTests/"
   }
 }

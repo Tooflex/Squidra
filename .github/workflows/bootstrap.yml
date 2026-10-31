@@ -52,6 +52,9 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-018
       - name: Run model routing tests
         run: bash Scripts/test-issue.sh SQD-003
+      - name: Run host FSM and budget tests
+        if: runner.os == 'macOS'
+        run: bash Scripts/test-issue.sh SQD-005-UNIT
       - name: Run HTTP boundary tests
         run: bash Scripts/test-issue.sh T04
       - name: Build isolated database for Swift adapter
@@ -63,6 +66,9 @@ jobs:
       - name: Verify live headless server and signal shutdown
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-001
+      - name: Verify durable runtime checkpoints and SQL CAS
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh SQD-005
       - name: Verify empty selections fail
         run: |
           if bash Scripts/test-issue.sh T01 --filter '^MissingSuite/'; then

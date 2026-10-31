@@ -1,6 +1,5 @@
 import Foundation
 import PostgresNIO
-import Logging
 
 public enum DatabaseReadiness: Equatable, Sendable {
     case ready
@@ -60,20 +59,20 @@ public struct PostgresSchemaReadiness: Sendable {
     }
 
     private func inspect(_ connection: PostgresConnection) async throws -> DatabaseReadiness {
-        let logger = Logger(label: "squidra.readiness", factory: { _ in SwiftLogNoOpLogHandler() })
         do {
-            let rows = try await connection.query("SELECT current_setting('server_version_num')::int", logger: logger)
+            let rows = try await BoundedPostgresQuery.rows(connection, "SELECT current_setting('server_version_num')::int")
             var versions: [Int] = []
-            for try await value in rows.decode(Int.self) { versions.append(value) }
+            for row in rows { versions.append(try row.decode(Int.self)) }
             guard versions.count == 1, (170000..<180000).contains(versions[0]) else { return .notReady(.database) }
         } catch {
             try Task.checkCancellation()
             return .notReady(.database)
         }
         do {
-            let rows = try await connection.query("SELECT namespace, version, checksum FROM public.squidra_schema_migrations LIMIT \(expected.count + 1)", logger: logger)
+            let rows = try await BoundedPostgresQuery.rows(connection, "SELECT namespace, version, checksum FROM public.squidra_schema_migrations LIMIT \(expected.count + 1)")
             var actual = Set<SchemaMigration>()
-            for try await (namespace, version, checksum) in rows.decode((String, String, String).self) {
+            for row in rows {
+                let (namespace, version, checksum) = try row.decode((String, String, String).self)
                 actual.insert(.init(namespace: namespace, version: version, checksum: checksum))
             }
             return actual == expected ? .ready : .notReady(.migrations)
