@@ -806,3 +806,15 @@ The deterministic suite qualifies observed/inferred/historical/change answers,
 stale/future/expired evidence, delayed validation, contradictions, partial pages,
 clock failure, citation injection and scoped limits. No model/provider call or
 answer HTTP route is introduced here; orchestration follows T14.
+
+Timestamp wire dates use `SquidraDomain.RFC3339`, shared by grounded evidence
+and future world tools. This explicit [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339)
+profile accepts Gregorian years 0001–9999, known explicit offsets, uppercase or
+lowercase T/Z and up to nine fractional digits. It rejects impossible dates,
+leap seconds, unknown `-00:00` offsets and UTC conversions outside the supported
+range. Offsets do not identify an IANA zone; preserve that zone separately.
+Output is canonical UTC with six fractional digits, rounded to microseconds.
+`UTCInstant` uses Double, so distant dates can have coarser precision; input
+precision is not a promise of nanosecond storage. The formatter uses proleptic
+Gregorian arithmetic rather than a calendar that normalizes invalid input.
+Run `bash Scripts/test-issue.sh T13-TIME` for the codec qualification.

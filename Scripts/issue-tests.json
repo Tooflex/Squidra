@@ -256,5 +256,9 @@
   "SQD-019": {
     "kind": "xctest",
     "filter": "^SquidraCognitionTests\\.AnswerEvidenceTests/"
+  },
+  "T13-TIME": {
+    "kind": "xctest",
+    "filter": "^SquidraDomainTests\\.RFC3339Tests/"
   }
 }
