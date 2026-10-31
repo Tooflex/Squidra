@@ -268,5 +268,21 @@
   "T13-CHANGES": {
     "kind": "xctest",
     "filter": "^SquidraToolsTests\\.WorldChangesToolTests/"
+  },
+  "T13-READS-SQL": {
+    "kind": "xctest",
+    "filter": "^SquidraToolsTests\\.WorldToolsSQLTests/"
+  },
+  "T13-READS": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-world-tools"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "gateway_postgres_evidence"
+    ]
   }
 }
