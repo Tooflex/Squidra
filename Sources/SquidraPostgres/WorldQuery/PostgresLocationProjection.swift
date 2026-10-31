@@ -112,7 +112,7 @@ public struct PostgresLocationProjection: WorldProjector, WorldStateQuery {
                     e.payload->'data'->>'basis' AS basis,floor(extract(epoch FROM e.occurred_at)*1000000)::bigint AS occurred_us,
                     floor(extract(epoch FROM e.observed_at)*1000000)::bigint AS observed_us,
                     floor(extract(epoch FROM e.recorded_at)*1000000)::bigint AS recorded_us,
-                    (f.subject_id=(e.payload->'data'->>'subjectId')::uuid AND f.object_id=(e.payload->'data'->>'locationId')::uuid
+                    (f.id=e.event_id AND f.subject_id=(e.payload->'data'->>'subjectId')::uuid AND f.object_id=(e.payload->'data'->>'locationId')::uuid
                         AND f.frame_id=(e.payload->'data'->>'frameId')::uuid AND f.confidence=e.confidence AND f.tx_from=e.recorded_at
                         AND floor(extract(epoch FROM f.valid_from)*1000000)::bigint=(e.payload->'data'->>'validFromMicroseconds')::numeric::bigint
                         AND floor(extract(epoch FROM f.valid_to)*1000000)::bigint IS NOT DISTINCT FROM (e.payload->'data'->>'validToMicroseconds')::numeric::bigint) AS source_matches
@@ -137,7 +137,7 @@ public struct PostgresLocationProjection: WorldProjector, WorldStateQuery {
         let occurred_us: Int64?,observed_us: Int64,recorded_us: Int64
         let source_matches: Bool?
     }
-    private func decodeFact(_ row: PostgresRow, subjectID: UUID) throws -> WorldLocationFact {
+    func decodeFact(_ row: PostgresRow, subjectID: UUID) throws -> WorldLocationFact {
         do {
             let text = try row.decode(String.self)
             guard text.utf8.count <= 8_192 else { throw WorldProjectionError.corruptRecord }
@@ -152,7 +152,7 @@ public struct PostgresLocationProjection: WorldProjector, WorldStateQuery {
                 sourceID:value.source_id,sourceEventID:value.provenance_event_id,timestamps:ObservationTimestamps(occurredAt:times.occurredAt,observedAt:times.observedAt,recordedAt:recorded,timeZone:times.timeZone))
         } catch { throw WorldProjectionError.corruptRecord }
     }
-    private func transaction<Value: Sendable>(deadline: ContinuousClock.Instant, readOnly: Bool = false,
+    func transaction<Value: Sendable>(deadline: ContinuousClock.Instant, readOnly: Bool = false,
         _ body: @escaping @Sendable (PostgresConnection) async throws -> Value) async throws -> Value {
         try await withConnection(deadline: deadline) { connection in
             let begin: PostgresQuery = readOnly ? "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY" : "BEGIN"
@@ -188,6 +188,7 @@ public struct PostgresLocationProjection: WorldProjector, WorldStateQuery {
         } catch {
             try Task.checkCancellation()
             if let error = error as? WorldProjectionError { throw error }
+            if let error = error as? WorldChangesError { throw error }
             if let error = error as? PSQLError {
                 switch error.serverInfo?[.sqlState] {
                 case "23505": throw WorldProjectionError.versionConflict
