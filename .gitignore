@@ -1,0 +1,84 @@
+# SQUIDRA — SwiftPM monolith (Swift 6.x / Hummingbird 2.x), Postgres, typed static web UI
+# See T01: Package.swift + Package.resolved are tracked for reproducible builds.
+
+# SwiftPM build outputs and dependency checkouts
+.build/
+.swiftpm/checkouts/
+.swiftpm/xcode/
+Packages/
+checkouts/
+
+# Keep the resolved dependency lockfile tracked — never ignore it
+!Package.resolved
+
+# Xcode generated files, user state, and derived data
+*.xcodeproj/
+*.xcworkspace/xcuserdata/
+xcuserdata/
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+timeline.xctimeline
+playground.xcworkspace
+
+# Web demo UI (web/, toolchain locked in T06)
+web/node_modules/
+web/dist/
+web/build/
+web/.next/
+web/out/
+web/coverage/
+
+# Python helper scripts and plan tooling
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local Postgres / container state (T02) — compose file and migrations stay tracked
+postgres-data/
+pgdata/
+*.dump
+
+# Environment and secrets — never commit credentials (T04)
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+# Native packaging outputs (SQD-002)
+packaging/build/
+packaging/dist/
+*.pkg
+*.dmg
+*.deb
+*.rpm
+*.msi
+*.msix
+
+# Coverage and profiling reports
+coverage/
+*.lcov
+*.profraw
+*.profdata
+
+# Logs and local runtime state
+*.log
+logs/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS files (macOS / Linux / Windows matrix)
+.DS_Store
+Thumbs.db
+Desktop.ini
