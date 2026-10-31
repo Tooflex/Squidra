@@ -2,5 +2,9 @@
   "T01": {
     "kind": "xctest",
     "filter": "^SquidraDomainTests\\.ConfidenceTests/"
+  },
+  "SQD-013": {
+    "kind": "xctest",
+    "filter": "^SquidraTemporalTests\\.TemporalTests/"
   }
 }

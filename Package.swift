@@ -30,6 +30,7 @@ let package = Package(
             ]
         ),
         .testTarget(name: "SquidraDomainTests", dependencies: ["SquidraDomain"]),
+        .testTarget(name: "SquidraTemporalTests", dependencies: ["SquidraDomain", "SquidraTemporal"]),
     ],
     swiftLanguageModes: [.v6]
 )
