@@ -36,6 +36,8 @@ jobs:
           python3 --version
           uname -a
           if [[ "$RUNNER_OS" == macOS ]]; then xcrun --show-sdk-version; fi
+      - name: Verify expected schema matches migrations
+        run: python3 Scripts/schema-manifest.py --check
       - name: Verify test-runner failure handling
         run: python3 Scripts/test_issue_runner.py
       - name: Build pinned dependencies and modules
@@ -48,6 +50,12 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-003
       - name: Run HTTP boundary tests
         run: bash Scripts/test-issue.sh T04
+      - name: Build isolated database for Swift adapter
+        if: runner.os == 'Linux'
+        run: bash Scripts/dev-db.sh build
+      - name: Verify real Swift database adapter
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh DB-CLIENT
       - name: Verify empty selections fail
         run: |
           if bash Scripts/test-issue.sh T01 --filter '^MissingSuite/'; then
