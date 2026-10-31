@@ -304,5 +304,9 @@
   "T11-CONTRACTS": {
     "kind": "xctest",
     "filter": "^SquidraProviderContractTests\\.ProviderContractTests/"
+  },
+  "SQD-020-OFFLINE": {
+    "kind": "xctest",
+    "filter": "^SquidraPerceptionTests\\.FrameImportTests/"
   }
 }

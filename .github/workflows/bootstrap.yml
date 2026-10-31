@@ -58,6 +58,8 @@ jobs:
         run: bash Scripts/test-issue.sh T05-CONTRACTS
       - name: Verify documented provider matrix and authored offline fixtures
         run: bash Scripts/test-issue.sh T11-CONTRACTS
+      - name: Verify consent-bound offline frame imports
+        run: bash Scripts/test-issue.sh SQD-020-OFFLINE
       - name: Run grounded answer provenance tests
         run: bash Scripts/test-issue.sh SQD-019
       - name: Qualify strict timestamp wire dates
