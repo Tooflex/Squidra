@@ -681,3 +681,47 @@ concurrent CAS and the blocked-first-append pagination case. The fixture is not
 a spatial production projector: bitemporal facts/queries follow in SQD-014/015.
 Operation deadlines remain bounded to five seconds or less; unknown errors expose
 static codes. No journal HTTP endpoint, provider call or production data change.
+
+## Bitemporal location facts (SQD-014)
+
+```bash
+bash Scripts/test-issue.sh SQD-014-UNIT
+bash Scripts/test-issue.sh SQD-014
+```
+
+`LocationFactChange` defines a closed version-1 internal journal profile for
+`world.location_asserted` and `world.location_corrected`. It binds subject,
+location, actor-owned coordinate frame, an explicit positive half-open valid
+interval, observed/inferred basis, and an optional corrected event. Its numeric
+microsecond fields are internal storage, not public HTTP time DTOs. A correction
+must causally reference the corrected event and declare both old/new locations
+among its journal entities. Other relation/geometry semantics are separate work.
+
+`PostgresLocationProjection` reads the authoritative stored event, verifies actor
+and next actor sequence, and applies facts/checkpoint in one transaction. Equal
+replay does nothing. Unrelated event types advance the location checkpoint;
+unknown location versions/types fail. Assertions coexist. Correction closes only
+the prior fact's transaction interval and inserts its replacement, preserving the
+old valid interval for historical knowledge queries. It never updates the journal
+or chooses one contradictory source as truth. A non-increasing recording time
+cannot form a valid correction interval and fails without advancing the checkpoint.
+Checkpoint JSON describes durable SQL metadata; it is not a complete row backup.
+
+`WorldStateQuery.state(actorID:subjectID:validAt:knownAt:)` is the read-only SRS
+`stateAt` alias. A repeatable-read snapshot applies both half-open dimensions.
+Results retain valid/transaction intervals, source event/ID, confidence, basis,
+IANA zone, and separate occurred/observed/recorded times. Missing, inferred,
+conflicting same-frame locations and an incomplete projection are explicit
+uncertainty flags. Missing occurrence is not replaced. Frame-independent
+locations are not automatically contradictions. The reader checks materialized
+subject/location/frame/validity/confidence against its immutable source; a
+mismatch fails instead of returning unsupported evidence. More than 128 matching
+sources returns a result-limit error instead of a partial, apparently complete
+answer. Actors and unknown entities remain scoped.
+
+The real SQL suite qualifies three movements, a late correction at two knowledge
+times, exact boundaries, a forced checkpoint-write rollback, idempotent reload,
+contradictory/inferred observations, source-confidence corruption, a foreign
+frame, backwards recording time, and 129 legitimate observations. No migration,
+package upgrade, spatial transform, business HTTP tool or external provider is
+added. Automatic scheduling/recovery and evidence rendering remain later tasks.

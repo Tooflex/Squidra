@@ -83,7 +83,7 @@ public struct PostgresWorldRepository: WorldRepository {
         let envelope_version: String?,source_zone: String?,payload_json: String?
         let causation_id: UUID?,correlation_id: UUID
     }
-    private func select(_ connection: PostgresConnection, actorID: UUID, id: UUID) async throws -> JournalEvent {
+    func select(_ connection: PostgresConnection, actorID: UUID, id: UUID) async throws -> JournalEvent {
         let rows = try await BoundedPostgresQuery.rows(connection,"""
             SELECT row_to_json(e)::text FROM (SELECT sequence,event_id,actor_id,stream_id,stream_version,entity_ids,event_type,
                 floor(extract(epoch FROM occurred_at)*1000000)::bigint AS occurred_us,
