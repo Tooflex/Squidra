@@ -300,5 +300,9 @@
   "T05-CONTRACTS": {
     "kind": "xctest",
     "filter": "^SquidraProtocolsTests\\.AGUIContractTests/"
+  },
+  "SQD-022-CONTRACTS": {
+    "kind": "xctest",
+    "filter": "^SquidraSpatialTests\\.CalibratedRelationTests/"
   }
 }

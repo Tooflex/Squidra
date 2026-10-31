@@ -52,6 +52,8 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-017
       - name: Run interval algebra tests
         run: bash Scripts/test-issue.sh SQD-018
+      - name: Qualify conservative calibrated spatial relations
+        run: bash Scripts/test-issue.sh SQD-022-CONTRACTS
       - name: Run model routing tests
         run: bash Scripts/test-issue.sh SQD-003
       - name: Verify pinned AG-UI producer and bounded SSE replay contracts
