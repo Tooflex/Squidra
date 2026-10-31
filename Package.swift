@@ -25,6 +25,7 @@ let package = Package(
         .target(name: "SquidraDomain"),
     ] + applicationModules.map { name in
         .target(name: name, dependencies: [.byName(name: "SquidraDomain")] +
+            (name == "SquidraCognition" ? [.byName(name: "SquidraWorld")] : []) +
             (name == "SquidraAgentRuntime" ? [.byName(name: "SquidraSecurity")] : []) +
             (name == "SquidraSecurity" ? [.product(name: "Crypto", package: "swift-crypto")] : []) +
             (name == "SquidraTools" ? [.byName(name: "SquidraSecurity"), .product(name: "JSONSchema", package: "swift-json-schema"), .product(name: "Crypto", package: "swift-crypto")] : []))
@@ -48,7 +49,7 @@ let package = Package(
         .testTarget(name: "SquidraToolsTests", dependencies: ["SquidraTools", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
         .testTarget(name: "SquidraDomainTests", dependencies: ["SquidraDomain"]),
         .testTarget(name: "SquidraTemporalTests", dependencies: ["SquidraDomain", "SquidraTemporal"]),
-        .testTarget(name: "SquidraCognitionTests", dependencies: ["SquidraDomain", "SquidraCognition", "SquidraMeta"]),
+        .testTarget(name: "SquidraCognitionTests", dependencies: ["SquidraDomain", "SquidraCognition", "SquidraWorld", "SquidraMeta"]),
     ],
     swiftLanguageModes: [.v6]
 )

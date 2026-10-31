@@ -763,3 +763,46 @@ geometry inference, package upgrade, migration or provider is introduced here.
 The SQL suite qualifies exact endpoints, origin/destination/replaced-location
 filters, equal-time paging, late projection catch-up, new appends, inferred/
 conflicting evidence and the 129-predecessor failure case.
+
+## Grounded response evidence (SQD-019)
+
+```bash
+bash Scripts/test-issue.sh SQD-019
+```
+
+Cognition consumes scoped world read values without depending on a database or
+provider SDK. `AnswerEvidenceContext` validates actor/subject/time/filter scope,
+retains up to 256 unique supporting events without truncation, and exposes a
+version-1 evidence DTO with source, confidence, observed/inferred basis, distinct
+occurred/observed/recorded times, IANA zone and observation age. Public times use
+UTC RFC 3339 with six fractional digits. An unknown occurrence stays absent;
+a future observation has clock-skew freshness and unknown age, never age zero.
+
+Freshness policy requires an explicit maximum age and current-confidence floor.
+Ages refresh from the injected clock at validation, after model generation.
+Current-query evidence must still be within its known valid/transaction intervals,
+with recent query/knowledge times, complete projection, sufficient confidence and
+explicit permission for inferred current evidence. Old observations may support
+historical/latest-observation answers with their stale flag; they cannot become
+current evidence simply because ingestion or model generation happened recently.
+
+The model may return only a bounded closed version-1 JSON object with `claims`.
+Location claims select subject/location/frame and supplied citations; change
+claims select a supplied change ID and all its supporting event IDs; unknown
+claims carry no invented place or citations. Request IDs bind the response.
+Unknown/duplicate/foreign/mismatched citations, unsupported subjects/locations,
+hidden same-frame contradictions, extra confidence/dates/certainty/free text and
+malformed/duplicate-key JSON reject. Basis and minimum cited source confidence
+are computed by the host. Changes preserve the reader's observation/change/
+correction distinction; no correction is rendered as proven physical movement.
+
+The host renders controlled text and includes the complete supplied evidence,
+uncertainty and coverage status. `grounded` means source-supported, not certain.
+Missing frames/changes, partial pages or projection lag cannot yield apparently
+complete coverage; abstention/unknown remains possible. Current-query text still
+describes recent observation evidence, without claiming continuous physical
+position. Source labels remain opaque data and never become model instructions.
+The deterministic suite qualifies observed/inferred/historical/change answers,
+stale/future/expired evidence, delayed validation, contradictions, partial pages,
+clock failure, citation injection and scoped limits. No model/provider call or
+answer HTTP route is introduced here; orchestration follows T14.
