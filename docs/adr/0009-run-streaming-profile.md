@@ -130,3 +130,45 @@ Migration `runtime/002_run_events.sql` is forward-only. Deploy its matching sche
 manifest and binary together: reverting only the binary fails schema readiness.
 No HTTP endpoint, worker ownership or atomic runtime/result publication is added
 by this persistence change; T05 remains open for those integrations.
+
+## Single-owner publication (T05 ownership)
+
+`RunPublicationStore` is a publication boundary, not an execution/approval permit.
+A host first creates a stream, then obtains one fresh successful claim before
+starting its bounded worker. Claiming an intact empty unmanaged stream fixes an
+opaque backend owner and atomically publishes RUN_STARTED. Any second claim,
+including one after an ambiguous response, conflicts. Do not dispatch on an
+ambiguous claim error; inspect status and let abandoned ownership expire.
+
+Execution is bounded to 1–180 seconds. A five-second publication grace is added
+to the database-clock lease; the returned execution deadline excludes this grace.
+The host must enforce its worker deadline and join cancellation before publishing
+cancelled completion. Leases cannot be renewed or transferred. Retention must
+outlast the lease. Database wall-clock adjustments can affect when recovery is
+eligible, but they never authorize another execution. Reconnection has no claim,
+model or tool-dispatch path.
+
+Only the backend's opaque claim can publish a managed terminal outcome. A whole
+GroundedAnswer produces its four presentation events plus RUN_FINISHED atomically
+with `succeeded`; a static failure or cancelled finish commits with its matching
+phase. Status never exposes the owner nonce. Generic event append cannot write a
+managed stream. Lease/retention are checked again before the metadata update;
+failed publication rolls back both event rows and phase. An uncertain completion
+must be resolved through persisted status/replay, never by rerunning the model.
+
+An owner-scoped maintenance call may terminalize an expired running lease with
+static RUN_RECOVERY_REQUIRED. It never restores an active runtime or repeats any
+read/action. A late completion conflicts, and retention expiry still prevents
+revival. Recovery is explicit per run; automatic scanning, worker composition,
+HTTP status/cancellation and restart orchestration are separate work. A crash
+after the runtime completed but before its answer was durably published still
+requires recovery; this layer cannot reconstruct a GroundedAnswer proof or claim
+successful output from the runtime checkpoint alone.
+
+Migration `runtime/003_run_publication.sql` adds ownership and constrained phases.
+Existing streams remain `unmanaged`, including previously terminal streams; they
+are not silently labeled successful. It requires the matching schema manifest
+and binary. `bash Scripts/test-issue.sh T05-PUBLICATION` qualifies concurrent
+claims, opaque/foreign ownership, generic-append isolation, terminal SQL rollback,
+reopened status/replay, expiry recovery and late-completion rejection. Physical
+retention/backup cleanup remains T12.

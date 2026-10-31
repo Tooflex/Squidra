@@ -316,5 +316,21 @@
       "client_loopback_boundary",
       "durable_scoped_run_replay"
     ]
+  },
+  "T05-PUBLICATION-SWIFT": {
+    "kind": "xctest",
+    "filter": "^SquidraProtocolsTests\\.RunPublicationSQLTests/"
+  },
+  "T05-PUBLICATION": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-run-publication"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "single_owner_terminal_publication"
+    ]
   }
 }

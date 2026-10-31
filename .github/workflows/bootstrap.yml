@@ -129,6 +129,9 @@ jobs:
       - name: Verify bounded durable AG-UI replay
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh T05-SQL
+      - name: Verify single-owner run publication and abandoned-run recovery
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh T05-PUBLICATION
       - name: Verify empty selections fail
         run: |
           if bash Scripts/test-issue.sh T01 --filter '^MissingSuite/'; then
