@@ -58,6 +58,9 @@ jobs:
       - name: Run canonical action fingerprint tests
         if: runner.os == 'macOS'
         run: bash Scripts/test-issue.sh SQD-007-UNIT
+      - name: Run exact-command approval contract tests
+        if: runner.os == 'macOS'
+        run: bash Scripts/test-issue.sh SQD-009-UNIT
       - name: Run tool catalog contract tests
         run: bash Scripts/test-issue.sh SQD-006
       - name: Run fail-closed action gateway tests
@@ -79,6 +82,9 @@ jobs:
       - name: Verify durable idempotency and action outbox
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-007
+      - name: Verify durable approval decisions and expiry
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh SQD-009-PERSISTENCE
       - name: Verify empty selections fail
         run: |
           if bash Scripts/test-issue.sh T01 --filter '^MissingSuite/'; then

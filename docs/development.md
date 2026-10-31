@@ -537,3 +537,39 @@ blindly. Successful mutation output is returned only after durable finalization.
 Policy and adapters must cooperate with structured cancellation. This feature
 adds no business HTTP route, provider integration, approval UI, recovery worker,
 or global guarantee against arbitrary code executing outside the host boundary.
+
+## Approval persistence (SQD-009)
+
+```bash
+bash Scripts/test-issue.sh SQD-009-UNIT
+bash Scripts/test-issue.sh SQD-009-PERSISTENCE
+```
+
+The second suite requires the isolated PostgreSQL image. `ApprovalStore` persists
+requests and one-way decisions without holding a worker while a human decides.
+The host `ApprovalCoordinator` uses an injected Domain clock, authenticates the
+approver through an identity policy (owner-only by default), and revalidates that
+identity when issuing a non-Codable `VerifiedApproval`. Identity exceptions,
+deadlines, cancellation, changed digests and cross-actor reads fail closed.
+Future routes must supply the principal from their authenticated context.
+
+Digest profile `SQUIDRA-APPROVAL-1` binds actor, run, ledger ID, the exact canonical
+command fingerprint, and expiry in integer UTC epoch milliseconds. The command
+fingerprint already covers tool/version/target/arguments/scope. Expiry is at most
+600,000 milliseconds after the request, with an exclusive expiry boundary.
+A repeated request returns the existing record without extending its TTL.
+Only a reserved ledger entry can create a new request. Concurrent requests are
+serialized by its row lock; decision changes lock the approval row. Equal final
+decisions from the same principal replay, while opposite decisions conflict.
+Final decisions are immutable; policy/identity revocation still blocks later
+verification. A pending request resolved after expiry persists `expired`.
+
+PostgreSQL supplies request timestamps and read-time observations; excessive
+host/database clock skew prevents request creation. Resolution uses the later
+host/database time, and proof verification also checks storage-observed time,
+so moving the host clock backwards cannot hide database-observed expiry. The
+adapter recomputes the persisted digest on every load and bounds each operation
+to five seconds or less. No applied migration changes. Crypto 5.0.3 remains pinned.
+This persistence slice does not yet enable sensitive tool dispatch or expose an
+approval route: the gateway/HTTP/runtime continuation must integrate it before
+SQD-009 is complete. No model-generated text constitutes an approval.
