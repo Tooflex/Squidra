@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Squidra API error envelope v1",
+  "description": "Normative error shape for all /api/v1 routes (T00, ADR-007). code is a stable machine string for control flow; message is public human text and MUST NOT contain secrets or PII; requestId correlates with traces (SRS P-07); details is route-schema-bound and filtered.",
+  "type": "object",
+  "required": ["code", "message", "requestId", "schemaVersion"],
+  "additionalProperties": false,
+  "properties": {
+    "code": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+      "description": "Stable machine-readable error code, e.g. POLICY_DENIED, CONFLICT, NOT_FOUND, TIMED_OUT.",
+      "examples": ["POLICY_DENIED", "CONFLICT", "VALIDATION_FAILED"]
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Public human-readable message. No secrets, credentials, connection strings, or PII."
+    },
+    "requestId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID correlating this response with server traces (SRS P-07 runId/traceId)."
+    },
+    "schemaVersion": {
+      "const": "1",
+      "description": "Envelope version. Breaking changes ship a new version per ADR-007 rule 3."
+    },
+    "details": {
+      "type": "object",
+      "description": "Optional filtered detail object bound by the route's schema. MUST NOT contain secrets."
+    }
+  }
+}
