@@ -96,12 +96,7 @@ public struct AnswerEvidenceContext: Sendable {
         catch { throw AnswerEvidenceError.invalidEvidence }
     }
     static func utc(_ instant: UTCInstant) throws -> String {
-        let micros = try times(instant,instant).observedMicroseconds
-        var seconds = micros/1_000_000,fraction = micros%1_000_000
-        if fraction < 0 { seconds -= 1;fraction += 1_000_000 }
-        let formatter = ISO8601DateFormatter();formatter.timeZone = TimeZone(secondsFromGMT:0);formatter.formatOptions = [.withInternetDateTime]
-        let base = formatter.string(from:Date(timeIntervalSince1970:Double(seconds)))
-        guard base.count == 20,base.hasSuffix("Z") else { throw AnswerEvidenceError.invalidEvidence }
-        return String(base.dropLast())+String(format:".%06lldZ",fraction)
+        do { return try RFC3339.format(instant) }
+        catch { throw AnswerEvidenceError.invalidEvidence }
     }
 }
