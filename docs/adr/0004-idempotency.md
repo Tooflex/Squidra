@@ -1,6 +1,6 @@
 # ADR-004: Idempotency keys and ledger/journal separation
 
-- Status: **Proposed** (T00; awaits human contract review)
+- Status: **Accepted** (maintainer approval, 2026-10-31)
 - Date: 2026-10-29
 - Sources: SRS §4.2 (+ §4.1, P-09, SQD-007); SDD §4.4 + §6.2 (+ §5.1, §13.2)
 - Implements: T00 executable task 1 (idempotency)

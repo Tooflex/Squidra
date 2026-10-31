@@ -1,6 +1,6 @@
 # ADR-007: Versioned envelopes, cancellation, deadlines
 
-- Status: **Proposed** (T00; awaits human contract review)
+- Status: **Accepted** (maintainer approval, 2026-10-31)
 - Date: 2026-10-29
 - Sources: SRS P-07, FR-TOOL-05, NFR-08, §5, SQD-011; SDD §4.1, §10, §11
 - Implements: T00 executable task 3 (envelopes, cancellation, deadlines)

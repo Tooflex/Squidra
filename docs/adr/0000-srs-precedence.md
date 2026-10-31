@@ -1,6 +1,6 @@
 # ADR-000: SRS precedence and change control
 
-- Status: **Proposed** (T00; awaits human contract review)
+- Status: **Accepted** (maintainer approval, 2026-10-31)
 - Date: 2026-10-29
 - Sources: SRS v1.0 status line; SDD v0.1 §0 header + p.1 companion note
 

@@ -1,6 +1,6 @@
 # ADR-002: Public FSM states, internal substates, terminal codes
 
-- Status: **Proposed** (T00; awaits human contract review)
+- Status: **Accepted** (maintainer approval, 2026-10-31)
 - Date: 2026-10-29
 - Sources: SRS §5; SDD §5 + §5.1; SRS §6 (approvals); SDD §10 (`RunState`)
 - Implements: T00 executable task 1 (FSM)

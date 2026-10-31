@@ -1,7 +1,7 @@
 # SQUIDRA Architecture Decision Records
 
-T00 contract-resolution record. All ADRs below are **Proposed** — they take
-effect only after maintainer (human) review, per T00 acceptance criteria.
+T00 contract-resolution record. All ADRs below are **Accepted** following
+explicit maintainer approval on 31 October 2026, per T00 acceptance criteria.
 
 ## Sources (verified)
 
@@ -58,9 +58,9 @@ always written `SDD §14 ADR-00X`.
 
 ## Review checklist (for the maintainer)
 
-- [ ] Source links above resolve to the cited SRS/SDD sections.
-- [ ] Decision table matches the cited discrepancies (no silent deviation).
-- [ ] Frozen values equal T00 acceptance: SRS precedence; 20/15/3/180 s/2
+- [x] Source links above resolve to the cited SRS/SDD sections.
+- [x] Decision table matches the cited discrepancies (no silent deviation).
+- [x] Frozen values equal T00 acceptance: SRS precedence; 20/15/3/180 s/2
       retries; R0–R4; `UNIQUE(actorId, toolName, idempotencyKey)`.
-- [ ] Administrative prerequisites confirmed (plan §8: first commit identity,
+- [x] Administrative prerequisites confirmed (plan §8: first commit identity,
       default branch, reviewer rules) before dependent work leaves draft.

@@ -1,6 +1,6 @@
 # ADR-006: Health and readiness routes
 
-- Status: **Proposed** (T00; awaits human contract review)
+- Status: **Accepted** (maintainer approval, 2026-10-31)
 - Date: 2026-10-29
 - Sources: SRS SQD-001 + §9; SDD §10
 - Implements: T00 executable task 1 (health routes)

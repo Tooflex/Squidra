@@ -1,6 +1,6 @@
 # ADR-008: Time conventions
 
-- Status: **Proposed** (T00; awaits human contract review)
+- Status: **Accepted** (maintainer approval, 2026-10-31)
 - Date: 2026-10-29
 - Sources: SRS P-04/P-05, §7.1–§7.3, SQD-013/014/015/017/018; SDD §4.1, §6.1–§6.4
 - Implements: T00 executable task 3 (time conventions)

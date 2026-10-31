@@ -1,6 +1,6 @@
 # ADR-003: Authoritative risk scale R0–R4
 
-- Status: **Proposed** (T00; awaits human contract review)
+- Status: **Accepted** (maintainer approval, 2026-10-31)
 - Date: 2026-10-29
 - Sources: SRS §6 (+ P-02/P-03, NFR-10); SDD §9 (+ §4.3 pipeline)
 - Implements: T00 executable task 1 (risks)

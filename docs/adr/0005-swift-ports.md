@@ -1,6 +1,6 @@
 # ADR-005: Swift port names and documentation aliases
 
-- Status: **Proposed** (T00; awaits human contract review)
+- Status: **Accepted** (maintainer approval, 2026-10-31)
 - Date: 2026-10-29
 - Sources: SRS §3.1 (+ P-06, SQD-003); SDD §3 + §4.1 + §4.2
 - Implements: T00 executable task 2 (ports)

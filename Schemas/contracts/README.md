@@ -1,7 +1,7 @@
 # Frozen contracts (T00)
 
-Normative machine-readable contracts. Status: **Proposed** — effective
-only after the maintainer reviews the [ADRs](../../docs/adr/README.md).
+Normative machine-readable contracts. Status: **Accepted** following
+maintainer approval on 31 October 2026; see the [ADRs](../../docs/adr/README.md).
 
 ## Index
 
