@@ -89,6 +89,28 @@ case "${1:-}" in
   down)
     assert_owned; "$container_engine" rm -f "$db_container" >/dev/null
     echo 'Container removed; development data volume retained.' ;;
+  test-client)
+    # Explicit integration-only exception: ephemeral TCP port on loopback, never 0.0.0.0.
+    db_container="squidra-client-test-$(python3 -c 'import uuid;print(uuid.uuid4().hex[:12])')"
+    credentials="$(mktemp)"; created=false
+    cleanup() {
+      if [[ "$created" == true ]]; then "$container_engine" rm -f "$db_container" >/dev/null 2>&1 || true; fi
+      rm -f "$credentials"
+    }
+    trap cleanup EXIT
+    write_credentials "$credentials"
+    "$container_engine" run -d --name "$db_container" --label io.squidra.database=test \
+      --publish 127.0.0.1::5432 --env-file "$credentials" \
+      --tmpfs /var/lib/postgresql/data:rw,nosuid,size=1g "$db_image" >/dev/null
+    created=true; ready
+    binding="$("$container_engine" port "$db_container" 5432/tcp)"
+    [[ "$binding" =~ ^127\.0\.0\.1:([0-9]+)$ ]] || { echo 'Client test port is not exclusively loopback' >&2; exit 1; }
+    test_port="${BASH_REMATCH[1]}"
+    echo 'SQUIDRA_TEST_PASS:client_loopback_boundary'
+    apply_migrations
+    python3 Scripts/run-db-client-tests.py "$credentials" "$test_port"
+    echo 'SQUIDRA_TEST_PASS:swift_client_integration'
+    ;;
   test|test-runtime)
     db_container="squidra-test-$(python3 -c 'import uuid;print(uuid.uuid4().hex[:12])')"
     credentials="$(mktemp)"; failure_root="$(mktemp -d)"; created=false
@@ -132,5 +154,5 @@ PY
       python3 Tests/SquidraPostgresTests/concurrency.py "$container_engine" "$db_container"
     fi
     ;;
-  *) echo 'Usage: Scripts/dev-db.sh build|up|migrate|test|test-runtime|down' >&2; exit 2 ;;
+  *) echo 'Usage: Scripts/dev-db.sh build|up|migrate|test|test-runtime|test-client|down' >&2; exit 2 ;;
 esac

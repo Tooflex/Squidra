@@ -233,3 +233,46 @@ cursor; each listing handler must apply it to an actor-filtered query.
 T04 tests execute Hummingbird's in-memory router adapter, not a live network
 listener. Probe tests use minimal fixtures; they do not certify dependency
 readiness, which belongs to SQD-001.
+
+## Swift PostgreSQL readiness adapter (T02 follow-up)
+
+The exact PostgresNIO 1.33.2 driver is locked with the existing dependencies;
+SwiftLog 1.16.2 is declared directly at its already locked version to provide
+a no-op logger. `LocalDatabaseConfiguration` accepts injected credentials
+and a loopback port, never a remote host or a source default password.
+Diagnostics redact credential fields. The driver uses a service-managed
+pool: run the client once and cancel its run task during shutdown. Queries
+and background connection work use disabled logging; raw errors are mapped
+to database/migrations readiness classes.
+
+```bash
+python3 Scripts/schema-manifest.py --check
+bash Scripts/test-issue.sh DB-CLIENT
+```
+
+This integration command explicitly publishes a temporary PostgreSQL port
+on **127.0.0.1 only**, verifies the binding, injects a random password through
+the child environment, migrates a disposable container, and runs three real
+Swift tests. The command report counts two integration groups; its nested
+`DB-CLIENT-SWIFT` report records the three XCTest cases. Missing database
+configuration fails rather than skipping tests. The ordinary `up`, `test`
+and `test-runtime` modes continue to publish no ports. None of these helpers
+deletes a development volume or resets a container VM.
+
+A readiness check leases one connection, checks PostgreSQL major version 17,
+then compares the complete migration filename/checksum set with the binary's
+expected manifest. Missing, edited or future migrations fail readiness.
+Regenerate `ExpectedDatabaseSchema.swift` with
+`python3 Scripts/schema-manifest.py` whenever adding a forward migration;
+CI rejects a stale manifest. This verifies migration metadata, not arbitrary
+manual DDL drift or production grants.
+
+The check has a monotonic timeout. Cancellation closes only its leased
+connection because awaiting an initial SQL response through a NIO future
+does not itself guarantee prompt cancellation. Server statement/lock timeouts
+provide additional bounds. Tests hold a real exclusive metadata-table lock,
+verify timeout and pool recovery, propagate cancellation, reject checksum
+mismatch/missing/future metadata, test an unavailable socket, and verify that
+a cancelled client cannot serve more queries. The Linux CI Swift job runs
+this real integration; macOS CI compiles the same adapter/tests. No WorldStore
+or runtime SQL adapter is claimed by this readiness-only follow-up.

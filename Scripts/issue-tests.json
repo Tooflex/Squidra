@@ -65,5 +65,21 @@
   "T04": {
     "kind": "xctest",
     "filter": "^SquidraServerTests\\.HTTPBoundaryTests/"
+  },
+  "DB-CLIENT": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-client"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "swift_client_integration"
+    ]
+  },
+  "DB-CLIENT-SWIFT": {
+    "kind": "xctest",
+    "filter": "^SquidraPostgresSwiftTests\\.ReadinessTests/"
   }
 }
