@@ -489,5 +489,9 @@
       "client_loopback_boundary",
       "private_trace_postgres_sources"
     ]
+  },
+  "SQD-022-CONTRACTS": {
+    "kind": "xctest",
+    "filter": "^SquidraSpatialTests\\.CalibratedRelationTests/"
   }
 }

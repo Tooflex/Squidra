@@ -59,6 +59,7 @@ let package = Package(
         .testTarget(name: "SquidraPerceptionTests", dependencies: ["SquidraDomain", "SquidraPerception", "SquidraMeta", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log"), .product(name: "Crypto", package: "swift-crypto")]),
         .testTarget(name: "SquidraProviderContractTests", dependencies: ["SquidraDomain", .product(name: "JSONSchema", package: "swift-json-schema"), .product(name: "Crypto", package: "swift-crypto")]),
         .testTarget(name: "SquidraObservabilityTests", dependencies: ["SquidraObservability", "SquidraDomain", "SquidraCognition", "SquidraSecurity", "SquidraTools", "SquidraWorld", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log"), .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"), .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core")]),
+        .testTarget(name: "SquidraSpatialTests", dependencies: ["SquidraSpatial", "SquidraDomain"]),
         .testTarget(name: "SquidraDomainTests", dependencies: ["SquidraDomain"]),
         .testTarget(name: "SquidraTemporalTests", dependencies: ["SquidraDomain", "SquidraTemporal"]),
         .testTarget(name: "SquidraCognitionTests", dependencies: ["SquidraDomain", "SquidraCognition", "SquidraTools", "SquidraSecurity", "SquidraWorld", "SquidraMeta"]),
