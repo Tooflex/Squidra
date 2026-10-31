@@ -264,5 +264,9 @@
   "T13-LOCATION": {
     "kind": "xctest",
     "filter": "^SquidraToolsTests\\.WorldLocationToolTests/"
+  },
+  "T13-CHANGES": {
+    "kind": "xctest",
+    "filter": "^SquidraToolsTests\\.WorldChangesToolTests/"
   }
 }

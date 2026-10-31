@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:squidra:tool:world.get_changes@1.0.0:input",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "maxLength": 1,
+      "const": "1"
+    },
+    "from": {
+      "type": "string",
+      "maxLength": 35,
+      "format": "date-time"
+    },
+    "to": {
+      "type": "string",
+      "maxLength": 35,
+      "format": "date-time"
+    },
+    "knownAt": {
+      "type": "string",
+      "maxLength": 35,
+      "format": "date-time"
+    },
+    "subjectId": {
+      "type": "string",
+      "maxLength": 36,
+      "format": "uuid"
+    },
+    "locationId": {
+      "type": "string",
+      "maxLength": 36,
+      "format": "uuid"
+    },
+    "cursor": {
+      "type": "string",
+      "maxLength": 2048,
+      "minLength": 1
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "from",
+    "to",
+    "knownAt",
+    "limit"
+  ],
+  "additionalProperties": false
+}
