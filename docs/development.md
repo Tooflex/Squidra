@@ -950,3 +950,23 @@ TOOL_INVALID_INPUT, allowing its HTTP adapter to report a static client error
 for actor-bound cursor validation. Effectful or ledger-backed adapter failures
 remain normalized as providerFailure; an unconfirmed effect cannot be recast
 as a harmless input error. The existing SQD-006 suite verifies all combinations.
+
+The authenticated local-owner HTTP API exposes `POST /api/v1/world/location`
+and `POST /api/v1/world/changes` using the exact tool input/output schemas in
+`Schemas/tools/world`. Both require one application/json content type and the
+injected bearer credential; the existing approved-origin/actor-header boundary
+applies. Actor identity and fresh request IDs come from the host. Body fields
+cannot supply identity, scope, tool selection or permission. The host creates
+an exact validated entity/global-read permission with fixed world:read scope;
+live PostgreSQL ports remain bound to that actor.
+
+The endpoints return schema-validated factual evidence and uncertainty with
+no-store headers. They do not generate natural-language answers or mutate the
+world. Invalid dates, malformed/foreign continuations and authoritative future
+watermark rejection return static 400 errors; oversized route bodies return
+413. Missing entity state remains an explicit not_found DTO, while backend
+failure/corruption is redacted. Generic schema timestamps are further checked
+against the strict Squidra RFC 3339 profile before target authorization.
+`T13-HTTP` covers real router and live HTTP requests. T13-READS qualifies actual
+PostgreSQL cursor rejection; T04, SQD-009 and SQD-001 regress boundary,
+approval and real process/signal lifecycle behavior.

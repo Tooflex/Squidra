@@ -164,7 +164,8 @@ final class WorldChangesToolTests: XCTestCase, @unchecked Sendable {
         value["throughSequence"] = 1000; value["availableThroughSequence"] = 1000
         let altered = try JSONSerialization.data(withJSONObject:value).base64EncodedString()
         let fixture = ChangesQueryFixture()
-        do { _ = try await Self.gateway(fixture).invoke(Self.action(input:Self.input(["cursor":altered]))); XCTFail("Future watermark accepted") } catch { }
+        do { _ = try await Self.gateway(fixture).invoke(Self.action(input:Self.input(["cursor":altered]))); XCTFail("Future watermark accepted") }
+        catch { XCTAssertEqual(error as? ToolError,.invalidInput) }
         let count = await fixture.calls; XCTAssertEqual(count,1)
     }
     func testCorruptUnorderedOrExcessiveEvidenceFailsWithoutTruncation() async throws {

@@ -75,6 +75,12 @@ final class WorldToolsSQLTests: XCTestCase, @unchecked Sendable {
             XCTAssertEqual(before["validAt"] as? String,try RFC3339.format(Self.instant(t1)))
             let page = try await invoke(definitions[1],changeInput(known),target:target)
             let cursor = try XCTUnwrap(page["next"] as? String)
+            let cursorBytes = try XCTUnwrap(Data(base64Encoded:cursor))
+            var future = try XCTUnwrap(JSONSerialization.jsonObject(with:cursorBytes) as? [String:Any])
+            future["throughSequence"] = 1000; future["availableThroughSequence"] = 1000
+            let forged = try JSONSerialization.data(withJSONObject:future).base64EncodedString()
+            do { _ = try await invoke(definitions[1],changeInput(known,cursor:forged),target:target); XCTFail("Future watermark accepted") }
+            catch { XCTAssertEqual(error as? ToolError,.invalidInput) }
             try await projection.apply(corrected)
             let current = try await invoke(definitions[0],locationInput(known),target:target)
             XCTAssertEqual((current["facts"] as? [[String:Any]])?.first?["locationId"] as? String,d.uuidString.lowercased())

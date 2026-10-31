@@ -316,5 +316,9 @@
       "client_loopback_boundary",
       "durable_grounded_read_runs"
     ]
+  },
+  "T13-HTTP": {
+    "kind": "xctest",
+    "filter": "^SquidraServerTests\\.WorldReadRouteTests/"
   }
 }
