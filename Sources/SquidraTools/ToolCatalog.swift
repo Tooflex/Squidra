@@ -5,7 +5,7 @@ public protocol ToolRegistry: Sendable {
 }
 
 /// Immutable, explicitly versioned registry. It neither discovers executable
-/// plugins nor exposes a production grant issuer; SQD-007 supplies the gateway.
+/// plugins. Only ActionGateway dispatches through an internal execution grant.
 public struct ToolCatalog: ToolRegistry {
     private struct Entry: Sendable { let definition: ToolDefinition; let input: ToolSchema; let output: ToolSchema }
     private let entries: [ToolID:Entry]
@@ -44,7 +44,7 @@ public struct ToolCatalog: ToolRegistry {
             return try UntrustedToolResult(tool: id, callID: UUID(), payload: value.serializedData())
         } catch { throw ToolError.invalidOutput }
     }
-    public func invoke(_ id: ToolID, input: Data, grant: ToolExecutionGrant, executor: any ToolExecutor) async throws -> UntrustedToolResult {
+    func invoke(_ id: ToolID, input: Data, grant: ToolExecutionGrant, executor: any ToolExecutor) async throws -> UntrustedToolResult {
         try Task.checkCancellation()
         guard let entry = entries[id] else { throw ToolError.unknownTool }
         let validated = try validateInput(input, for: id)
@@ -55,12 +55,13 @@ public struct ToolCatalog: ToolRegistry {
         let now = ContinuousClock.now
         guard grant.deadline > now else { throw ToolError.timedOut }
         let deadline = min(grant.deadline, now.advanced(by: .milliseconds(entry.definition.timeoutMilliseconds)))
-        let call = ToolCall(actorID: grant.actorID, runID: grant.runID, tool: id, input: validated,
+        let call = ToolCall(actorID: grant.actorID, runID: grant.runID, tool: id, target: grant.target, input: validated,
             scope: grant.scope, idempotencyKey: grant.idempotencyKey, deadline: deadline)
         do {
             let output = try await withThrowingTaskGroup(of: Data.self) { group in
                 group.addTask {
                     try Task.checkCancellation()
+                    guard ContinuousClock.now < deadline else { throw ToolError.timedOut }
                     return try await executor.execute(call)
                 }
                 group.addTask { try await Task.sleep(until: deadline); throw ToolError.timedOut }
@@ -68,6 +69,7 @@ public struct ToolCatalog: ToolRegistry {
                 return try await group.next()!
             }
             try Task.checkCancellation()
+            guard ContinuousClock.now < deadline else { throw ToolError.timedOut }
             return try validateOutput(output, for: id)
         } catch is CancellationError { throw CancellationError() }
         catch ToolError.timedOut { throw ToolError.timedOut }

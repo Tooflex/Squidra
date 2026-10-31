@@ -25,7 +25,7 @@ let package = Package(
         .target(name: "SquidraDomain"),
     ] + applicationModules.map { name in
         .target(name: name, dependencies: [.byName(name: "SquidraDomain")] +
-            (name == "SquidraTools" ? [.product(name: "JSONSchema", package: "swift-json-schema"), .product(name: "Crypto", package: "swift-crypto")] : []))
+            (name == "SquidraTools" ? [.byName(name: "SquidraSecurity"), .product(name: "JSONSchema", package: "swift-json-schema"), .product(name: "Crypto", package: "swift-crypto")] : []))
     } + [
         .target(name: "SquidraPostgres", dependencies: ["SquidraDomain", "SquidraWorld", "SquidraAgentRuntime", "SquidraTools", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
         .target(name: "SquidraMeta", dependencies: ["SquidraDomain", "SquidraCognition", "SquidraPerception"]),
@@ -41,6 +41,7 @@ let package = Package(
         .testTarget(name: "SquidraPostgresSwiftTests", dependencies: ["SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
         .testTarget(name: "SquidraServerTests", dependencies: ["SquidraServer", "SquidraProtocols", "SquidraPostgres", .product(name: "HummingbirdTesting", package: "hummingbird")], exclude: ["server_process.py"]),
         .testTarget(name: "SquidraAgentRuntimeTests", dependencies: ["SquidraDomain", "SquidraAgentRuntime", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
+        .testTarget(name: "SquidraSecurityTests", dependencies: ["SquidraSecurity", "SquidraTools"]),
         .testTarget(name: "SquidraToolsTests", dependencies: ["SquidraTools", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
         .testTarget(name: "SquidraDomainTests", dependencies: ["SquidraDomain"]),
         .testTarget(name: "SquidraTemporalTests", dependencies: ["SquidraDomain", "SquidraTemporal"]),

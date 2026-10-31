@@ -45,7 +45,7 @@ final class ToolCatalogTests: XCTestCase, @unchecked Sendable {
         return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
     }
     private static func grant(_ definition: ToolDefinition, catalog: ToolCatalog, input: Data, deadline: ContinuousClock.Instant? = nil) throws -> ToolExecutionGrant {
-        ToolExecutionGrant(actorID: UUID(), runID: UUID(), definition: definition,
+        ToolExecutionGrant(actorID: UUID(), runID: UUID(), definition: definition, target: "fixture:entity",
             input: try catalog.validateInput(input, for: definition.id), scope: [definition.capability],
             idempotencyKey: UUID().uuidString, deadline: deadline ?? .now.advanced(by: .seconds(2)))
     }

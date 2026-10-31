@@ -502,3 +502,38 @@ without provider support, perform approval checks, implement crash recovery, or
 expose a business HTTP route. Those callers must use the host gateway and runtime
 budgets before dispatch. No migration is added: the adapter uses T03's ledger,
 run-scoped foreign keys, immutable commands, and outbox.
+
+## Action gateway and host policy (SQD-008)
+
+```bash
+bash Scripts/test-issue.sh SQD-008
+```
+
+`ActionGateway` is the sole production catalog dispatcher: execution grants and
+`ToolCatalog.invoke` are internal to the Tools module. The composition root
+registers each exact tool version, its bounded executor, and an explicit pure
+resolver deriving its resource target from validated arguments. The supplied
+target must agree, and the same target reaches policy, ledger and `ToolCall`.
+There is no default resource resolver or registration for unrestricted shell,
+SQL or HTTP. Adapter registrations and policies are trusted host code; a host
+that deliberately misclassifies an unrestricted executor is outside this API's
+trust boundary. Model/tool/client data cannot register adapters or permissions.
+
+The default policy denies everything. `HostActionPolicy` permits only an exact
+actor/tool/capability/target match with unexpired host permission and a nonempty
+requested scope contained in that permission. Delegation may reduce this scope.
+Policy exceptions become a static error. Authorization is bounded by the action
+and tool deadlines, checked again immediately before adapter invocation, and
+cannot waive R2–R4 approval. Until SQD-009 supplies verified approval resolution,
+these risks return approval-required without executing. R4 extra controls are
+also unimplemented and cannot be enabled by a caller boolean.
+
+R1 and every non-read-only strategy require the ledger. Replays do not execute
+again. Revocation after claiming but before execution persists a known
+`notApplied` failure when storage is available. Provider failure, invalid output,
+cancellation or timeout after dispatch remains unconfirmed: the ledger becomes
+unknown when possible, otherwise pending, and duplicate submissions never retry
+blindly. Successful mutation output is returned only after durable finalization.
+Policy and adapters must cooperate with structured cancellation. This feature
+adds no business HTTP route, provider integration, approval UI, recovery worker,
+or global guarantee against arbitrary code executing outside the host boundary.

@@ -156,5 +156,9 @@
       "canonical_fingerprints",
       "swift_action_ledger"
     ]
+  },
+  "SQD-008": {
+    "kind": "xctest",
+    "filter": "^SquidraSecurityTests\\.ActionGatewayTests/"
   }
 }
