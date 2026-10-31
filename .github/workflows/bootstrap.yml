@@ -1,0 +1,81 @@
+name: Bootstrap
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bootstrap-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Swift 6.4.2 / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Select pinned macOS SDK
+        if: runner.os == 'macOS'
+        run: echo "DEVELOPER_DIR=/Applications/Xcode_26.3.app/Contents/Developer" >> "$GITHUB_ENV"
+      - name: Install official Swift 6.4.2 toolchain
+        run: bash Scripts/install-ci-swift.sh
+      - name: Record toolchain and host
+        run: |
+          swift --version
+          python3 --version
+          uname -a
+          if [[ "$RUNNER_OS" == macOS ]]; then xcrun --show-sdk-version; fi
+      - name: Verify test-runner failure handling
+        run: python3 Scripts/test_issue_runner.py
+      - name: Build pinned dependencies and modules
+        run: swift build --force-resolved-versions
+      - name: Run T01 Domain tests
+        run: bash Scripts/test-issue.sh T01
+      - name: Verify empty selections fail
+        run: |
+          if bash Scripts/test-issue.sh T01 --filter '^MissingSuite/'; then
+            echo 'An empty selection must not pass'
+            exit 1
+          fi
+      - name: Smoke-test executable linkage
+        run: swift run --skip-build squidra
+      - name: Verify lockfile remained unchanged
+        run: git diff --exit-code -- Package.resolved
+
+  windows-probe:
+    name: Windows x86_64 qualification probe
+    runs-on: windows-2025
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Probe installed toolchain, build, and Domain tests
+        id: probe
+        shell: pwsh
+        run: |
+          $swiftCommand = Get-Command swift -ErrorAction SilentlyContinue
+          if (-not $swiftCommand) { throw 'Swift unavailable: Windows remains unqualified' }
+          swift --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          swift build --force-resolved-versions
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          swift test --force-resolved-versions --disable-swift-testing
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Report qualification separately
+        if: always()
+        shell: pwsh
+        run: |
+          'Windows probe outcome: ${{ steps.probe.outcome }}. This nonblocking probe does not establish general Windows support.' >> $env:GITHUB_STEP_SUMMARY
