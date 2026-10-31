@@ -638,3 +638,46 @@ converted into new serialized numbers. Tools now applies this shared boundary
 before its pinned SDK parser/schema evaluator. Domain imports no JSONSchema,
 HTTP or database SDK. Catalog, fingerprint and approval regressions qualify the
 shared change independently of the upcoming journal adapter.
+
+## Append-only world journal (SQD-016)
+
+```bash
+bash Scripts/test-issue.sh SQD-016-UNIT
+bash Scripts/test-issue.sh SQD-016
+```
+
+`WorldRepository.append` requires actor/stream, expected stream version (zero for
+an empty stream), and a separate journal idempotency key. Equal keys and semantic
+content replay the original event/correlation IDs, even if a retry supplies fresh
+IDs or an old expected version. Content covers entities, type, source, confidence,
+payload/version, occurrence/observation times, IANA zone and causation. Changed
+content conflicts. New keys must match the current version; entity and causation
+references remain actor-scoped. The ledger's keys/results are independent.
+
+All qualified append transactions for one actor hold an advisory lock through
+commit before allocating a sequence. This preserves commit order across that
+actor's streams: a later append cannot become visible ahead of an earlier one
+blocked on an entity reference. Snapshot pages capture one actor's high-water
+sequence, keep it fixed across cursors and exclude later appends. Pages are
+bounded to 128 events. A fresh query can tail after the previous high-water value;
+global sequence gaps from other actors or rollbacks are valid. Raw SQL writers
+that bypass the append port do not receive this ordering guarantee.
+
+Journal times explicitly store microseconds (UTCInstant input rounds to that
+precision). Unknown occurrence remains unknown. Recorded time comes from the
+server; source time zone is preserved in a version-1 internal JSONB envelope with
+the event payload. Input and normalized stored payloads must fit the shared JSON
+profile and 64 KiB bound. JSONB expansion outside those bounds rejects before
+insertion. Legacy rows lacking the envelope return unsupported-event instead of
+inventing a time zone. No migration or existing journal UPDATE is introduced.
+
+WorldProjector exposes idempotent application and versioned checkpoints. The
+versioned `journal.v1.json` fixture uses a label projector to qualify correction,
+per-stream gaps, unsupported versions, conflicting duplicates, paginated replay
+and deterministic rebuild. Its frozen SHA-256 is
+`42e666f184c2b35cbef156905baa6dab9633f41c745cc82bbb60086c6abb6324`.
+The real SQL suite obtains that same hash after storage/reload and checks both
+concurrent CAS and the blocked-first-append pagination case. The fixture is not
+a spatial production projector: bitemporal facts/queries follow in SQD-014/015.
+Operation deadlines remain bounded to five seconds or less; unknown errors expose
+static codes. No journal HTTP endpoint, provider call or production data change.

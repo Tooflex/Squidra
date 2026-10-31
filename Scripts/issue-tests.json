@@ -189,5 +189,26 @@
   "SQD-016-JSON": {
     "kind": "xctest",
     "filter": "^SquidraDomainTests\\.JSONDocumentTests/"
+  },
+  "SQD-016-UNIT": {
+    "kind": "xctest",
+    "filter": "^SquidraWorldTests\\.WorldJournalTests/"
+  },
+  "SQD-016-SQL": {
+    "kind": "xctest",
+    "filter": "^SquidraWorldTests\\.WorldJournalSQLTests/"
+  },
+  "SQD-016": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-journal"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "journal_rebuild_contracts",
+      "durable_journal_snapshot"
+    ]
   }
 }

@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "actorId": "00000000-0000-0000-0000-000000000001",
+  "events": [
+    {
+      "sequence": 1,
+      "streamVersion": 1,
+      "id": "00000000-0000-0000-0000-000000000201",
+      "streamId": "00000000-0000-0000-0000-000000000010",
+      "entityIds": [
+        "00000000-0000-0000-0000-000000000101"
+      ],
+      "type": "fixture.label_set",
+      "occurredMicroseconds": null,
+      "observedMicroseconds": 1700000000000011,
+      "timeZone": "Europe/Paris",
+      "sourceId": "fixture:journal-v1",
+      "confidence": 0.9,
+      "payloadVersion": 1,
+      "payload": {
+        "schemaVersion": "1",
+        "label": "Room A"
+      },
+      "causationId": null,
+      "correlationId": "00000000-0000-0000-0000-000000000900"
+    },
+    {
+      "sequence": 2,
+      "streamVersion": 1,
+      "id": "00000000-0000-0000-0000-000000000202",
+      "streamId": "00000000-0000-0000-0000-000000000020",
+      "entityIds": [
+        "00000000-0000-0000-0000-000000000102"
+      ],
+      "type": "fixture.label_set",
+      "occurredMicroseconds": 1700000000000002,
+      "observedMicroseconds": 1700000000000012,
+      "timeZone": "Europe/Paris",
+      "sourceId": "fixture:journal-v1",
+      "confidence": 0.9,
+      "payloadVersion": 1,
+      "payload": {
+        "schemaVersion": "1",
+        "label": "Blue box"
+      },
+      "causationId": null,
+      "correlationId": "00000000-0000-0000-0000-000000000900"
+    },
+    {
+      "sequence": 3,
+      "streamVersion": 2,
+      "id": "00000000-0000-0000-0000-000000000203",
+      "streamId": "00000000-0000-0000-0000-000000000010",
+      "entityIds": [
+        "00000000-0000-0000-0000-000000000101"
+      ],
+      "type": "fixture.label_corrected",
+      "occurredMicroseconds": 1700000000000003,
+      "observedMicroseconds": 1700000000000013,
+      "timeZone": "Europe/Paris",
+      "sourceId": "fixture:journal-v1",
+      "confidence": 0.9,
+      "payloadVersion": 1,
+      "payload": {
+        "schemaVersion": "1",
+        "label": "Room B"
+      },
+      "causationId": "00000000-0000-0000-0000-000000000201",
+      "correlationId": "00000000-0000-0000-0000-000000000900"
+    },
+    {
+      "sequence": 4,
+      "streamVersion": 2,
+      "id": "00000000-0000-0000-0000-000000000204",
+      "streamId": "00000000-0000-0000-0000-000000000020",
+      "entityIds": [
+        "00000000-0000-0000-0000-000000000102"
+      ],
+      "type": "fixture.label_corrected",
+      "occurredMicroseconds": 1700000000000004,
+      "observedMicroseconds": 1700000000000014,
+      "timeZone": "Europe/Paris",
+      "sourceId": "fixture:journal-v1",
+      "confidence": 0.9,
+      "payloadVersion": 1,
+      "payload": {
+        "schemaVersion": "1",
+        "label": "Green box"
+      },
+      "causationId": "00000000-0000-0000-0000-000000000202",
+      "correlationId": "00000000-0000-0000-0000-000000000900"
+    }
+  ],
+  "expectedProjection": {
+    "schemaVersion": "1",
+    "projectionVersion": 1,
+    "actorId": "00000000-0000-0000-0000-000000000001",
+    "lastSequence": 4,
+    "labels": [
+      {
+        "entityId": "00000000-0000-0000-0000-000000000101",
+        "label": "Room B"
+      },
+      {
+        "entityId": "00000000-0000-0000-0000-000000000102",
+        "label": "Green box"
+      }
+    ]
+  },
+  "expectedSHA256": "42e666f184c2b35cbef156905baa6dab9633f41c745cc82bbb60086c6abb6324"
+}
