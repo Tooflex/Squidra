@@ -3,7 +3,7 @@ import XCTest
 @testable import SquidraTools
 
 private actor FixtureExecutor: ToolExecutor {
-    enum Behavior: Sendable { case output(Data), failure, wait }
+    enum Behavior: Sendable { case output(Data), failure, rejectedInput, wait }
     struct SecretError: Error { let message = "private-provider-credential" }
     let behavior: Behavior
     private(set) var calls: [ToolCall] = []
@@ -13,6 +13,7 @@ private actor FixtureExecutor: ToolExecutor {
         switch behavior {
         case .output(let data): return data
         case .failure: throw SecretError()
+        case .rejectedInput: throw ToolError.invalidInput
         case .wait: try await Task.sleep(for: .seconds(60)); return Data()
         }
     }
@@ -229,6 +230,20 @@ final class ToolCatalogTests: XCTestCase, @unchecked Sendable {
             XCTAssertEqual(error as? ToolError, .providerFailure)
             XCTAssertFalse(String(describing:error).contains("private"))
             XCTAssertFalse((error as? ToolError)?.publicMessage.contains("credential") ?? true)
+        }
+    }
+    func testOnlyR0ReadOnlyAdaptersPreserveSemanticInputRejection() async throws {
+        let input = try Self.input(), base = try Self.definition()
+        for (risk,idempotency) in [(ToolRisk.r0,ToolIdempotency.readOnly),(.r1,.readOnly),(.r0,.durableLedger),(.r1,.durableLedger)] {
+            let definition = try ToolDefinition(id:base.id,capability:base.capability,risk:risk,idempotency:idempotency,
+                inputSchema:base.inputSchema,outputSchema:base.outputSchema)
+            let catalog = try ToolCatalog(definitions:[definition])
+            do {
+                _ = try await catalog.invoke(definition.id,input:input,grant:Self.grant(definition,catalog:catalog,input:input),executor:FixtureExecutor(.rejectedInput))
+                XCTFail("Rejected input became a result")
+            } catch {
+                XCTAssertEqual(error as? ToolError,risk == .r0 && idempotency == .readOnly ? .invalidInput : .providerFailure)
+            }
         }
     }
 

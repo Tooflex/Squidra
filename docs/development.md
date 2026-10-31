@@ -944,3 +944,9 @@ An isolated trigger rejects the dispatch-reservation checkpoint and proves that
 recoveryRequired grants no read and invents no terminal state. The helper cleans
 up its temporary loopback database and credentials. This is database composition
 qualification, not process-restart, HTTP or live-model qualification.
+
+Semantic input rejection inside a bounded R0/readOnly adapter remains
+TOOL_INVALID_INPUT, allowing its HTTP adapter to report a static client error
+for actor-bound cursor validation. Effectful or ledger-backed adapter failures
+remain normalized as providerFailure; an unconfirmed effect cannot be recast
+as a harmless input error. The existing SQD-006 suite verifies all combinations.
