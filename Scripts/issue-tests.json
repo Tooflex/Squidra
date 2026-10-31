@@ -102,5 +102,9 @@
   "SQD-001-SWIFT": {
     "kind": "xctest",
     "filter": "^SquidraServerTests\\.LifecycleTests/"
+  },
+  "SQD-017": {
+    "kind": "xctest",
+    "filter": "^SquidraTemporalTests\\.RelativeTimeTests/"
   }
 }

@@ -46,6 +46,8 @@ jobs:
         run: bash Scripts/test-issue.sh T01
       - name: Run temporal contract tests
         run: bash Scripts/test-issue.sh SQD-013
+      - name: Run relative local-time tests
+        run: bash Scripts/test-issue.sh SQD-017
       - name: Run model routing tests
         run: bash Scripts/test-issue.sh SQD-003
       - name: Run HTTP boundary tests
