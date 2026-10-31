@@ -80,7 +80,10 @@ public struct WorldChangesTool: ToolExecutor {
         guard call.target == request.target else { throw ToolError.policyDenied }
         guard ContinuousClock.now < call.deadline else { throw ToolError.timedOut }
         let cursor = try request.cursor.map { try Continuation.decode($0, query: query) }
-        let page = try await world.changes(query, cursor: cursor, limit: request.limit, deadline: call.deadline)
+        let page: WorldChangesPage
+        do { page = try await world.changes(query, cursor: cursor, limit: request.limit, deadline: call.deadline) }
+        catch WorldChangesError.invalidCursor { throw ToolError.invalidInput }
+        catch WorldChangesError.invalidInterval { throw ToolError.invalidInput }
         try Task.checkCancellation()
         guard ContinuousClock.now < call.deadline else { throw ToolError.timedOut }
         guard page.changes.count <= request.limit, page.throughSequence >= 0,
