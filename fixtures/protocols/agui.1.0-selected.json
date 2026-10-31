@@ -1,0 +1,177 @@
+{
+  "schemaVersion": "1",
+  "protocolVersion": "1.0",
+  "releaseTag": "release/2026-10-30",
+  "revision": "1a9b3db4ea5145f263c66049e836c8896df66269",
+  "observedOn": "2026-10-31",
+  "schemaSHA256": "4b5c93226838a0e72d88e6c5df20633c686c49fcb75d9be2815c6cbf9e48e71a",
+  "licenseSHA256": "06dcddbb6908a0c6dd4a9e8ec822eea41d5a460a53089fecccc8a68049e99241",
+  "events": [
+    {
+      "path": "spec/1.0/fixtures/RunStartedEvent/valid/minimal.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/fixtures/RunStartedEvent/valid/minimal.json",
+      "sha256": "18da153201f0e0bac4483e04607d0b94883f0e35d53c5f0d033a58ba069e45dc",
+      "originalUTF8": "{\n  \"type\": \"RUN_STARTED\",\n  \"threadId\": \"t1\",\n  \"runId\": \"r1\"\n}\n",
+      "definition": "RunStartedEvent",
+      "valid": true
+    },
+    {
+      "path": "spec/1.0/fixtures/RunFinishedEvent/valid/minimal.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/fixtures/RunFinishedEvent/valid/minimal.json",
+      "sha256": "bf068f59ecef39d5f35067b055055ead068d085860be3fb99b89222a45055cd6",
+      "originalUTF8": "{\n  \"type\": \"RUN_FINISHED\",\n  \"threadId\": \"t1\",\n  \"runId\": \"r1\"\n}\n",
+      "definition": "RunFinishedEvent",
+      "valid": true
+    },
+    {
+      "path": "spec/1.0/fixtures/RunErrorEvent/valid/minimal.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/fixtures/RunErrorEvent/valid/minimal.json",
+      "sha256": "a2c17e5b0168947a4c9533c2372e4f3009b083050f3ecbaa748acb011e81f76e",
+      "originalUTF8": "{\n  \"type\": \"RUN_ERROR\",\n  \"message\": \"upstream refused the request\"\n}\n",
+      "definition": "RunErrorEvent",
+      "valid": true
+    },
+    {
+      "path": "spec/1.0/fixtures/TextMessageStartEvent/valid/minimal.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/fixtures/TextMessageStartEvent/valid/minimal.json",
+      "sha256": "4bbc68380108b45c5c2710e349389656a912c756690a703a03e4285132106624",
+      "originalUTF8": "{\n  \"type\": \"TEXT_MESSAGE_START\",\n  \"messageId\": \"m1\"\n}\n",
+      "definition": "TextMessageStartEvent",
+      "valid": true
+    },
+    {
+      "path": "spec/1.0/fixtures/TextMessageContentEvent/valid/minimal.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/fixtures/TextMessageContentEvent/valid/minimal.json",
+      "sha256": "a9c6084925d24643aab8e44d5f564bcc275c30ecbf72c64c86d6e11ef1f9a21b",
+      "originalUTF8": "{\n  \"type\": \"TEXT_MESSAGE_CONTENT\",\n  \"messageId\": \"m1\",\n  \"delta\": \"hello\"\n}\n",
+      "definition": "TextMessageContentEvent",
+      "valid": true
+    },
+    {
+      "path": "spec/1.0/fixtures/TextMessageContentEvent/valid/empty-delta.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/fixtures/TextMessageContentEvent/valid/empty-delta.json",
+      "sha256": "b98f19db1ef5d074e25d440642b0c994793789e2e0c2b8472007174c80315372",
+      "originalUTF8": "{\n  \"type\": \"TEXT_MESSAGE_CONTENT\",\n  \"messageId\": \"m1\",\n  \"delta\": \"\"\n}\n",
+      "definition": "TextMessageContentEvent",
+      "valid": true
+    },
+    {
+      "path": "spec/1.0/fixtures/TextMessageEndEvent/valid/minimal.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/fixtures/TextMessageEndEvent/valid/minimal.json",
+      "sha256": "677624fe069add50752076969632db33b81da653192588d6cf9e8f6cb2f2b9b2",
+      "originalUTF8": "{\n  \"type\": \"TEXT_MESSAGE_END\",\n  \"messageId\": \"m1\"\n}\n",
+      "definition": "TextMessageEndEvent",
+      "valid": true
+    },
+    {
+      "path": "spec/1.0/fixtures/CustomEvent/valid/minimal.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/fixtures/CustomEvent/valid/minimal.json",
+      "sha256": "345fdc154f3124f0d40ec57fb8b7cd8d09d92df4d056c23ba59ed14ec39b77a8",
+      "originalUTF8": "{\n  \"type\": \"CUSTOM\",\n  \"name\": \"app.progress\",\n  \"value\": 0.5\n}\n",
+      "definition": "CustomEvent",
+      "valid": true
+    },
+    {
+      "path": "spec/1.0/fixtures/TextMessageContentEvent/invalid/delta-missing.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/fixtures/TextMessageContentEvent/invalid/delta-missing.json",
+      "sha256": "b6228748156ae19d423eb5c91286535f33335cef5e4981b32240d0449e59f24d",
+      "originalUTF8": "{\n  \"type\": \"TEXT_MESSAGE_CONTENT\",\n  \"messageId\": \"m1\"\n}\n",
+      "definition": "TextMessageContentEvent",
+      "valid": false
+    },
+    {
+      "path": "spec/1.0/fixtures/TextMessageContentEvent/invalid/delta-not-a-string.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/fixtures/TextMessageContentEvent/invalid/delta-not-a-string.json",
+      "sha256": "a07ea56f1eb086e5893e156f34c46cf024b11026f799031f8944eefe1e884c12",
+      "originalUTF8": "{\n  \"type\": \"TEXT_MESSAGE_CONTENT\",\n  \"messageId\": \"m1\",\n  \"delta\": 1\n}\n",
+      "definition": "TextMessageContentEvent",
+      "valid": false
+    },
+    {
+      "path": "spec/1.0/fixtures/TextMessageContentEvent/invalid/metadata-null.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/fixtures/TextMessageContentEvent/invalid/metadata-null.json",
+      "sha256": "b55d29ba2566a4857e482c2754d9b302d39a11241119791aa2ed392cea3c06fe",
+      "originalUTF8": "{\n  \"type\": \"TEXT_MESSAGE_CONTENT\",\n  \"messageId\": \"m1\",\n  \"delta\": \"hi\",\n  \"metadata\": null\n}\n",
+      "definition": "TextMessageContentEvent",
+      "valid": false
+    },
+    {
+      "path": "spec/1.0/fixtures/TextMessageEndEvent/invalid/timestamp-float.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/fixtures/TextMessageEndEvent/invalid/timestamp-float.json",
+      "sha256": "6663ccafb32284361bb57dde5fda2837c97e9c6d3e87f921bd57bda5011851f7",
+      "originalUTF8": "{\n  \"type\": \"TEXT_MESSAGE_END\",\n  \"messageId\": \"m1\",\n  \"timestamp\": 1.5\n}\n",
+      "definition": "TextMessageEndEvent",
+      "valid": false
+    },
+    {
+      "path": "spec/1.0/fixtures/TextMessageEndEvent/invalid/unknown-property.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/fixtures/TextMessageEndEvent/invalid/unknown-property.json",
+      "sha256": "be5d48d711499ee515ca065bb496a03b7cb1a5e9d2834b227d90f153a9b7cd30",
+      "originalUTF8": "{\n  \"type\": \"TEXT_MESSAGE_END\",\n  \"messageId\": \"msg_1\",\n  \"somethingNewer\": true\n}\n",
+      "definition": "TextMessageEndEvent",
+      "valid": false
+    },
+    {
+      "path": "spec/1.0/fixtures/CustomEvent/invalid/name-missing.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/fixtures/CustomEvent/invalid/name-missing.json",
+      "sha256": "2c4818e20b78e6792f3353b05466d0dfe774de6369a47d4c674a5767d080cba5",
+      "originalUTF8": "{\n  \"type\": \"CUSTOM\",\n  \"value\": 1\n}\n",
+      "definition": "CustomEvent",
+      "valid": false
+    },
+    {
+      "path": "spec/1.0/fixtures/CustomEvent/invalid/value-missing.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/fixtures/CustomEvent/invalid/value-missing.json",
+      "sha256": "4d97fd46c2c40c68f97d34f74be179a9033c0fe7a9c13979e7fea95048577d6d",
+      "originalUTF8": "{\n  \"type\": \"CUSTOM\",\n  \"name\": \"app.thing\"\n}\n",
+      "definition": "CustomEvent",
+      "valid": false
+    },
+    {
+      "path": "spec/1.0/fixtures/RunFinishedEvent/invalid/outcome-null.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/fixtures/RunFinishedEvent/invalid/outcome-null.json",
+      "sha256": "26820c391b9627c98149e88780ad5aa5e29e7e30728f899c875bbeb8190cfe95",
+      "originalUTF8": "{\n  \"type\": \"RUN_FINISHED\",\n  \"threadId\": \"t1\",\n  \"runId\": \"r1\",\n  \"outcome\": null\n}\n",
+      "definition": "RunFinishedEvent",
+      "valid": false
+    }
+  ],
+  "streams": [
+    {
+      "path": "spec/1.0/conformance/streams/current-peer-declares-protocol-version.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/conformance/streams/current-peer-declares-protocol-version.json",
+      "sha256": "c1bc23ef82f05872ae6784f937b070b5350f82b78aad6a5a0a55a96e436ac534",
+      "originalUTF8": "{\n  \"name\": \"current-peer-declares-protocol-version\",\n  \"area\": \"compatibility\",\n  \"description\": \"a client talking to a current peer declares the protocol version it speaks\",\n  \"specPage\": \"/spec/1.0/basic/versioning\",\n  \"kill\": \"stop declaring protocolVersion on the run input\",\n  \"stream\": [\n    { \"type\": \"RUN_STARTED\", \"threadId\": \"t-curpin\", \"runId\": \"r-1\", \"protocolVersion\": \"1.0\" },\n    { \"type\": \"RUN_FINISHED\", \"threadId\": \"t-curpin\", \"runId\": \"r-1\" }\n  ],\n  \"expect\": {\n    \"outcome\": \"completed\",\n    \"noWarnings\": true,\n    \"request\": { \"protocolVersion\": \"1.0\" }\n  }\n}\n"
+    },
+    {
+      "path": "spec/1.0/conformance/streams/first-event-not-run-started-fatal.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/conformance/streams/first-event-not-run-started-fatal.json",
+      "sha256": "913b1f8c47e75bb5862fa94c8847749580e054ad2e0a5d1438d58eb4542d2a82",
+      "originalUTF8": "{\n  \"name\": \"first-event-not-run-started-fatal\",\n  \"area\": \"lifecycle\",\n  \"description\": \"a stream that opens with anything but RUN_STARTED or RUN_ERROR is a protocol violation\",\n  \"specPage\": \"/spec/1.0/events/lifecycle\",\n  \"kill\": \"drop the `!firstEventReceived` first-event check in verifyEvents so any event may open a stream\",\n  \"stream\": [\n    {\n      \"type\": \"TEXT_MESSAGE_START\",\n      \"messageId\": \"first-event-not-run-started-m-1\",\n      \"role\": \"assistant\"\n    }\n  ],\n  \"expect\": {\n    \"outcome\": \"failed\",\n    \"errorContains\": \"First event must be 'RUN_STARTED'\"\n  }\n}\n"
+    },
+    {
+      "path": "spec/1.0/conformance/streams/nested-run-started-fatal.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/conformance/streams/nested-run-started-fatal.json",
+      "sha256": "765216d58b9523faed91eef77e88c1649361b5629d851739d3aa4b8a69775fc9",
+      "originalUTF8": "{\n  \"name\": \"nested-run-started-fatal\",\n  \"area\": \"lifecycle\",\n  \"description\": \"a second RUN_STARTED while a run is still active is fatal — a producer must close the current run before opening the next\",\n  \"specPage\": \"/spec/1.0/events/lifecycle\",\n  \"kill\": \"drop the `runStarted && !runFinished && !runError` guard in verifyEvents so a run may be nested inside another\",\n  \"stream\": [\n    {\n      \"type\": \"RUN_STARTED\",\n      \"threadId\": \"t-nested-run-started\",\n      \"runId\": \"nested-run-started-r-1\",\n      \"protocolVersion\": \"1.0\"\n    },\n    {\n      \"type\": \"RUN_STARTED\",\n      \"threadId\": \"t-nested-run-started\",\n      \"runId\": \"nested-run-started-r-2\",\n      \"protocolVersion\": \"1.0\"\n    }\n  ],\n  \"expect\": {\n    \"outcome\": \"failed\",\n    \"errorContains\": \"Cannot send 'RUN_STARTED' while a run is still active\"\n  }\n}\n"
+    },
+    {
+      "path": "spec/1.0/conformance/streams/event-after-run-finished-fatal.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/conformance/streams/event-after-run-finished-fatal.json",
+      "sha256": "2f1cef66b153713c362f9be70a18b67d4acaa7c62455ccb71494584daae226c0",
+      "originalUTF8": "{\n  \"name\": \"event-after-run-finished-fatal\",\n  \"area\": \"lifecycle\",\n  \"description\": \"an ordinary event after RUN_FINISHED is fatal — only RUN_STARTED and RUN_ERROR may follow a closed run\",\n  \"specPage\": \"/spec/1.0/events/lifecycle\",\n  \"kill\": \"drop the `runFinished` guard in verifyEvents so events keep flowing after a run closes\",\n  \"stream\": [\n    {\n      \"type\": \"RUN_STARTED\",\n      \"threadId\": \"t-event-after-run-finished\",\n      \"runId\": \"event-after-run-finished-r-1\",\n      \"protocolVersion\": \"1.0\"\n    },\n    {\n      \"type\": \"RUN_FINISHED\",\n      \"threadId\": \"t-event-after-run-finished\",\n      \"runId\": \"event-after-run-finished-r-1\"\n    },\n    {\n      \"type\": \"TEXT_MESSAGE_START\",\n      \"messageId\": \"event-after-run-finished-m-1\",\n      \"role\": \"assistant\"\n    }\n  ],\n  \"expect\": {\n    \"outcome\": \"failed\",\n    \"errorContains\": \"The run has already finished with 'RUN_FINISHED'\"\n  }\n}\n"
+    },
+    {
+      "path": "spec/1.0/conformance/streams/open-message-at-run-finished-fatal.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/conformance/streams/open-message-at-run-finished-fatal.json",
+      "sha256": "239de7e76cc3ae7b0028866170348cba6af36bf2c4c51a3194cfc9900a15d026",
+      "originalUTF8": "{\n  \"name\": \"open-message-at-run-finished-fatal\",\n  \"area\": \"lifecycle\",\n  \"description\": \"RUN_FINISHED while a text message is still open is fatal — everything the run opened must be closed first\",\n  \"specPage\": \"/spec/1.0/events/lifecycle\",\n  \"kill\": \"drop the activeMessages check in the RUN_FINISHED case of verifyEvents so a run may close over an open message\",\n  \"stream\": [\n    {\n      \"type\": \"RUN_STARTED\",\n      \"threadId\": \"t-open-message-at-run-finished\",\n      \"runId\": \"open-message-at-run-finished-r-1\",\n      \"protocolVersion\": \"1.0\"\n    },\n    {\n      \"type\": \"TEXT_MESSAGE_START\",\n      \"messageId\": \"open-message-at-run-finished-m-1\",\n      \"role\": \"assistant\"\n    },\n    {\n      \"type\": \"TEXT_MESSAGE_CONTENT\",\n      \"messageId\": \"open-message-at-run-finished-m-1\",\n      \"delta\": \"never closed\"\n    },\n    {\n      \"type\": \"RUN_FINISHED\",\n      \"threadId\": \"t-open-message-at-run-finished\",\n      \"runId\": \"open-message-at-run-finished-r-1\"\n    }\n  ],\n  \"expect\": {\n    \"outcome\": \"failed\",\n    \"errorContains\": \"Cannot send 'RUN_FINISHED' while text messages are still active\"\n  }\n}\n"
+    },
+    {
+      "path": "spec/1.0/conformance/streams/content-without-start-fatal.json",
+      "url": "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/1a9b3db4ea5145f263c66049e836c8896df66269/spec/1.0/conformance/streams/content-without-start-fatal.json",
+      "sha256": "fe881c0e5a1e3d853baeec000598e4a1f43e3bf2f1def3e165d9ad39c5eb9ed5",
+      "originalUTF8": "{\n  \"name\": \"content-without-start-fatal\",\n  \"area\": \"streaming\",\n  \"description\": \"a content event for an identifier that is not open is a protocol violation, not a message the consumer invents\",\n  \"specPage\": \"/spec/1.0/basic/patterns/streaming\",\n  \"kill\": \"make verification create the message on TEXT_MESSAGE_CONTENT when none is open instead of rejecting the event\",\n  \"stream\": [\n    { \"type\": \"RUN_STARTED\", \"threadId\": \"t-orphan-content\", \"runId\": \"orphan-content-r1\", \"protocolVersion\": \"1.0\" },\n    { \"type\": \"TEXT_MESSAGE_CONTENT\", \"messageId\": \"orphan-content-m1\", \"delta\": \"nothing is open\" },\n    { \"type\": \"RUN_FINISHED\", \"threadId\": \"t-orphan-content\", \"runId\": \"orphan-content-r1\" }\n  ],\n  \"expect\": {\n    \"outcome\": \"failed\",\n    \"errorContains\": \"No active text message found with ID 'orphan-content-m1'\"\n  }\n}\n"
+    }
+  ]
+}
