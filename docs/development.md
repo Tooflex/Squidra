@@ -328,3 +328,70 @@ SIGINT, and verifies zero exit codes and closed listeners. The command report
 counts seven groups; the nested Swift report counts three XCTest cases.
 The Linux CI job runs this integration. No missing database is silently
 skipped, and no data volume is deleted by the test.
+
+## Persisted FSM and host budgets (SQD-005)
+
+```bash
+bash Scripts/test-issue.sh SQD-005-UNIT   # deterministic clock/store fixtures
+bash Scripts/test-issue.sh SQD-005        # unit suite plus real SQL integration
+```
+
+`RunController` is a host-side actor over the async, actor-scoped `RunStore`
+port. `PostgresRunStore` persists an internal schema-version-1 checkpoint,
+including budgets, iteration fingerprints, retries, state/substate and
+terminal reasons. It checks the checkpoint against SQL scalar fields on
+load, rejects corrupt/unknown versions, and uses row locking plus an atomic
+expected-version update. T03's immutable/monotonic SQL triggers remain in
+force. Internal substates are written in the same update as public state.
+Checkpoints are limited to 64 KiB and are not the external HTTP RunState DTO.
+
+The public transition matrix follows ADR-002. Protected phases require a
+validated proposal, pending attempts must finish before ordinary transitions,
+and terminal records never resume. A wait can resume only to VALIDATING;
+this does not approve a tool. Approval authentication/TTL and immediately
+pre-effect policy revalidation belong to the gateway/approval integration.
+The controller performs no real tool action, model call or outbox dispatch.
+
+The host allows at most 20 validated steps, 15 tool attempts including
+retries, depth 3, two retries for the current invocation and 180,000 active
+milliseconds. Profiles can tighten these ceilings. Retry backoff is 500 ms
+then 1,000 ms after a recorded retryable outcome; every retry preserves the
+invocation's idempotency key. Unknown outcomes require reconciliation and
+cannot grant a blind retry. Reserved attempts count even when persistence
+latency exhausts the remaining active budget before dispatch.
+
+Active accounting uses the injected monotonic clock and rounds consumed
+fractions up to milliseconds at checkpoints. Wall-clock jumps do not exhaust
+this budget; persisted UTC deadlines are advisory transport/correlation
+values. The dispatch permit also has an absolute monotonic deadline, which
+the future gateway must enforce. Timeouts and limit terminal reasons are
+computed from counters; callers cannot forge an unexhausted timeout/limit.
+A lost write acknowledgement detaches the controller so an unconfirmed
+checkpoint cannot issue another permit.
+
+At iteration boundaries, three identical no-progress fingerprints terminate
+as BUDGET_EXCEEDED / LOOP_DETECTED. Rejected proposals count for repetition
+but consume no step. Fingerprints and counts survive storage/restart. The
+caller is trusted host code and must supply a canonical semantic digest
+excluding incidental IDs, timestamps and idempotency keys. Only
+contract-verified new evidence or confirmed relevant effects reset the guard;
+provider text or bookkeeping cannot be promoted to progress. Canonical tool
+proposal construction and evidence verification are gateway/orchestrator
+work, not inferred by this coordinator.
+
+Durable WAITING_APPROVAL excludes the wait from active accounting and holds
+no sleeping worker. Reattachment is explicit and limited to a saved wait.
+Active crash recovery refuses to invent a new monotonic anchor or replenish
+budgets; SQD-028 must reconcile that case. These checks do not implement a
+complete recovery workflow or authorize effects after an approval decision.
+
+The unit suite has 19 cases. The SQL suite uses a fresh client after closing
+the first pool, checks preserved loop/approval checkpoints and actor scope,
+then holds a row lock and observes two real SQL transitions blocked behind
+it before allowing a single winner. It verifies terminal immutability and
+corrupt-checkpoint rejection. Small adapter queries atomically check/enqueue
+on the NIO event loop: cancellation must not enqueue rollback or another
+query on a closed channel with an unresumed promise. The same guarded path
+is used by readiness. The issue command reports three groups; nested reports
+record the 19 unit cases and one SQL scenario separately. CI runs unit policy
+checks on macOS and the complete SQL integration on Linux.
