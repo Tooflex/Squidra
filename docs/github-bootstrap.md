@@ -11,9 +11,13 @@ plan's requirement for an enforced approving reviewer. GitHub does not
 allow authors to approve their own PRs; the only currently verified
 repository administrator is `Tooflex`.
 
-Maintainer validation and manual merging remain the workflow. Do not
-claim that GitHub enforces independent human approval. CODEOWNERS records
-ownership and can request review; it does not prove that review occurred.
+The maintainer subsequently delegated continuous implementation, diff
+review, and PR merging to the agent on 31 October 2026. Open regular PRs,
+run the required checks, inspect the diff and results, and merge passing
+increments without waiting for per-batch approval. This standing instruction
+supersedes Draft/manual-review wording in earlier issue descriptions and
+the original plan. GitHub does not enforce independent human approval.
+CODEOWNERS records ownership; it does not prove that review occurred.
 No collaborator invitation, access grant, or separate bot identity is
 part of this bootstrap.
 
@@ -38,7 +42,9 @@ The repository ruleset `main: pull requests and history protection`
 - Do not require code-owner or last-push approval.
 - Require resolution of review threads before merging.
 - Reject forced/non-fast-forward updates and branch deletion.
-- No required status checks until real CI check names are available.
+- Required successful checks: `Swift 6.4.2 / ubuntu-24.04` and
+  `Swift 6.4.2 / macos-15`, with the branch up to date.
+- The Windows qualification probe is nonblocking and is not required.
 
 Repository auto-merge is disabled. The default Actions token has read-only
 permissions, and Actions cannot approve pull requests. These settings
@@ -62,12 +68,13 @@ Do not test force-push/deletion rejection destructively on `main`.
 1. Read the issue, its dependencies, accepted ADRs, and allowed paths.
 2. Branch from current `main` as `bot/<issue-number>-<slug>`; do not
    rewrite another contributor's branch.
-3. Keep one bounded issue per PR. Open as Draft and use the PR template.
+3. Keep one bounded issue per PR. Open a regular PR and use the PR template.
 4. Record actual validation, unexecuted checks, risks, rollback, and
    redacted provenance. Do not fabricate tokens, cost, trace identifiers,
    or tool-manifest hashes.
-5. The maintainer validates the diff and contracts, marks the PR ready,
-   and merges manually. No agent auto-merge or direct push to `main`.
+5. The agent reviews the diff, resolves failures, verifies required checks
+   on the exact head commit, and merges through the PR API. Do not bypass
+   protections, enable native auto-merge, or push directly to `main`.
 6. Update the issue/Project only to reflect observed completion.
 
 The maintainer explicitly accepted T00 on 31 October 2026; PR #57 was
@@ -97,8 +104,7 @@ installed by this task.
 - [x] CODEOWNERS and PR template checked; maintainer authorized integration.
 - [x] Maintainer approved this bootstrap checklist on 31 October 2026.
 
-A completed checkbox records evidence, not a promise. T10 remains open
-until the maintainer validates and integrates these files. There are no
-application tests at this stage. Reverting these files does not remove
+A completed checkbox records evidence, not a promise. T10 and T01 were
+integrated after the required validations. Reverting these files does not remove
 server-side rules; changing rules requires an explicit administrative
 operation.
