@@ -288,5 +288,9 @@
   "T14-PLANNING": {
     "kind": "xctest",
     "filter": "^SquidraCognitionTests\\.ReadPlannerTests/"
+  },
+  "T14-EVIDENCE": {
+    "kind": "xctest",
+    "filter": "^SquidraCognitionTests\\.WorldReadEvidenceDecoderTests/"
   }
 }

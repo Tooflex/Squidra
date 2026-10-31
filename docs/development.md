@@ -891,3 +891,19 @@ execution or factual certainty: the future RunEngine must charge durable
 budgets, submit it to ActionGateway and validate a grounded response against
 actual evidence. `T14-PLANNING` uses controlled LanguageModel fixtures through
 the real router; no live model access or quality is claimed.
+
+`WorldReadEvidenceDecoder` binds a registered read-tool result to its validated
+ReadProposal and host actor before constructing AnswerEvidenceContext. It
+revalidates schemas, query echoes, source records, intervals, source IDs,
+watermarks, change references/order and uncertainty. Source text remains
+untrusted data. Missing entities yield an explicit entityNotFound marker and an
+empty context; they never invent a location. Opaque continuations are retained
+for host-controlled paging and make the context partial even though no typed
+backend cursor crosses the model boundary. The additional-pages flag can only
+make existing grounded validation more conservative.
+
+`T14-EVIDENCE` exercises actual world-tool results through ActionGateway and
+then the grounded validator, plus deliberately corrupted host DTOs under
+test-only visibility. Decoding verifies consistency and scope; the producer's
+PostgreSQL source validation is qualified separately by T13-READS. It grants no
+execution rights and is not a cryptographic source-authentication mechanism.

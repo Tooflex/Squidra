@@ -45,7 +45,7 @@ public struct AnswerEvidenceContext: Sendable {
         isPartial = snapshot.uncertainty.contains(.projectionBehind)
         uncertainty = Set(snapshot.uncertainty.map(\.rawValue))
     }
-    public init(page: WorldChangesPage, query: WorldChangesQuery, expectedActor: UUID, clock: any SquidraDomain.Clock, policy: AnswerFreshnessPolicy) throws {
+    public init(page: WorldChangesPage, query: WorldChangesQuery, expectedActor: UUID, clock: any SquidraDomain.Clock, policy: AnswerFreshnessPolicy, hasAdditionalPages: Bool = false) throws {
         guard query.actorID == expectedActor,page.changes.count <= 128,page.throughSequence >= 0,page.availableThroughSequence >= page.throughSequence,
               page.next.map({ $0.query == query && $0.throughSequence == page.throughSequence && $0.availableThroughSequence == page.availableThroughSequence }) ?? true else { throw AnswerEvidenceError.invalidEvidence }
         var all: [WorldLocationFact] = [],changes: [UUID:WorldChange] = [:],subjects: Set<UUID> = []
@@ -61,8 +61,8 @@ public struct AnswerEvidenceContext: Sendable {
         if let subject = query.subjectID { subjects.insert(subject) }
         facts = try Self.collect(all,actor:expectedActor);self.changes = changes;self.subjects = subjects
         scope = .changes(query);actorID = expectedActor;intent = .historical;self.clock = clock;self.policy = policy
-        isPartial = page.next != nil || page.projectionBehind
-        if page.next != nil { uncertainty.insert("partial_page") };if page.projectionBehind { uncertainty.insert("projectionBehind") }
+        isPartial = page.next != nil || hasAdditionalPages || page.projectionBehind
+        if page.next != nil || hasAdditionalPages { uncertainty.insert("partial_page") };if page.projectionBehind { uncertainty.insert("projectionBehind") }
         self.uncertainty = uncertainty
     }
     public func evidence() throws -> [AnswerEvidenceDTO] { try refreshed().0.values.sorted { $0.id.uuidString < $1.id.uuidString } }
