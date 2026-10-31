@@ -28,11 +28,13 @@ let package = Package(
             name: "SquidraServer",
             dependencies: applicationModules.map { .byName(name: $0) } + [
                 "SquidraDomain", "SquidraPostgres", "SquidraMeta",
+                .product(name: "Logging", package: "swift-log"),
+                .product(name: "PostgresNIO", package: "postgres-nio"),
                 .product(name: "Hummingbird", package: "hummingbird"),
             ]
         ),
         .testTarget(name: "SquidraPostgresSwiftTests", dependencies: ["SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
-        .testTarget(name: "SquidraServerTests", dependencies: ["SquidraServer", "SquidraProtocols", .product(name: "HummingbirdTesting", package: "hummingbird")]),
+        .testTarget(name: "SquidraServerTests", dependencies: ["SquidraServer", "SquidraProtocols", "SquidraPostgres", .product(name: "HummingbirdTesting", package: "hummingbird")], exclude: ["server_process.py"]),
         .testTarget(name: "SquidraDomainTests", dependencies: ["SquidraDomain"]),
         .testTarget(name: "SquidraTemporalTests", dependencies: ["SquidraDomain", "SquidraTemporal"]),
         .testTarget(name: "SquidraCognitionTests", dependencies: ["SquidraDomain", "SquidraCognition", "SquidraMeta"]),

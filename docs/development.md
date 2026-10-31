@@ -28,17 +28,17 @@ both the exact declaration (when applicable) and the lockfile in a reviewed PR.
 
 - `SquidraDomain`: library with the first real invariant, finite confidence
   in `[0, 1]`; unknown confidence must be represented separately.
-- `squidra` / `SquidraServer`: executable composition-root placeholder.
-  It currently prints a bootstrap message and exits. It does not open
-  an HTTP listener or implement probes; those belong to SQD-001.
+- `squidra` / `SquidraServer`: executable composition root.
+  `serve` starts the authenticated local HTTP service; no arguments show
+  CLI help without reading credentials or starting services. See SQD-001 below.
 - Application boundaries: AgentRuntime, Cognition, Temporal, Spatial,
   World, Perception, Memory, Security, Tools, Protocols, Observability.
   Their targets depend only on Domain at bootstrap; source files mark
   boundaries and do not claim implemented features.
 - Adapters: Postgres depends on Domain/World; Meta on
   Domain/Cognition/Perception. The server connects the adapters and
-  application targets with Hummingbird. No SQL driver or model SDK is
-  introduced here.
+  application targets with Hummingbird. The readiness adapter uses the
+  pinned PostgreSQL driver; no live model SDK is introduced.
 
 The manifest is acyclic. Domain has no package, HTTP, SQL, or model SDK
 dependencies. Future changes must preserve the accepted
@@ -55,7 +55,7 @@ bash Scripts/test-issue.sh T01
 swift run --skip-build squidra
 ```
 
-`python3 Scripts/test_issue_runner.py` checks eight process/report scenarios
+`python3 Scripts/test_issue_runner.py` checks twelve process/report scenarios
 using an isolated fake Swift command, including exit-code preservation,
 stale-report removal, missing/partial reports, and fully skipped suites.
 These checks test the runner and do not substitute for the real Domain tests.
@@ -136,7 +136,9 @@ bash Scripts/dev-db.sh down
 
 Docker or Podman must already be running. `SQUIDRA_CONTAINER_ENGINE` can
 select an explicit engine executable. The helper never initializes or
-resets a VM, publishes a host port, or deletes the development data volume.
+resets a VM or deletes the development data volume. `up`, `test` and
+`test-runtime` publish no ports; explicitly selected `up-local` and client/server
+integration modes bind only to loopback.
 The integration test uses a unique, labelled, network-isolated container,
 a random credential file, and temporary data; cleanup targets only that
 container. Development credentials are generated into the gitignored
@@ -203,8 +205,7 @@ configured actor UUID. The host must inject a credential generated from
 never supplied by source defaults or returned by configuration diagnostics.
 The token's syntax is validated; syntax alone cannot prove entropy. The
 configuration supplies `127.0.0.1` as its listener host. HTTP startup and
-configuration loading are composed in SQD-001; the bootstrap executable
-still does not serve HTTP.
+configuration loading are composed in SQD-001, described below.
 
 Every data/action route, including unknown paths, requires exactly one
 valid Bearer header. An actor header cannot change identity. Resource
@@ -276,3 +277,54 @@ mismatch/missing/future metadata, test an unavailable socket, and verify that
 a cancelled client cannot serve more queries. The Linux CI Swift job runs
 this real integration; macOS CI compiles the same adapter/tests. No WorldStore
 or runtime SQL adapter is claimed by this readiness-only follow-up.
+
+## Headless server and lifecycle (SQD-001)
+
+```bash
+bash Scripts/dev-db.sh build
+bash Scripts/dev-db.sh up-local
+set -a
+source infra/.env.squidra-db-local
+set +a
+export SQUIDRA_DB_PORT=5432 SQUIDRA_DB_USER="$POSTGRES_USER"
+export SQUIDRA_DB_PASSWORD="$POSTGRES_PASSWORD" SQUIDRA_DB_NAME="$POSTGRES_DB"
+export SQUIDRA_AUTH_TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+export SQUIDRA_ACTOR_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+export SQUIDRA_UI_ORIGIN=http://localhost:3000
+swift run --skip-build squidra check-config
+swift run --skip-build squidra serve
+```
+
+Run `swift build --force-resolved-versions` first. Keep credentials outside
+source control and do not print them or put them in process arguments.
+`up-local` explicitly creates a separate persistent database container,
+credential file and data volume from isolated `up`; port 5432 binds only to
+127.0.0.1. `SQUIDRA_DB_LOCAL_PORT` selects another local DB port; set the
+server's `SQUIDRA_DB_PORT` to match. To stop the local DB container while
+retaining its data, use
+`SQUIDRA_DB_CONTAINER=squidra-dev-db-local bash Scripts/dev-db.sh down`.
+Docker/Podman must already be running; the helper does not manage its VM.
+
+The server binds only to 127.0.0.1:8080 by default. `SQUIDRA_PORT=0` requests
+an ephemeral port; startup reports the bound loopback port without secrets.
+Only the offline profile is available. Configured credentials, actor and UI
+origin are required even when the database is down; there is no anonymous
+network mode. Optional model integrations do not gate readiness.
+
+GET `/health/live` and `/health` return `{"status":"alive"}`. GET
+`/health/ready` and `/ready` return `{"status":"ready"}`, or 503 with only
+`status:not_ready` and `dependency:database|migrations`. All other requests
+pass through T04 authentication. There are no business endpoints yet.
+Requests and idle HTTP connections are bounded. Hummingbird's service group
+handles SIGTERM/SIGINT, drains HTTP work and cancels the owned PostgreSQL
+client service. Work still depends on cooperative cancellation; no external
+effect is manufactured by shutdown.
+
+`bash Scripts/test-issue.sh SQD-001` starts a disposable loopback database,
+runs three Swift lifecycle tests on a real Hummingbird listener, then starts
+the actual binary twice. It checks authentication/configuration redaction,
+stops its own test database to verify live 200 / ready 503, sends SIGTERM and
+SIGINT, and verifies zero exit codes and closed listeners. The command report
+counts seven groups; the nested Swift report counts three XCTest cases.
+The Linux CI job runs this integration. No missing database is silently
+skipped, and no data volume is deleted by the test.

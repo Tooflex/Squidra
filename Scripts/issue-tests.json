@@ -81,5 +81,26 @@
   "DB-CLIENT-SWIFT": {
     "kind": "xctest",
     "filter": "^SquidraPostgresSwiftTests\\.ReadinessTests/"
+  },
+  "SQD-001": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-server"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "configuration_redaction",
+      "server_startup_and_auth",
+      "sigterm_shutdown",
+      "database_down_probes",
+      "sigint_shutdown",
+      "swift_server_integration"
+    ]
+  },
+  "SQD-001-SWIFT": {
+    "kind": "xctest",
+    "filter": "^SquidraServerTests\\.LifecycleTests/"
   }
 }

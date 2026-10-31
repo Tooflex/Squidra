@@ -56,13 +56,16 @@ jobs:
       - name: Verify real Swift database adapter
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh DB-CLIENT
+      - name: Verify live headless server and signal shutdown
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh SQD-001
       - name: Verify empty selections fail
         run: |
           if bash Scripts/test-issue.sh T01 --filter '^MissingSuite/'; then
             echo 'An empty selection must not pass'
             exit 1
           fi
-      - name: Smoke-test executable linkage
+      - name: Smoke-test CLI help
         run: swift run --skip-build squidra
       - name: Verify lockfile remained unchanged
         run: git diff --exit-code -- Package.resolved
