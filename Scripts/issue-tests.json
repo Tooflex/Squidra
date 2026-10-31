@@ -308,5 +308,21 @@
   "SQD-030-PORTS": {
     "kind": "xctest",
     "filter": "^SquidraObservabilityTests\\.PortTracingTests/"
+  },
+  "SQD-030-SQL-SWIFT": {
+    "kind": "xctest",
+    "filter": "^SquidraObservabilityTests\\.TracingSQLTests/"
+  },
+  "SQD-030-SQL": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-tracing"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "private_trace_postgres_sources"
+    ]
   }
 }

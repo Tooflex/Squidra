@@ -130,6 +130,9 @@ jobs:
       - name: Verify world read tools against real PostgreSQL
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh T13-READS
+      - name: Verify private tracing against actual PostgreSQL evidence
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh SQD-030-SQL
       - name: Verify empty selections fail
         run: |
           if bash Scripts/test-issue.sh T01 --filter '^MissingSuite/'; then

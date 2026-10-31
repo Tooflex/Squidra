@@ -109,3 +109,21 @@ Run `bash Scripts/test-issue.sh SQD-030-PORTS` for actual ModelRouter/ActionGate
 composition and controlled journal/projection qualification. Server activation,
 durable PostgreSQL trace composition and run/HTTP end-to-end tracing remain open
 under SQD-030.
+
+## PostgreSQL source qualification
+
+`GatewayToolRegistration.decoratingExecutor` wraps an executor while preserving
+its complete definition, bounded surface and original private target resolver.
+Composition can add a tracer without duplicating target-binding logic. This is
+a trusted construction hook and grants no authority.
+
+`bash Scripts/test-issue.sh SQD-030-SQL` uses a disposable loopback PostgreSQL
+instance, real journal/projection adapters, actual ModelRouter fixture attempts
+and the actual world-location ActionGateway registration with a traced executor.
+The returned source event UUID is checked against ended journal/projection SDK
+spans under one host trace/run/task correlation. Source labels and output remain
+present in the actor's evidence response and absent from the trace snapshot.
+Negative cases verify that foreign actors, mismatched targets, unknown input
+properties and denied policy cause no SQL query dispatch after decoration.
+This qualifies component composition; it does not activate HTTP/run tracing or
+claim an LLM answered the question correctly.
