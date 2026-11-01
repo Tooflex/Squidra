@@ -156,6 +156,18 @@ private actor ToolResultFixture: ReadRunToolResultStore {
 
 }
 
+private actor AnswerFixture: ReadRunAnswerStore {
+    let fail: Bool
+    private(set) var saved: StoredReadRunAnswer?
+    init(fail: Bool) { self.fail = fail }
+    func save(snapshot: RunSnapshot,response: RoutedModelResponse,deadline: ContinuousClock.Instant) throws {
+        saved = StoredReadRunAnswer(actorID:snapshot.actorID,runID:snapshot.id,requestID:response.response.requestID,
+            respondingVersion:snapshot.version,archive:try ReadAnswerArchive.encode(response))
+        if fail { throw ReadRunTaskError.unavailable }
+    }
+    func load(runID: UUID,deadline: ContinuousClock.Instant) -> StoredReadRunAnswer? { saved }
+}
+
 // SAFETY: stateless suite; models, query counters and stores are actors.
 final class ReadRunEngineTests: XCTestCase, @unchecked Sendable {
     private static let actor = EngineWorldFixture.id(2)
@@ -165,13 +177,44 @@ final class ReadRunEngineTests: XCTestCase, @unchecked Sendable {
             modelOptions:ReadPlanningOptions(maximumCostMicroUSD:cost,deadline:UTCInstant(secondsSince1970:clock.now().secondsSince1970+seconds)),budget:budget)
     }
     private static func engine(clock: EngineClockFixture, store: EngineRunStore, model: EngineModelFixture, world: EngineWorldFixture, deny: Bool = false,
-                               memory: MemoryContextProvider? = nil, completions: (any ReadRunCompletionStore)? = nil,plans: (any ReadRunPlanStore)? = nil,toolResults: (any ReadRunToolResultStore)? = nil) throws -> ReadRunEngine {
+                               memory: MemoryContextProvider? = nil, completions: (any ReadRunCompletionStore)? = nil,plans: (any ReadRunPlanStore)? = nil,toolResults: (any ReadRunToolResultStore)? = nil,answers: (any ReadRunAnswerStore)? = nil) throws -> ReadRunEngine {
         let registrations = try [WorldLocationTool(world:world).registration(),WorldChangesTool(world:world).registration()]
         let permissions = registrations.map { HostActionPermission(actorID:actor,tool:$0.definition.id,capability:$0.definition.capability,
             targets:["entity:"+EngineWorldFixture.entity.uuidString.lowercased()],scope:["world:read"],expiresAt:.now.advanced(by:.seconds(60))) }
         let policy: any PolicyEngine = deny ? DenyAllActionPolicy() : HostActionPolicy(permissions:permissions)
         return try ReadRunEngine(router:ModelRouter(models:[model],clock:clock),gateway:ActionGateway(tools:registrations,policy:policy),store:store,
-            clock:clock,freshness:AnswerFreshnessPolicy(maximumObservationAgeSeconds:2000,minimumCurrentConfidence:Confidence(0.5)),memory:memory,completions:completions,plans:plans,toolResults:toolResults)
+            clock:clock,freshness:AnswerFreshnessPolicy(maximumObservationAgeSeconds:2000,minimumCurrentConfidence:Confidence(0.5)),memory:memory,completions:completions,plans:plans,toolResults:toolResults,answers:answers)
+    }
+    func testAnswerArchiveRetainsRoutingCostAndLostAcknowledgementStopsCompletion() async throws {
+        for fail in [false,true] {
+            let clock = EngineClockFixture(),store = EngineRunStore(),world = EngineWorldFixture(),model = EngineModelFixture(cost:5)
+            let request = try Self.request(clock:clock,cost:10),archive = AnswerFixture(fail:fail),completion = CompletionFixture(fail:false)
+            let engine = try Self.engine(clock:clock,store:store,model:model,world:world,completions:completion,answers:archive)
+            do { let result = try await engine.execute(request);XCTAssertFalse(fail);XCTAssertEqual(result.snapshot.state,.completed) }
+            catch let failure as ReadRunFailure { XCTAssertTrue(fail);XCTAssertEqual(failure.code,.recoveryRequired) }
+            let saved = await archive.saved
+            let original = try XCTUnwrap(saved),routing = try ReadAnswerArchive.decode(original.archive)
+            XCTAssertEqual(routing.response.requestID,request.requestID);XCTAssertEqual(routing.response.modelID,model.descriptor.id)
+            XCTAssertEqual(routing.reservedCostUpperBoundMicroUSD,5);XCTAssertEqual(routing.response.costMicroUSD,3)
+            XCTAssertEqual(routing.attemptedModelIDs,[model.descriptor.id]);XCTAssertEqual(routing.response.outputTokens,64)
+            let checkpoint = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2)))
+            XCTAssertEqual(checkpoint.state,fail ? .responding : .completed)
+            if fail { XCTAssertEqual(checkpoint.version,original.respondingVersion) }
+            let published = await completion.saved,models = await model.requests.count,reads = await world.calls
+            XCTAssertEqual(published == nil,fail);XCTAssertEqual(models,2);XCTAssertEqual(reads,1)
+            var wire = try JSONSerialization.jsonObject(with:original.archive) as! [String:Any]
+            wire["reserved"] = 0
+            XCTAssertThrowsError(try ReadAnswerArchive.decode(JSONSerialization.data(withJSONObject:wire)))
+            wire["reserved"] = 5;wire["unexpected"] = true
+            XCTAssertThrowsError(try ReadAnswerArchive.decode(JSONSerialization.data(withJSONObject:wire)))
+        }
+    }
+    func testInvalidAnswerIsNotArchivedForRecovery() async throws {
+        let clock = EngineClockFixture(),store = EngineRunStore(),world = EngineWorldFixture(),model = EngineModelFixture(.invalidCitation),archive = AnswerFixture(fail:false)
+        let engine = try Self.engine(clock:clock,store:store,model:model,world:world,answers:archive)
+        do { _ = try await engine.execute(Self.request(clock:clock));XCTFail("Invalid answer accepted") }
+        catch let failure as ReadRunFailure { XCTAssertEqual(failure.code,.invalidAnswer) }
+        let saved = await archive.saved;XCTAssertNil(saved)
     }
     func testSavedToolResultResumesWithoutAnotherReadAndPreservesModelReservation() async throws {
         for boundary in ["archive","confirmation","claim"] {

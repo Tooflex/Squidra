@@ -35,7 +35,7 @@ enum ServerComposition {
             let registrations = try [WorldLocationTool(world:queries).registration(),WorldChangesTool(world:queries).registration()]
             let gateway = try ActionGateway(tools:registrations.map { $0.decoratingExecutor { TracedToolExecutor($0) } },
                 policy:ServerWorldReadPolicy(actorID:configuration.boundary.actorID,entities:readHost.entities))
-            let engine = try ReadRunEngine(router:router,gateway:gateway,store:runtime,clock:clock,freshness:readHost.freshness,completions:PostgresReadRunCompletionStore(client:client,actorID:configuration.boundary.actorID),plans:PostgresReadRunPlanStore(client:client,actorID:configuration.boundary.actorID),toolResults:PostgresReadRunToolResultStore(client:client,actorID:configuration.boundary.actorID))
+            let engine = try ReadRunEngine(router:router,gateway:gateway,store:runtime,clock:clock,freshness:readHost.freshness,completions:PostgresReadRunCompletionStore(client:client,actorID:configuration.boundary.actorID),plans:PostgresReadRunPlanStore(client:client,actorID:configuration.boundary.actorID),toolResults:PostgresReadRunToolResultStore(client:client,actorID:configuration.boundary.actorID),answers:PostgresReadRunAnswerStore(client:client,actorID:configuration.boundary.actorID))
             let coordinator = try PublishedReadRunCoordinator(actorID:configuration.boundary.actorID,executor:TracedReadExecutor(base:engine,recorder:recorder),
                 events:events,publication:publication,clock:clock,tasks:PostgresReadRunTaskStore(client:client,actorID:configuration.boundary.actorID))
             submission = try RunRoutes.Submission(coordinator:coordinator,clock:clock,entities:readHost.entities,budget:readHost.budget)
