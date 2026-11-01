@@ -102,7 +102,10 @@ struct SuspendedCompletionStore: ReadRunCompletionStore {
                 let events = PostgresRunEventStore(client:client,actorID:actor),publication = PostgresRunPublicationStore(client:client,actorID:actor)
                 _ = try await events.create(binding,retentionSeconds:3600,deadline:.now.advanced(by:.seconds(4)))
                 try await PostgresReadRunTaskStore(client:client,actorID:actor).save(StoredReadRunTask(request:request,threadID:binding.threadID),deadline:.now.advanced(by:.seconds(4)))
-                _ = try await publication.claim(binding,maximumExecutionSeconds:15,at:at,deadline:.now.advanced(by:.seconds(4)))
+                let ownership = try env["SQUIDRA_RUN_DIRECTORY"].map { try LocalRunOwnership.acquire(directory:URL(fileURLWithPath:$0),actorID:actor) }
+                defer { ownership?.releaseAfterJoiningWorkers() }
+                if let ownership { try await PostgresReadRunOwnershipStore(client:client,ownership:ownership).register(runID:request.runID,deadline:.now.advanced(by:.seconds(4))) }
+                _ = try await publication.claim(binding,maximumExecutionSeconds:ownership == nil ? 15 : 180,at:at,deadline:.now.advanced(by:.seconds(4)))
                 if args[1] == "seed-early" {
                     let controller = try await RunController.create(actorID:actor,id:request.runID,traceID:request.traceID,budget:RunBudget(activeMilliseconds:15000),store:PostgresRunStore(client:client),clock:clock)
                     _ = try await controller.transition(to:.validating)

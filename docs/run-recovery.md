@@ -497,10 +497,9 @@ previous-owner selection after joined shutdown, untracked-run exclusion and SQL
 immutability. T05-HTTP verifies the live admission row and lock release after
 service shutdown. T03 verifies the migration with runtime constraints.
 
-Production CLI directory provisioning and automatic startup selection/continuation
-are not yet activated. The explicit ownership injection is now integrated and
-qualified; SQD-028 remains open until that host activation and process-crash flow
-are complete.
+CLI ownership configuration and completed publication recovery are described below.
+SQD-028 remains open for automatic nonterminal continuation and its complete
+process-crash qualification.
 
 ## Publication takeover under held local ownership
 
@@ -572,11 +571,40 @@ T05-HTTP exercises automatic owned recovery before lease expiry through live
 model-free composition, subsequent SSE replay and lock release on graceful stop.
 A cancellation test holds recovery cleanup beyond cancellation and verifies the
 lock stays held until that cleanup joins. Existing worker shutdown and cancellation
-checks remain in the same suite. Directory provisioning from CLI and automatic
-continuation of nonterminal checkpoints still remain to complete SQD-028.
+checks remain in the same suite. Automatic continuation of nonterminal checkpoints
+still remains to complete SQD-028.
 
 Concurrent startup binding uses untargeted `ON CONFLICT DO NOTHING`, followed by
 an exact domain/file comparison. Both the actor primary key and the composite
 foreign-key target are unique; targeting only the primary key can let concurrent
 identical inserts fail on the other index. T05-WORKERS exercises two clients
 binding the same held owner, and retains the copied-domain rejection checks.
+
+## CLI ownership directory and real process recovery
+
+Set `SQUIDRA_RUN_DIRECTORY` to an existing absolute local directory owned by the
+server user with mode `0700`. For example, create a persistent directory once with
+`mkdir -m 700 /absolute/path/to/squidra-runs`, then provide its path in the server
+environment. `squidra serve` acquires the actor lock before starting services and
+passes it to the live composition. Without this variable, the existing model-free
+server and expired-lease recovery remain available.
+
+The CLI does not create or replace that directory. Keep its lock files across
+restarts: deleting or copying them cannot transfer the durable database ownership
+binding. A simultaneous server for the same actor/file, an unsafe directory,
+symlink or missing directory fails with the generic redacted startup error.
+`check-config` validates the path syntax without creating files or acquiring a
+lock; filesystem and exclusivity checks occur when serving. Relative, empty and
+NUL-containing paths are invalid. No configured path is printed on failure.
+
+`SQD-028-OWNED-PUBLICATION-CRASH` starts a real fixture that acquires this lock,
+registers its saved task and completes a run under a 185-second publication lease.
+The harness SIGKILLs that exact child, starts the normal model-free CLI with the
+same directory and verifies six SSE frames before that lease can expire. A second
+live CLI is refused. It then SIGKILLs the first server and verifies byte-identical
+replay from another CLI, which exits cleanly on SIGTERM. Runtime version, one tool
+call and the original archived answer are checked by a separate process.
+The harness also checks configuration-only operation and unsafe paths. Other
+crash suites retain their original expired-lease behavior; this suite explicitly
+proves recovery through the local ownership path. It does not yet resume
+nonterminal runs or configure a CLI model host.
