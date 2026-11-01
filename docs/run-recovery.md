@@ -461,9 +461,8 @@ that exact child, waits for confirmed signal exit and reacquires the unchanged
 identity. Python is test-only. Local macOS qualification passes; Linux still needs
 its configured CI qualification when hosted CI is restored.
 
-The primitive is not yet wired into server admission or startup recovery. Durable
-run-owner registration, joined service lifetime, startup selection and refusal of
-foreign/untracked owners remain necessary before SQD-028 can close.
+The primitive is wired into explicit server admission as described below.
+Automatic startup continuation remains necessary before SQD-028 can close.
 
 ## Durable actor and run owner registration
 
@@ -502,3 +501,27 @@ Production CLI directory provisioning and automatic startup selection/continuati
 are not yet activated. The explicit ownership injection is now integrated and
 qualified; SQD-028 remains open until that host activation and process-crash flow
 are complete.
+
+## Publication takeover under held local ownership
+
+`PostgresRunPublicationStore.takeOver` transfers a running publication to the
+new local owner only when the durable registration matches the held actor/domain/
+file identity and belongs to another process. It locks the stream and changes only
+`execution_owner`. The lease and returned execution deadline (lease minus the
+original five-second publication grace) remain unchanged. An already exhausted
+execution deadline, unmanaged/terminal stream, copied file, original registering
+owner or untracked run cannot obtain a claim.
+
+The new owner's UUID also fences a second claim in the same process. If the commit
+acknowledgement is lost, that process must not dispatch based on a retry; a later
+process can reconcile under the same local lock. The returned opaque capability
+retains the lock handle and refuses publication after release. The old claim is
+fenced by its mismatching database owner. Hosts must keep the lock until every
+resumed worker and publication operation has joined, as for normal admission.
+
+T05-WORKERS exercises transfer before lease expiry, exact original deadline over
+two owner transitions, old/repeated/released claim rejection, invalid ownership,
+untracked and terminal streams, and refusal during publication grace after the
+execution budget expires. This is the publication primitive; automatic selection,
+checkpoint continuation and archived-completion finalization are not activated by
+this change. No model or tool is dispatched by takeover.

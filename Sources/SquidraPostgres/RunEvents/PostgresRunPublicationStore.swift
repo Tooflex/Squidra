@@ -1,5 +1,6 @@
 import Foundation
 import PostgresNIO
+import SquidraAgentRuntime
 import SquidraDomain
 import SquidraProtocols
 
@@ -8,6 +9,7 @@ public struct PostgresRunPublicationStore: RunPublicationStore {
     public init(client: PostgresClient, actorID: UUID) { events = PostgresRunEventStore(client:client,actorID:actorID) }
     private struct Claim: RunPublicationClaim {
         let binding: AGUIRunBinding, executionExpiresAt: UTCInstant, owner: UUID
+        var localOwnership: LocalRunOwnership? = nil
     }
     public func claim(_ binding: AGUIRunBinding, maximumExecutionSeconds: Int, at: UTCInstant, deadline: ContinuousClock.Instant) async throws -> any RunPublicationClaim {
         guard binding.actorID == events.actorID else { throw RunEventStoreError.notFound }
@@ -36,8 +38,42 @@ public struct PostgresRunPublicationStore: RunPublicationStore {
             return Claim(binding:binding,executionExpiresAt:try UTCInstant(secondsSince1970:Double(expires)/1_000_000-5),owner:owner) as any RunPublicationClaim
         }
     }
+    /// Transfers a registered stopped process's publication claim under the same
+    /// local lock. The host must keep the handle held until all resumed workers join.
+    /// Neither the original lease nor its execution deadline is extended. A lost
+    /// acknowledgement is not permission to dispatch again from this process.
+    public func takeOver(runID: UUID, ownership: LocalRunOwnership, deadline: ContinuousClock.Instant) async throws -> any RunPublicationClaim {
+        guard ownership.actorID == events.actorID else { throw RunEventStoreError.notFound }
+        guard ownership.isHeld else { throw RunEventStoreError.conflict }
+        return try await events.transaction(deadline) { c in
+            guard ownership.isHeld else { throw RunEventStoreError.conflict }
+            guard let metadata = try await events.select(c,runID:runID,write:true) else { throw RunEventStoreError.notFound }
+            guard !metadata.expired else { throw RunEventStoreError.expired }
+            guard metadata.info.nextSequence == 2,!metadata.info.isTerminal else { throw RunEventStoreError.conflict }
+            _ = try await events.history(c,metadata:metadata)
+            let actor = ownership.actorID,domain = ownership.domainID,file = ownership.fileID,owner = ownership.ownerID
+            let rows = try await BoundedPostgresQuery.rows(c,"""
+                UPDATE run_event_streams s SET execution_owner=\(owner)
+                FROM read_run_owners o JOIN read_run_local_domains d
+                    ON d.actor_id=o.actor_id AND d.domain_id=o.domain_id AND d.file_id=o.file_id
+                WHERE s.actor_id=\(actor) AND s.run_id=\(runID)
+                    AND o.actor_id=s.actor_id AND o.run_id=s.run_id
+                    AND o.domain_id=\(domain) AND o.file_id=\(file) AND o.owner_id<>\(owner)
+                    AND s.publication_phase='running' AND s.execution_owner<>\(owner)
+                    AND s.execution_lease_until>clock_timestamp()+interval '5 seconds'
+                    AND s.expires_at>clock_timestamp()
+                RETURNING floor(extract(epoch FROM s.execution_lease_until)*1000000)::bigint
+                """)
+            guard rows.count == 1,let row = rows.first else { throw RunEventStoreError.conflict }
+            let expires = try row.decode(Int64.self)
+            guard ownership.isHeld else { throw RunEventStoreError.conflict }
+            return Claim(binding:metadata.info.binding,executionExpiresAt:try UTCInstant(secondsSince1970:Double(expires)/1_000_000-5),
+                owner:owner,localOwnership:ownership) as any RunPublicationClaim
+        }
+    }
     public func finish(_ claim: any RunPublicationClaim, outcome: RunPublicationOutcome, at: UTCInstant, deadline: ContinuousClock.Instant) async throws -> RunPublicationStatus {
         guard let claim = claim as? Claim else { throw RunEventStoreError.invalidRequest }
+        guard claim.localOwnership?.isHeld != false else { throw RunEventStoreError.conflict }
         guard claim.binding.actorID == events.actorID else { throw RunEventStoreError.notFound }
         let batch:[AGUIEvent],phase:RunPublicationPhase
         do { switch outcome {
@@ -52,6 +88,7 @@ public struct PostgresRunPublicationStore: RunPublicationStore {
         }
         } catch { throw RunEventStoreError.invalidRequest }
         return try await events.transaction(deadline) { connection in
+            guard claim.localOwnership?.isHeld != false else { throw RunEventStoreError.conflict }
             let stream = try await events.appendLocked(connection,binding:claim.binding,expectedNextSequence:2,events:batch,authorization:.owner(claim.owner),terminalPhase:phase)
             return RunPublicationStatus(phase:phase,stream:stream,leaseExpired:false)
         }
