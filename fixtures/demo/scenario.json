@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "origin": "authored-synthetic-replay",
+  "entity": "Arduino",
+  "monday": "2026-10-26T09:00:00Z",
+  "tuesday": "2026-10-27T09:00:00Z",
+  "wednesday": "2026-10-28T09:00:00Z",
+  "movement": "2026-10-29T09:00:00Z",
+  "initialLocation": "desk",
+  "tuesdayLocation": "shelf",
+  "correctedMondayLocation": "drawer"
+}
