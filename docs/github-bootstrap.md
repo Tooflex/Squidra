@@ -39,9 +39,12 @@ checks. Bootstrap was disabled through the GitHub workflow API and its
 checked-in trigger changed to `workflow_dispatch`. Use
 `python3 Scripts/check-local.py` for the full local gate; see
 [development instructions](development.md#local-checks-while-ci-is-paused).
-The ruleset below was inspected and left unchanged: local reports do not
-fulfil its required hosted status checks. Re-enable CI before merging under
-these rules, or have the maintainer explicitly change the required-check policy.
+The maintainer explicitly confirmed temporary suspension of the three required
+CI checks so validated PRs can merge continuously. Only the
+`required_status_checks` rule was removed; PR, deletion and non-fast-forward
+protections remain active and unchanged. Restore the three named checks below
+and automatic workflows at the end of the implementation campaign, then verify
+the final head in hosted CI. Local evidence is recorded in each merged PR.
 
 The repository ruleset `main: pull requests and history protection`
 (ID `26267411`) targets the default branch with no bypass actors:
@@ -51,7 +54,7 @@ The repository ruleset `main: pull requests and history protection`
 - Do not require code-owner or last-push approval.
 - Require resolution of review threads before merging.
 - Reject forced/non-fast-forward updates and branch deletion.
-- Required successful checks: `Swift 6.4.2 / ubuntu-24.04` and
+- Temporarily suspended successful checks, to restore at the end: `Swift 6.4.2 / ubuntu-24.04` and
   `Swift 6.4.2 / macos-15`, and `PostgreSQL 17 / PostGIS + pgvector`, with the branch up to date.
 - Windows is excluded from CI at the maintainer’s request and remains unqualified.
 

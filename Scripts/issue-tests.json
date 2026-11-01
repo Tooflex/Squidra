@@ -528,5 +528,19 @@
   "SQD-027": {
     "kind": "xctest",
     "filter": "(^SquidraMemoryTests\\.|^SquidraAgentRuntimeTests\\.ReadRunEngineTests/testPrivateMemory)"
+  },
+  "SQD-021": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-associations"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "repeatable_association_migration",
+      "association_contracts",
+      "durable_association_cas"
+    ]
   }
 }
