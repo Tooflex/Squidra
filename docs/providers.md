@@ -1,18 +1,18 @@
 # Provider qualification
 
-Observed on 2026-10-31. The server remains offline-only. No provider adapter is
-activated by this document, and no live inference was performed. Public model
-metadata and documentation can be verified without proving account access,
-accepted weight terms, compatible execution, quality, latency or spending bounds.
+Public contracts first observed on 2026-10-31; authenticated catalog and minimal
+text inference verified on 2026-11-01 as detailed below. The default server
+remains offline-only. These bounded probes do not establish general quality,
+account retention, billing reconciliation or safe production spending bounds.
 
 ## Documented contracts versus execution
 
 | Family | Documented identifier | Documented interface | Squidra execution status |
 | --- | --- | --- | --- |
-| Spark | `muse-spark-1.3` | Hosted multimodal input, text output | Untested; Model API key absent |
-| Wonder | `muse-wonder-1.0` | Hosted multimodal input, text output | Untested; Model API key absent |
+| Spark | `muse-spark-1.3` | Hosted multimodal input, text output | HTTP 200; one bounded JSON text probe passed |
+| Wonder | `muse-wonder-1.0` | Hosted multimodal input, text output | HTTP 200; one bounded JSON text probe passed |
 | Glimmer | `meta-models/Muse-Glimmer-30B` | Self-hosted image/text to text | Weights not downloaded; runtime unqualified |
-| SAM | `sam-3.1` | Hosted prompted image/video segmentation | Untested; key absent; wire decoder unqualified |
+| SAM | `sam-3.1` | Hosted prompted image/video segmentation | Authenticated catalog present; segmentation and wire decoder unqualified |
 
 The hosted base is `https://api.meta.ai/v1`, authenticated with a Bearer
 `MODEL_API_KEY`. Responses uses `POST /v1/responses`. Public API documentation
@@ -133,8 +133,9 @@ fixture tests cannot close them.
 
 ## Meta Responses client preparation (2026-11-01)
 
-The user selected hosted Meta AI and SAM 3.1 APIs and will configure credentials
-later. No live inference has been performed. The default server remains offline.
+The user selected hosted Meta AI and SAM 3.1 APIs and supplied a private key.
+Two minimal text probes now pass; SAM inference remains untested. The default
+server remains offline.
 
 `MetaResponsesClient` implements a bounded, injectable text Responses contract
 for Standard-mode `muse-spark-1.3` or `muse-wonder-1.0`. It requires explicit cloud
@@ -174,7 +175,7 @@ hand-authored responses, covering request flags/roles, consent and resource
 limits, HTTP failures/no retry, refusal/partial/tool output, model/usage/JSON
 validation, encoding/body limits, deadline and caller cancellation. Passing them
 does not establish account access, billing, retention, model quality or live
-compatibility. Those remain pending the user's later credentials.
+compatibility. Separate live observations below cover only two small text calls.
 
 Contract sources re-read on 2026-11-01:
 [Responses protocol](https://dev.meta.ai/docs/protocols/responses),
@@ -209,7 +210,8 @@ redirect delegate directly because its URLProtocol redirect callback is unsuppor
 qualify Linux TLS, real Meta access, account retention, inference or billing.
 
 The user's selected deployment for both language models and SAM 3.1 is hosted
-API access. Both credentials will be supplied later. SAM still requires its own
+API access. Authenticated catalog access now lists SAM with the supplied key.
+SAM still requires its own
 segmentation request/decoder contract and qualification; this text-response
 transport alone does not implement SAM or enable image upload.
 
@@ -249,3 +251,61 @@ Offline checks: `T11-META-COST` covers exact arithmetic, cache uncertainty and
 invalid counters; `SQD-003-COST` covers routing and both archive versions.
 No API key is read by these components. The planned server credential variable
 is `MODEL_API_KEY`; environment-based cloud activation remains unimplemented.
+
+
+## Authorized live text probes (2026-11-01)
+
+Authenticated `GET /v1/models` returned HTTP 200 and listed Spark 1.3, Wonder 1.0
+and SAM 3.1. The endpoint and authentication follow the official
+[list-models reference](https://dev.meta.ai/docs/api-reference/models/list-models).
+Catalog membership does not prove segmentation capability or inference quality.
+
+The explicit `squidra-meta-qualification-fixture` then called the actual
+`MetaResponsesClient` and `MetaHTTPSResponseTransport` once per Standard text
+model with a fixed public prompt requesting `{"ok":true}`. Both returned the
+expected object through the existing structured-response validator. Each call
+used 64 maximum output tokens, a 25-second deadline, store/stream/background
+false, no tools and no application retry. No private world data or image was sent.
+
+| Model | Input / output (reasoning included) | Estimated USD | Result |
+| --- | --- | --- | --- |
+| Spark 1.3 | 20 / 60 (46 reasoning) | 0.000280 | HTTP 200, completed, expected JSON |
+| Wonder 1.0 | 20 / 31 (17 reasoning) | 0.000700 | HTTP 200, completed, expected JSON |
+
+Both reported zero cached-input tokens. These amounts use the dated published
+schedule, not an invoice. Total estimated token cost is USD 0.000980. The public
+`fixtures/providers/meta-text-live.v1.json` contains the fixed prompt, validated
+text, usage and exact original-response hashes. It is an anonymized projection,
+not a full vendor wire response; raw responses, provider IDs and reasoning
+contents are not retained. It does not qualify cancellation under real network
+failure, broad answer quality, account retention or SAM geometry parsing.
+
+The user authorized **100 EUR total** across all Meta/SAM tests. The opt-in
+`Scripts/test-meta-live.py` reserves **10 EUR per attempt** in the private,
+Git-ignored `.build/provider-access/live-budget.json`, before launching inference.
+A no-follow lock serializes probes and atomic fsync writes preserve reservations
+across failures/restarts. Estimates and failures never refund a reservation.
+Two completed calls currently consume 20 EUR of conservative reservations;
+this is **not 20 EUR spent**. Future SAM probes must use this same ledger and cap.
+Do not delete the ledger to repeat a probe or refresh pricing.
+
+The reservation deliberately exceeds a full published 1,048,576-token Standard
+input context plus the 64-token output cap even for Wonder. The verified
+[ECB USD reference](https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/eurofxref-graph-usd.en.html)
+was 1.1172 USD per EUR on 2026-10-30. The pricing/FX snapshot expires at
+2026-11-02 00:00 UTC; later probes refuse until reviewed and updated while
+preserving all prior reservations. This conservative test envelope is not a
+production ModelDescriptor qualification or account-level billing control.
+
+Run only with explicit authorization and an owner-only regular credential file:
+
+```sh
+python3 Scripts/test-meta-live.py --allow-live --model spark --key-file /absolute/private/key-file
+```
+
+The file is read with no-follow, owner, 0600 mode and size checks. The key never
+appears in command arguments, reports or fixtures. The fixture requires a live
+opt-in and a reservation ID supplied by the driver; do not invoke it directly.
+The driver and inference fixture are never run by CI or the offline gate.
+Offline Python tests exercise cumulative exhaustion, failure/restart reservation
+retention, stale/corrupt records and private-file rejection.
