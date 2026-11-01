@@ -686,5 +686,17 @@
       "durable_evidence",
       "process_restart"
     ]
+  },
+  "SQD-031-COMPONENTS": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/eval.sh"
+    ],
+    "tests": [
+      "metric_regressions",
+      "complete_exports",
+      "component_thresholds"
+    ]
   }
 }
