@@ -62,8 +62,10 @@ The screenshot at `web/test-results/review.png` is an authored fixture.
 
 The `T06-REVIEW` scenarios intercept API responses for deterministic fault cases.
 The integrated suite below separately verifies the live browser-to-PostgreSQL path.
-Live batch extraction/provisioning, frame import, questions and external-command
-approval expiry/rejection remain part of #42/#29.
+Structured batch provisioning is available through the normal CLI below.
+Frame import, questions and external-command approval expiry/rejection remain
+part of #42. Automatic model extraction is not implemented or qualified by
+the consolidation review path; see `docs/fact-consolidation.md` for its scope.
 Hosted CI is still paused; its future Node/browser steps and the local gate include
 this suite. Actual Linux execution awaits restored CI.
 

@@ -921,8 +921,18 @@
     ]
   },
   "SQD-029": {
-    "kind": "xctest",
-    "filter": "^SquidraMemoryTests\\.(FactConsolidationTests|ConsolidationImportTests)/"
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/test-consolidation.py"
+    ],
+    "tests": [
+      "consolidation_proposals",
+      "consolidation_durable_history",
+      "consolidation_authenticated_review",
+      "consolidation_browser_boundaries",
+      "consolidation_import_browser_reload"
+    ]
   },
   "SQD-029-SQL": {
     "kind": "xctest",
@@ -1002,5 +1012,9 @@
       "timeline_sql_read",
       "timeline_sql_reload"
     ]
+  },
+  "SQD-029-UNIT": {
+    "kind": "xctest",
+    "filter": "^SquidraMemoryTests\\.(FactConsolidationTests|ConsolidationImportTests)/"
   }
 }

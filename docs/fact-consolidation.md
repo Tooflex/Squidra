@@ -41,13 +41,12 @@ proposal state before reuse rather than treating exports as perpetual proofs.
 Original memory records are immutable and remain inspectable; there is no world
 journal write/delete capability, external publisher or destructive operation.
 
-`bash Scripts/test-issue.sh SQD-029` verifies seven scenarios spanning citation
-and actor isolation, atomic failures, changed idempotency keys, exact reviews,
-rejection, critical proposals, overlapping and adjacent periods, late conflicts,
-source preservation, bounded capacity and cancellation. The workspace is in-memory; the durable journal/store pair below adds persistence.
-Extraction from live batches, authenticated review UI and application scheduling
-remain to integrate before
-claiming end-to-end SQD-029 completion. No live model quality/cost is measured.
+`bash Scripts/test-issue.sh SQD-029` runs the complete qualification described
+below. `SQD-029-UNIT` is the narrow workspace/import suite: eleven tests cover
+citation and actor isolation, atomic failures, changed idempotency keys, exact
+reviews, rejection, critical proposals, overlapping/adjacent periods, late
+conflicts, source preservation, bounds, cancellation and concurrent imports.
+No live model quality or cost is measured.
 
 ## Durable journal
 
@@ -83,10 +82,9 @@ limitation on previously returned copies described above.
 separate clients to verify stable IDs, review reconstruction, exact retry,
 concurrent append CAS, late conflict withdrawal, original preservation, actor
 isolation, deadline refusal, malformed archive rejection and SQL history guards.
-This qualifies persistence and client reload, not process SIGKILL, live extraction,
-HTTP approval authentication or application scheduling. Those integrations remain
-open in #29; the earlier reference adapter's lack of persistence is addressed by
-this explicit journal/store pair.
+This persistence sub-suite qualifies client reload and history preservation.
+The separate HTTP/browser suites below qualify owner authentication and application
+review. Process SIGKILL, automatic extraction and scheduling are not claimed.
 
 ## Authenticated server review
 
@@ -128,9 +126,9 @@ contradicting evidence arrives.
 `SQD-029-HTTP` exercises normal `ServerComposition.live` over loopback with real
 PostgreSQL: preview/evidence, approval and rejection, a second server instance,
 foreign actors, no authentication, closed/duplicate/escaped bodies, stale versions,
-contradictions and a failing-store fixture. It does not claim a browser UI, a
-multi-principal approval model, archive import, or live model extraction. Journals
-are still provisioned by the host through the archive/store API.
+contradictions and a failing-store fixture. This sub-suite does not itself exercise the browser or CLI import. Those paths
+are qualified by the live browser suite below. A multi-principal approval model
+and live model extraction are not provided.
 
 ## Import a local structured batch
 
@@ -193,12 +191,45 @@ leave a committed genesis without the proposal operation; rerun the same file to
 complete it safely. Errors are filtered and never print input text or credentials.
 The input file and original evidence are not modified or deleted.
 
-`SQD-029` now includes import parser, pre-write validation, idempotency, retained
+`SQD-029-UNIT` includes import parser, pre-write validation, idempotency, retained
 review and concurrent import tests. `T06-REVIEW-LIVE` prepares authored files and
 uses this normal CLI command for all journal creation, then exercises real browser
 review and SQL restart verification. It also refuses injected review fields,
 changed batches, symlinks, FIFOs and oversized files, and verifies retries before
 and after review. The fixture executable now only prepares input files and verifies
-the database; it no longer seeds journals directly. Automatic model extraction,
-scheduling and integration of reviewed knowledge into model context remain separate
-work under #29.
+the database; it no longer seeds journals directly. Automatic model extraction, scheduling and insertion of reviewed knowledge into
+model context are not implemented. The delivered path consumes owner-provided
+structured candidates and promotes reviewed results to private memory only.
+
+## DREAM-029 acceptance evidence
+
+The executable scope of issue #29 is a bounded proposal batch with provenance,
+conflict detection, retained originals and explicit review before promotion.
+The normal CLI now imports that batch, the authenticated browser reviews it,
+and the committed archive can produce private reusable `MemoryRecord` values.
+Review does not authorize publication, tool execution or automatic model exposure.
+The following table maps each stated criterion to its implementation and checks.
+
+| Criterion | Implementation | Qualification |
+|---|---|---|
+| Bounded, sourced proposals | `ConsolidationBatchImport` and `FactConsolidation` reject excess bounds, foreign subjects and invented quotations before writes | `SQD-029-UNIT`, normal CLI import in `T06-REVIEW-LIVE` |
+| Conflicts remain unpublished | Overlapping differing values mark both proposals conflicted, including late conflicts with approved proposals; review cannot waive them | unit and durable suites; browser conflict has no approval action |
+| Originals retained | Immutable source catalogue and append-only archive commands; SQL rejects source/history replacement, deletion and truncation | `SQD-029-DURABLE`; fresh SQL checks after browser review/restart |
+| Explicit critical validation | Host predicate criticality, pending proposals, owner-authenticated exact-version decision, private promotion only after durable approval | unit, HTTP and real browser approval/rejection suites |
+| Positive, negative and regression checks | Strict runner counts actual tests/markers and preserves failure exit codes | canonical `SQD-029` aggregates all five suites below |
+
+The canonical command runs, in order, `SQD-029-UNIT`, `SQD-029-DURABLE`,
+`SQD-029-HTTP`, `T06-REVIEW` and `T06-REVIEW-LIVE`. It stops on the first failed
+child and emits a group marker only after that child's strict runner succeeds.
+Nested markers are not counted twice. The full local/CI gate lists these child
+suites individually, including `SQD-029-UNIT`, so it does not rerun them through
+the aggregate. Database suites use isolated PostgreSQL;
+UI fixtures are explicitly distinguished from the live CLI/browser/SQL path.
+
+Scope limits remain: quotations establish textual provenance, not semantic truth;
+source UUIDs are owner-declared; conflict detection is structural and per journal;
+exports already returned cannot be revoked; private promotion is not automatic
+world publication. The referenced original SRS/SDD PDFs and PLAN.md are not
+available in this checkout, so this mapping claims the published issue's explicit
+executable criteria, not verification of unavailable source documents. No Linux
+or live-model qualification is inferred from local macOS checks.
