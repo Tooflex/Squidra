@@ -318,3 +318,40 @@ read, unchanged checkpoint on failure and no premature answer. T05-HTTP checks
 real live persistence, ordering between planning and completion archives, exact
 command binding, schema/evidence decoding, actor isolation and SQL update
 rejection. SQD-028 remains open until continuation and host activation are complete.
+
+## Continue from a saved read result
+
+`ReadRunEngine.resumeSavedToolResult` now continues an interrupted read after the
+host proves the previous worker stopped and reloads the original task. It loads
+both planning and tool archives, checks actor/run/request identity and checkpoint
+ordering, revalidates the plan against the supplied scope and model limits, and
+recomputes the exact original command fingerprint and invocation key. Tool bytes
+must pass catalog schema and actor/entity/time/evidence validation before any
+checkpoint changes. Catalog reconstruction remains untrusted data; it is not a
+new gateway grant and does not dispatch a tool.
+
+The runtime accepts only EXECUTING_TOOL with the exact inspected version, one
+step/call/attempt, matching iteration digest and invocation key. An in-flight
+attempt with no recorded outcome or an already-confirmed attempt is eligible.
+The durable claim reconciles it to confirmed, charges downtime, retains the
+original budgets and increments the version. A lost claim acknowledgement can
+be retried only after reloading the newer version. The continuation then uses the
+ordinary evidence/answer/grounding/completion path without planning or reading
+again, and retains the original planning cost reservation. It does not resave or
+replace the original result archive or original call UUID.
+
+RESPONDING is explicitly excluded: an answer model may already have started and
+its cost/outcome cannot be inferred from a read result. Missing, corrupt, foreign,
+stale or mismatched inputs grant no continuation. Expired runs become TIMED_OUT
+without another read/model call. Automatic host execution recovery and durable
+answer-phase continuation remain outstanding; SQD-028 is still open.
+
+T14-RUN covers lost archive, confirmation and recovery-claim acknowledgements,
+exact budget/cost preservation, one read across continuation, terminal and
+responding refusal, missing/corrupt archives, stale versions and expiry.
+`SQD-028-SAVED-RESULT-CRASH` kills the owned seed process after PostgreSQL commits
+the real tool result. A fresh process reloads the task and invokes this API with
+an answer-only fixture model, then normal model-free servers recover and replay
+the identical six-event stream. The fixture keeps one step/call and the original
+checkpoint budget with the authored 5+5 microUSD reservations. No production
+crash hooks or new migration are added by this continuation.
