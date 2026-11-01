@@ -11,6 +11,8 @@ struct ServerConfiguration: Sendable {
     let port: Int
     let localRunDirectory: URL?
     let syntheticImport: SyntheticImportConfiguration?
+    let samImport: SAMImportConfiguration?
+    var importPolicy: FrameScenePolicy? { samImport?.policy ?? syntheticImport?.policy }
     let configuredReadHost: ReadHostConfiguration?
 
     init(environment: [String: String], credentialProvider: (any CredentialProvider)? = nil,
@@ -30,9 +32,12 @@ struct ServerConfiguration: Sendable {
             self.localRunDirectory = URL(fileURLWithPath:path,isDirectory:true)
         } else { self.localRunDirectory = nil }
         self.syntheticImport = try SyntheticImportConfiguration.read(environment:environment,actorID:actor)
+        let hostClock = try clock ?? SystemClock(timeZone:IANATimeZone(identifier:"Etc/UTC"))
+        self.samImport = try SAMImportConfiguration.read(environment:environment,actorID:actor,clock:hostClock)
+        guard syntheticImport == nil || samImport == nil else { throw Invalid.profile }
         if profile == "meta-qualification" {
-            configuredReadHost = try MetaReadHostConfiguration.read(environment:environment,allowsImportedEntities:syntheticImport != nil,
-                clock:clock ?? SystemClock(timeZone:IANATimeZone(identifier:"Etc/UTC")))
+            configuredReadHost = try MetaReadHostConfiguration.read(environment:environment,allowsImportedEntities:syntheticImport != nil || samImport != nil,
+                clock:hostClock)
         } else { configuredReadHost = nil }
         self.port = port
         switch (credentialProvider, credentialReference) {

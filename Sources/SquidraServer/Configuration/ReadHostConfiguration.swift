@@ -10,13 +10,13 @@ import SquidraPostgres
 /// silently substitutes fixture responses. Provider qualification is separate.
 struct ReadHostConfiguration: Sendable {
     let models: [any LanguageModel], entities: [PlanningEntity]
-    let allowSyntheticImportedEntities: Bool
+    let allowImportedEntities: Bool
     let cloudConsent: Bool, maximumCostMicroUSD: Int64, maximumOutputTokens: Int
     let budget: RunBudget, freshness: AnswerFreshnessPolicy
     init(models: [any LanguageModel], entities: [PlanningEntity], budget: RunBudget = try! RunBudget(),
-         maximumObservationAgeSeconds: Double = 300, minimumConfidence: Double = 0.5, allowSyntheticImportedEntities: Bool = false,
+         maximumObservationAgeSeconds: Double = 300, minimumConfidence: Double = 0.5, allowImportedEntities: Bool = false,
          cloudConsent: Bool = false, maximumCostMicroUSD: Int64 = 0, maximumOutputTokens: Int = 512) throws {
-        guard (1...4).contains(models.count),!entities.isEmpty || allowSyntheticImportedEntities else { throw ReadRunSubmissionError.invalidRequest }
+        guard (1...4).contains(models.count),!entities.isEmpty || allowImportedEntities else { throw ReadRunSubmissionError.invalidRequest }
         if !entities.isEmpty { _ = try ReadPlanningScope(entities:entities) }
         guard maximumCostMicroUSD >= 0,(16...4096).contains(maximumOutputTokens),cloudConsent || maximumCostMicroUSD == 0 else { throw ModelRoutingError.invalidConfiguration }
         for model in models {
@@ -29,7 +29,7 @@ struct ReadHostConfiguration: Sendable {
             }
         }
         self.cloudConsent = cloudConsent;self.maximumCostMicroUSD = maximumCostMicroUSD;self.maximumOutputTokens = maximumOutputTokens
-        self.allowSyntheticImportedEntities = allowSyntheticImportedEntities
+        self.allowImportedEntities = allowImportedEntities
         self.models = models;self.entities = entities;self.budget = budget
         self.freshness = try AnswerFreshnessPolicy(maximumObservationAgeSeconds:maximumObservationAgeSeconds,minimumCurrentConfidence:Confidence(minimumConfidence))
     }
@@ -58,7 +58,7 @@ struct ReadHostEntityScope: Sendable {
     func resolve(_ id: UUID, deadline: ContinuousClock.Instant) async throws -> PlanningEntity? {
         if let entity = entities.first(where: { $0.id == id }) { return entity }
         guard let imported,try await imported.contains(id,deadline:deadline) else { return nil }
-        return try PlanningEntity(id:id,label:"Imported synthetic entity")
+        return try PlanningEntity(id:id,label:"Imported entity")
     }
 }
 struct ScopedServerWorldReadPolicy: PolicyEngine {

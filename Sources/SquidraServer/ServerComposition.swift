@@ -27,7 +27,12 @@ enum ServerComposition {
         let readiness = PostgresSchemaReadiness(client: client)
         let approvals = ApprovalCoordinator(store:PostgresApprovalStore(client:client),clock:SystemClock(timeZone:try! IANATimeZone(identifier:"Etc/UTC")))
         let world = PostgresLocationProjection(actorID:configuration.boundary.actorID,client:client)
-        let frameImports = try configuration.syntheticImport.map { FrameImportRoutes(ingestion:try PostgresFrameIngestion(client:client,model:$0.model,policy:$0.policy)) }
+        let frameImports: FrameImportRoutes?
+        if let profile = configuration.samImport {
+            frameImports = FrameImportRoutes(ingestion:try PostgresFrameIngestion(client:client,model:profile.model,policy:profile.policy,cloudAdmission:profile.admission))
+        } else {
+            frameImports = try configuration.syntheticImport.map { FrameImportRoutes(ingestion:try PostgresFrameIngestion(client:client,model:$0.model,policy:$0.policy)) }
+        }
         let worldReads = try WorldReadRoutes(actorID:configuration.boundary.actorID,world:world,changes:world)
         let recovery = WorldProjectionRecovery(actorID:configuration.boundary.actorID,
             repository:PostgresWorldRepository(client:client),projector:world)
@@ -39,9 +44,9 @@ enum ServerComposition {
         let continuationStep: (@Sendable () async throws -> Bool)?
         if let readHost {
             let imported: PostgresImportedEntityReadScope?
-            if readHost.allowSyntheticImportedEntities {
-                guard let profile = configuration.syntheticImport else { throw ReadRunSubmissionError.invalidRequest }
-                imported = PostgresImportedEntityReadScope(client:client,policy:profile.policy)
+            if readHost.allowImportedEntities {
+                guard let policy = configuration.importPolicy else { throw ReadRunSubmissionError.invalidRequest }
+                imported = PostgresImportedEntityReadScope(client:client,policy:policy)
             } else { imported = nil }
             let entityScope = ReadHostEntityScope(entities:readHost.entities,imported:imported)
             let clock = try SystemClock(timeZone:IANATimeZone(identifier:"Etc/UTC"))
@@ -101,8 +106,7 @@ enum ServerComposition {
             runs:try! RunRoutes.Dependencies(actorID:configuration.boundary.actorID,
                 events:events,publication:publication,runtime:runtime,submission:submission,traces:recorder),
             beforeServing:{
-                if let profile = configuration.syntheticImport {
-                    let policy = profile.policy
+                if let policy = configuration.importPolicy {
                     let rows = try await client.query("SELECT EXISTS(SELECT 1 FROM world_entities WHERE id=\(policy.locationID) AND actor_id=\(policy.actorID)) AND EXISTS(SELECT 1 FROM coordinate_frames WHERE id=\(policy.coordinateFrameID) AND actor_id=\(policy.actorID))").collect()
                     guard let row = rows.first,try row.decode(Bool.self) else { throw FramePublicationError.scopeMismatch }
                 }
