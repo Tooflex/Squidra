@@ -29,6 +29,12 @@ jobs:
         run: echo "DEVELOPER_DIR=/Applications/Xcode_26.3.app/Contents/Developer" >> "$GITHUB_ENV"
       - name: Install official Swift 6.4.2 toolchain
         run: bash Scripts/install-ci-swift.sh
+      - name: Install pinned Web toolchain
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
       - name: Record toolchain and host
         run: |
           swift --version
@@ -51,6 +57,8 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-027
       - name: Verify bounded fact consolidation
         run: bash Scripts/test-issue.sh SQD-029
+      - name: Verify typed local review interface in Chromium
+        run: bash Scripts/test-issue.sh T06-REVIEW
       - name: Run T01 Domain tests
         run: bash Scripts/test-issue.sh T01
       - name: Run bounded JSON document tests
