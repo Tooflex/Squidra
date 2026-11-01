@@ -19,13 +19,16 @@ Closes #<!-- issue number -->
 
 ## Agent provenance
 
-<!-- Provide a redacted task summary, never raw sensitive prompts. -->
+Provide a concise redacted task summary. Add exactly one structured block using
+[the provenance format](../Scripts/validate-pr-metadata/README.md).
+The template intentionally fails validation until actual metadata is supplied.
+Use `unknown` for unmeasured model identity, tokens, or cost. Never paste secrets
+or raw private prompts. Trace kind distinguishes an authoring thread from a
+runtime trace; a names-only manifest is not an executable tool schema.
 
-- Task / issue:
-- Allowed paths and any approved scope changes:
-- traceId: <!-- value, unavailable, or not applicable -->
-- Tool-manifest hash: <!-- value, unavailable, or not applicable -->
-- Models / tokens / cost: <!-- measured values or “not measured” -->
+<!-- squidra-provenance:v1 -->
+{}
+<!-- /squidra-provenance -->
 
 ## Integration
 
