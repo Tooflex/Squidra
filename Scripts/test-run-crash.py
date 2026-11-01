@@ -17,8 +17,10 @@ env = dict(os.environ, SQUIDRA_RUN_CRASH_FIXTURE='1', SQUIDRA_TEST_DB_PORT=port,
 subprocess.run(['swift', 'build', '--force-resolved-versions', '--product', 'squidra-run-crash-fixture'], cwd=root, check=True)
 bin_path = subprocess.check_output(['swift', 'build', '--show-bin-path'], cwd=root, text=True).strip()
 exe = str(Path(bin_path) / 'squidra-run-crash-fixture')
+approval_stages = ['approval_pending', 'approval_approved', 'approval_denied',
+                   'approval_withdrawn', 'approval_expired', 'approval_approved_expired']
 with tempfile.TemporaryDirectory(prefix='squidra-run-crash-') as temp:
-    for stage in ['reserved', 'pending', 'effect', 'result']:
+    for stage in ['reserved', 'pending', 'effect', 'result'] + approval_stages:
         marker = Path(temp) / (stage + '.json')
         with (Path(temp) / (stage + '.log')).open('w+') as log:
             process = subprocess.Popen([exe, 'seed', stage, str(marker)], cwd=root, env=env,
@@ -27,7 +29,9 @@ with tempfile.TemporaryDirectory(prefix='squidra-run-crash-') as temp:
                 end = time.monotonic() + 30
                 while not marker.exists():
                     if process.poll() is not None or time.monotonic() >= end:
-                        raise RuntimeError('Owned fixture did not reach its durable crash boundary')
+                        log.seek(0)
+                        codes = [line.strip() for line in log if line.startswith('CRASH_FIXTURE_FAILED')]
+                        raise RuntimeError('Owned fixture did not reach ' + stage + ': ' + (codes[-1] if codes else 'no diagnostic'))
                     time.sleep(0.02)
                 data = json.loads(marker.read_text())
                 if data.get('stage') != stage or process.poll() is not None:
@@ -43,4 +47,9 @@ with tempfile.TemporaryDirectory(prefix='squidra-run-crash-') as temp:
                                      capture_output=True, text=True, timeout=30)
             if resumed.returncode or resumed.stdout.strip() != 'CRASH_RECOVERY_VERIFIED':
                 raise RuntimeError('Fresh process did not verify recovery')
+            if stage in approval_stages:
+                verified = subprocess.run([exe, 'verify', stage, str(marker)], cwd=root, env=env,
+                                          capture_output=True, text=True, timeout=30)
+                if verified.returncode or verified.stdout.strip() != 'CRASH_RECOVERY_VERIFIED':
+                    raise RuntimeError('Second fresh process did not verify durable approval outcome')
             print('SQUIDRA_TEST_PASS:crash_' + stage, flush=True)

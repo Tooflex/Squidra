@@ -4,7 +4,7 @@
 
 Run `bash Scripts/test-issue.sh SQD-028` for the aggregate recovery check.
 It executes checkpoint unit tests, approval wait contracts, PostgreSQL effect
-reconciliation, actual effect process crashes, local ownership, normal CLI
+reconciliation, actual effect and approval process crashes, local ownership, normal CLI
 publication recovery, automatic read-host process crashes, and HTTP status
 regressions. Each child must pass its own nonzero-test validation before the
 aggregate reports its marker; failure preserves the child exit code.
@@ -15,9 +15,23 @@ normal model-free CLI can recover completed publication archives. Generic
 `RunRecovery` and `ApprovalWait` remain explicit host operations; the automatic
 read host does not execute effectful tasks or resume approval workflows.
 The sections below record successive implementation stages; earlier statements
-that all host activation is pending are superseded by the automatic read-host
-sections. This gate does not claim real-provider or Linux qualification, nor
-completion of every acceptance criterion in #28.
+that host activation or approval crash qualification is pending are superseded by
+the automatic read-host and approval process-death sections. This gate does not
+claim real-provider, Linux or cross-host failover qualification.
+
+The SQD-028 acceptance scope is the implemented automatic read host and explicit
+trusted-host recovery APIs. An unknown external effect deliberately terminates
+with RECOVERY_REQUIRED when no authoritative verifier can establish its outcome;
+it is not retried. Automatic execution of arbitrary effectful tasks is not an
+implicit capability of checkpoint restoration.
+
+| Requirement | Implementation and executable evidence |
+| --- | --- |
+| Reload checkpoints and approvals | RunRecovery / ApprovalWait; SQD-028-UNIT, SQD-009 and six actual approval process-crash scenarios |
+| Reconcile pending/unknown actions before retry | Exact actor/run/key/fingerprint binding, authoritative RunEffectVerifier, persisted ledger result; SQD-028-DURABLE and reserved/pending/effect/result process crashes |
+| Explicitly stop when a remote effect is unverifiable | FAILED / RECOVERY_REQUIRED with no new dispatch; pending process-crash and checkpoint tests |
+| Resume without duplicating effects | Confirmed receipts/results reused; reserved work claims its original key; one or zero effects asserted in independent processes |
+| Consistent status and correlation | Preserved budgets, trace/run IDs, monotonic versions; automatic host recovery and HTTP/SSE status/replay checks |
 
 `RunRecovery` is a host recovery operation for a worker that has stopped. It is
 not a live takeover endpoint: the host must join the old worker, or verify its
@@ -721,6 +735,35 @@ child diagnostics only on failure.
 This qualifies automatic host recovery for these five saved boundaries on the
 executed platform. It does not qualify a real model provider, CLI model-host
 configuration, cross-host failover or unknown remote effects. Linux process
-qualification remains part of restored CI. Generic pending-action/approval
-recovery and other unverified boundaries still require their respective evidence
-before SQD-028 is complete.
+qualification remains part of restored CI. Generic pending-action recovery is
+qualified by the separate effect-crash tests, and approval restoration by the
+process-death tests below. Neither enables automatic effectful startup execution.
+
+## Approval waits after actual process death
+
+`SQD-028-CRASH` now also runs six approval scenarios: pending, approved, denied,
+withdrawn, pending past expiry, and approved past expiry. The fixture reserves the
+exact command, persists an approval and the WAITING_APPROVAL checkpoint, optionally
+persists a decision, then publishes its committed marker. The harness kills and
+joins that owned process with SIGKILL before starting a fresh continuation process.
+
+The new process checks the exact saved checkpoint, actor/run/trace, approval digest,
+original expiry and command fingerprint. A pending wait remains unchanged until
+an explicit fixture-owner decision. An unexpired approval resumes at VALIDATING /
+POLICY_CHECK; it does not issue a tool permit. Denial/expiry becomes POLICY_DENIED,
+withdrawal becomes CANCELLED. Expiry uses actual elapsed time and the original
+PostgreSQL timestamp, including an approval that expires while its worker is dead.
+
+Every scenario checks unchanged active budget, steps and zero calls; the action
+must remain reserved with its original key and zero receipt effects. A second fresh
+process verifies the persisted outcome and rejection of another restoration of
+the old wait. These checks passed locally on macOS with isolated PostgreSQL;
+the four existing action-crash scenarios also passed (11 runner checks including
+the loopback boundary). This is explicit trusted-host continuation through the
+production ApprovalWait API. Automatic startup of effectful tasks, arbitrary
+remote-effect verification and cross-host failover are not enabled or claimed.
+
+The first fixture used a ten-second I/O deadline, which the PostgreSQL ports
+correctly rejected. It now uses a fresh four-second deadline for each operation;
+the approval TTL and elapsed-time expiry wait are independent. Error diagnostics
+expose only closed approval/run error codes, never SQL text or credentials.

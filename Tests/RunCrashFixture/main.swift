@@ -3,6 +3,7 @@ import PostgresNIO
 import SquidraAgentRuntime
 import SquidraDomain
 import SquidraPostgres
+import SquidraSecurity
 import SquidraTools
 
 struct FixtureClock: SquidraDomain.Clock {
@@ -23,11 +24,17 @@ struct ReceiptVerifier: RunEffectVerifier {
 @main struct RunCrashFixture {
     static func main() async {
         do { try await run() }
-        catch { print("CRASH_FIXTURE_FAILED");exit(1) }
+        catch {
+            // Only closed, data-free error enums; never SQL/provider descriptions.
+            if let error = error as? ApprovalError { print("CRASH_FIXTURE_FAILED:approval:\(error)") }
+            else if let error = error as? RunError { print("CRASH_FIXTURE_FAILED:run:\(error)") }
+            else { print("CRASH_FIXTURE_FAILED") }
+            exit(1)
+        }
     }
     static func run() async throws {
         let args = CommandLine.arguments,env = ProcessInfo.processInfo.environment
-        guard args.count == 4,["seed","resume"].contains(args[1]),["reserved","pending","effect","result"].contains(args[2]),
+        guard args.count == 4,["seed","resume","verify"].contains(args[1]),(["reserved","pending","effect","result"].contains(args[2]) || approvalStages.contains(args[2])),
               env["SQUIDRA_RUN_CRASH_FIXTURE"] == "1",let port = env["SQUIDRA_TEST_DB_PORT"].flatMap(Int.init),let password = env["SQUIDRA_TEST_DB_PASSWORD"] else { throw FixtureFailure.invalid }
         let path = URL(fileURLWithPath:args[3]),clock = FixtureClock()
         let client = try LocalDatabaseConfiguration(port:port,username:"squidra",password:password,database:"squidra").makeClient()
@@ -40,6 +47,11 @@ struct ReceiptVerifier: RunEffectVerifier {
         let result = try ActionResult.succeeded(ToolCatalog(definitions:[definition]).validateOutput(payload,for:tool),for:tool)
         try await withThrowingTaskGroup(of:Void.self) { group in
             group.addTask { await client.run() };defer { group.cancelAll() }
+            if approvalStages.contains(args[2]) {
+                try await approvalCrash(mode:args[1],stage:args[2],path:path,client:client,clock:clock,tool:tool)
+                return
+            }
+            guard args[1] != "verify" else { throw FixtureFailure.invalid }
             let runs = PostgresRunStore(client:client),store = PostgresActionLedger(client:client),ledger = ActionLedger(store:store)
             if args[1] == "seed" {
                 _ = try await client.query("CREATE TABLE IF NOT EXISTS crash_receipts(action_id uuid PRIMARY KEY)").collect()
