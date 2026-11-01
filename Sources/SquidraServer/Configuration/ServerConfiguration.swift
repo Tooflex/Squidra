@@ -1,6 +1,8 @@
 import Foundation
 import SquidraPostgres
 import SquidraSecurity
+import SquidraDomain
+import SquidraTemporal
 
 struct ServerConfiguration: Sendable {
     enum Invalid: Error { case requiredValues, profile, port, localRunDirectory }
@@ -9,14 +11,16 @@ struct ServerConfiguration: Sendable {
     let port: Int
     let localRunDirectory: URL?
     let syntheticImport: SyntheticImportConfiguration?
+    let configuredReadHost: ReadHostConfiguration?
 
     init(environment: [String: String], credentialProvider: (any CredentialProvider)? = nil,
-         credentialReference: CredentialReference? = nil) throws {
+         credentialReference: CredentialReference? = nil, clock: (any SquidraDomain.Clock)? = nil) throws {
         func required(_ key: String) throws -> String {
             guard let value = environment[key], !value.isEmpty else { throw Invalid.requiredValues }
             return value
         }
-        guard (environment["SQUIDRA_PROFILE"] ?? "offline") == "offline" else { throw Invalid.profile }
+        let profile = environment["SQUIDRA_PROFILE"] ?? "offline"
+        guard ["offline","meta-qualification"].contains(profile) else { throw Invalid.profile }
         let portText = environment["SQUIDRA_PORT"] ?? "8080"
         guard let port = Int(portText), (0...65535).contains(port), String(port) == portText else { throw Invalid.port }
         guard let actor = UUID(uuidString: try required("SQUIDRA_ACTOR_ID")),
@@ -26,6 +30,10 @@ struct ServerConfiguration: Sendable {
             self.localRunDirectory = URL(fileURLWithPath:path,isDirectory:true)
         } else { self.localRunDirectory = nil }
         self.syntheticImport = try SyntheticImportConfiguration.read(environment:environment,actorID:actor)
+        if profile == "meta-qualification" {
+            configuredReadHost = try MetaReadHostConfiguration.read(environment:environment,allowsImportedEntities:syntheticImport != nil,
+                clock:clock ?? SystemClock(timeZone:IANATimeZone(identifier:"Etc/UTC")))
+        } else { configuredReadHost = nil }
         self.port = port
         switch (credentialProvider, credentialReference) {
         case let (.some(provider), .some(reference)):

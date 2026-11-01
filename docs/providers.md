@@ -166,9 +166,9 @@ There is no retry, polling or fallback.
 The transport is injected and must enforce response limits while receiving,
 refuse redirects and cooperate with cancellation. The client independently
 validates the complete response and joins the deadline/cancellation tasks. This
-component now has a separate LanguageModel adapter described below. Qualified
-spending bounds/accounting and explicit server configuration remain necessary
-before the server can register it. No environment key is read and no network transport is
+component now has a separate LanguageModel adapter described below. The explicit dated
+server qualification profile is described below. General production spending
+and account qualification remain separate. No environment key is read and no network transport is
 implicitly created by this component.
 
 `bash Scripts/test-issue.sh T11-META-RESPONSES` runs eight offline tests with
@@ -249,8 +249,9 @@ prices nor proves a safe live reservation. Current source:
 
 Offline checks: `T11-META-COST` covers exact arithmetic, cache uncertainty and
 invalid counters; `SQD-003-COST` covers routing and both archive versions.
-No API key is read by these components. The planned server credential variable
-is `MODEL_API_KEY`; environment-based cloud activation remains unimplemented.
+No API key is read by these components. The server credential variable
+is `MODEL_API_KEY`, with private `MODEL_API_KEY_FILE` as an alternative in the
+explicit qualification profile below. A key alone does not activate cloud calls.
 
 
 ## Authorized live text probes (2026-11-01)
@@ -420,8 +421,7 @@ monotonic deadline and retain reservations on failures, cancellation or uncertai
 outcomes. Attempt IDs are unique even when planning and answering share a request
 ID. Authorization latency consumes the same deadline as transport. Usage estimates
 do not refund reservations. The existing private 100 EUR test ledger has an explicit Swift implementation
-below; server configuration still needs integration before real questions can
-make paid calls.
+below; the explicit server profile connects it to question execution.
 
 The domain model port lacks function call IDs. Its tool messages are therefore
 encoded as JSON objects with `kind=untrusted_tool_data` and the original content,
@@ -471,4 +471,49 @@ rename and fsync semantics; distributed storage is not qualified.
 new instances, Python/Swift interoperability and cross-process lock contention,
 private-file checks, expiry, malformed state and cancellation. It does not touch
 the real ledger, access credentials or make paid API calls. The default server
-remains offline until explicit host configuration is connected to this budget.
+remains offline unless the explicit Meta qualification profile below is selected.
+
+
+## Opt-in server qualification profile
+
+The normal CLI now connects the real Meta adapter, HTTPS transport and shared
+file budget when `SQUIDRA_PROFILE=meta-qualification` is explicitly selected.
+The default `offline` profile ignores Meta credentials and makes no model calls.
+This dated profile exists to qualify the selected APIs; it is not an assertion
+of production retention, billing reconciliation or broad answer quality.
+
+Required additional configuration:
+
+- `SQUIDRA_META_CLOUD_CONSENT=1`: authorize transfer of questions and their scoped
+  world/tool evidence to Meta. Standard mode and store:false do not establish ZDR.
+- `SQUIDRA_META_MODEL=spark` or `wonder`: select one model; no automatic fallback.
+- `SQUIDRA_META_BUDGET_DIRECTORY`: absolute path to the existing private directory
+  containing the shared ledger. Its state and remaining capacity are validated
+  before each attempt; `check-config` does not reserve funds or call the provider.
+- Exactly one of `MODEL_API_KEY` or `MODEL_API_KEY_FILE`. The latter is an absolute
+  path to an owner-only, unlinked regular 0600 file containing the raw ASCII key
+  without a trailing newline. Symlinks, special files and ambiguous sources fail.
+- `SQUIDRA_META_ENTITY_IDS`: one to 32 distinct canonical lowercase UUIDs separated
+  by commas. These are host-authorized entities, not model-generated permissions.
+  Alternatively, an enabled synthetic import profile supplies the existing
+  actor/camera/scene-bound imported-entity scope. Explicit IDs may supplement it.
+
+All existing authentication, origin and local database settings remain required.
+The read host allows 4096 output tokens per call, reserves a conservative ten USD
+per model attempt within a twenty-USD run allowance, and disables retries and
+fallback. The separate shared ledger reserves ten EUR for each actual attempt
+and retains the global 100 EUR cap across both language models and SAM. At least
+180 seconds must remain before the pricing/FX snapshot expires at startup; each
+request and reservation independently checks expiry. Missing/invalid/exhausted
+budget state fails before network dispatch, without creating a new allowance.
+
+The configuration is wired into the normal `serve` composition and existing
+question routes. A simultaneous injected read host and configured Meta host is
+rejected. Local host injection retains its zero-cost defaults. No new public
+request fields grant cloud access or widen entity permissions. Disabling the
+profile returns to offline behavior without deleting runs or budget history.
+
+`T11-META-HOST` tests explicit activation, both model choices, consent/scope,
+expiry, private-key-file rejection and actual adapter-to-file-budget execution
+with a fake transport and temporary ledger. No real credential or API call is
+used. End-to-end live question quality remains a separate qualification step.

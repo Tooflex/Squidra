@@ -11,16 +11,24 @@ import SquidraPostgres
 struct ReadHostConfiguration: Sendable {
     let models: [any LanguageModel], entities: [PlanningEntity]
     let allowSyntheticImportedEntities: Bool
+    let cloudConsent: Bool, maximumCostMicroUSD: Int64, maximumOutputTokens: Int
     let budget: RunBudget, freshness: AnswerFreshnessPolicy
     init(models: [any LanguageModel], entities: [PlanningEntity], budget: RunBudget = try! RunBudget(),
-         maximumObservationAgeSeconds: Double = 300, minimumConfidence: Double = 0.5, allowSyntheticImportedEntities: Bool = false) throws {
+         maximumObservationAgeSeconds: Double = 300, minimumConfidence: Double = 0.5, allowSyntheticImportedEntities: Bool = false,
+         cloudConsent: Bool = false, maximumCostMicroUSD: Int64 = 0, maximumOutputTokens: Int = 512) throws {
         guard (1...4).contains(models.count),!entities.isEmpty || allowSyntheticImportedEntities else { throw ReadRunSubmissionError.invalidRequest }
         if !entities.isEmpty { _ = try ReadPlanningScope(entities:entities) }
+        guard maximumCostMicroUSD >= 0,(16...4096).contains(maximumOutputTokens),cloudConsent || maximumCostMicroUSD == 0 else { throw ModelRoutingError.invalidConfiguration }
         for model in models {
-            guard case .local = model.descriptor.location,
-                  model.descriptor.capabilities.isSuperset(of:[.text,.structuredOutput]),
-                  model.descriptor.maximumCostMicroUSD == 0 else { throw ModelRoutingError.invalidConfiguration }
+            let d = model.descriptor
+            guard d.capabilities.isSuperset(of:[.text,.structuredOutput]) else { throw ModelRoutingError.invalidConfiguration }
+            switch d.location {
+            case .local: guard d.maximumCostMicroUSD == 0 else { throw ModelRoutingError.invalidConfiguration }
+            case .cloud:
+                guard cloudConsent,d.maximumCostMicroUSD > 0,d.maximumCostMicroUSD <= maximumCostMicroUSD/2 else { throw ModelRoutingError.invalidConfiguration }
+            }
         }
+        self.cloudConsent = cloudConsent;self.maximumCostMicroUSD = maximumCostMicroUSD;self.maximumOutputTokens = maximumOutputTokens
         self.allowSyntheticImportedEntities = allowSyntheticImportedEntities
         self.models = models;self.entities = entities;self.budget = budget
         self.freshness = try AnswerFreshnessPolicy(maximumObservationAgeSeconds:maximumObservationAgeSeconds,minimumCurrentConfidence:Confidence(minimumConfidence))
