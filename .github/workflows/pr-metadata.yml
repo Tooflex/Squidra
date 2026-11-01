@@ -1,0 +1,31 @@
+name: PR Metadata
+
+# Restore pull_request events at the end of the maintainer-authorized CI pause.
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR whose description is checked as data
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Check trusted validator contracts
+        run: python3 Scripts/validate-pr-metadata/test_validate.py
+      - name: Validate description without running PR code
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: python3 Scripts/validate-pr-metadata/validate.py --pr "$PR_NUMBER"

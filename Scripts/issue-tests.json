@@ -1219,5 +1219,15 @@
       "linux_engine",
       "swift_browser_adapter"
     ]
+  },
+  "SQD-034": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/validate-pr-metadata/test_validate.py"
+    ],
+    "tests": [
+      "pr_provenance_contracts"
+    ]
   }
 }
