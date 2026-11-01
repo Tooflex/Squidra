@@ -19,6 +19,7 @@ let package = Package(
         .executable(name: "squidra-movement-crash-fixture", targets: ["MovementCrashFixture"]),
         .executable(name: "squidra-watch-crash-fixture", targets: ["WatchCrashFixture"]),
         .executable(name: "squidra-publication-crash-fixture", targets: ["PublicationCrashFixture"]),
+        .executable(name: "squidra-timeline-browser-fixture", targets: ["TimelineBrowserFixture"]),
         .executable(name: "squidra-consolidation-browser-fixture", targets: ["ConsolidationBrowserFixture"]),
     ],
     dependencies: [
@@ -47,6 +48,7 @@ let package = Package(
         .executableTarget(name: "EvalRunner", dependencies: ["SquidraDomain", "SquidraTemporal", "SquidraSpatial", "SquidraPerception"], path: "Evals/Runner"),
         .executableTarget(name: "MovementCrashFixture", dependencies: ["SquidraPerception", "SquidraSpatial", "SquidraDomain", "SquidraWorld", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio")], path: "Tests/MovementCrashFixture"),
         .executableTarget(name: "WatchCrashFixture", dependencies: ["SquidraMemory", "SquidraPerception", "SquidraSpatial", "SquidraDomain", "SquidraWorld", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio")], path: "Tests/WatchCrashFixture"),
+        .executableTarget(name: "TimelineBrowserFixture", dependencies: ["SquidraWorld", "SquidraDomain", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio")], path: "Tests/TimelineBrowserFixture"),
         .executableTarget(name: "ConsolidationBrowserFixture", dependencies: ["SquidraMemory", "SquidraDomain", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio")], path: "Tests/ConsolidationBrowserFixture"),
         .executableTarget(name: "PublicationCrashFixture", dependencies: ["SquidraAgentRuntime", "SquidraCognition", "SquidraDomain", "SquidraPostgres", "SquidraProtocols", "SquidraSecurity", "SquidraTemporal", "SquidraTools", .product(name: "PostgresNIO", package: "postgres-nio")], path: "Tests/PublicationCrashFixture"),
         .executableTarget(name: "RunCrashFixture", dependencies: ["SquidraAgentRuntime", "SquidraTools", "SquidraDomain", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio")], path: "Tests/RunCrashFixture"),

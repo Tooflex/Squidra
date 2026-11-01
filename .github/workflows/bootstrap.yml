@@ -61,6 +61,8 @@ jobs:
         run: bash Scripts/test-issue.sh T06-REVIEW
       - name: Temporal browser checks
         run: bash Scripts/test-issue.sh SQD-023
+      - name: Temporal browser against normal server and PostgreSQL
+        run: bash Scripts/test-issue.sh SQD-023-LIVE
       - name: Verify browser review against real server and PostgreSQL
         run: bash Scripts/test-issue.sh T06-REVIEW-LIVE
       - name: Run T01 Domain tests

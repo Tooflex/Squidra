@@ -989,5 +989,18 @@
     "tests": [
       "typed_web_timeline"
     ]
+  },
+  "SQD-023-LIVE": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-timeline-live"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "timeline_sql_read",
+      "timeline_sql_reload"
+    ]
   }
 }
