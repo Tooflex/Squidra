@@ -241,6 +241,8 @@ jobs:
       - name: Verify frame import to durable evidence and sourced answers
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-020-PUBLISH
+      - name: Authenticated synthetic frame import
+        run: bash Scripts/test-issue.sh SQD-020-HTTP
       - name: Verify private tracing against actual PostgreSQL evidence
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-030-SQL

@@ -17,6 +17,8 @@ enum ServerMain {
             print("consolidate imports a bounded local JSON batch using the same actor/database configuration.")
             print("Optional: SQUIDRA_PORT (default 8080), SQUIDRA_PROFILE (offline only).")
             print("Optional: SQUIDRA_RUN_DIRECTORY (existing private local directory for run recovery).")
+            print("Optional synthetic import: SQUIDRA_SYNTHETIC_IMPORT=1 with SQUIDRA_SYNTHETIC_FIXTURE,")
+            print("SQUIDRA_SYNTHETIC_CAMERA_ID, SQUIDRA_SYNTHETIC_SCENE_ID and SQUIDRA_SYNTHETIC_COORDINATE_FRAME_ID.")
             return 0
         }
         if arguments == ["--version"] { print("Squidra development (SwiftPM)"); return 0 }

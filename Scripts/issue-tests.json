@@ -1040,5 +1040,21 @@
       "approval_sql_decide",
       "approval_sql_reload"
     ]
+  },
+  "SQD-020-HTTP-SWIFT": {
+    "kind": "xctest",
+    "filter": "^SquidraServerTests\\.FrameImportRouteTests/"
+  },
+  "SQD-020-HTTP": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-frame-http"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "synthetic_frame_http"
+    ]
   }
 }
