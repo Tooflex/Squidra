@@ -47,6 +47,18 @@ struct SuspendedPlanStore: ReadRunPlanStore {
         try await base.load(runID:runID,deadline:deadline)
     }
 }
+struct SuspendedToolResultStore: ReadRunToolResultStore {
+    let base: PostgresReadRunToolResultStore,marker: URL,model: AuthoredModel
+    func save(snapshot: RunSnapshot,requestID: UUID,command: ActionCommand,result: UntrustedToolResult,deadline: ContinuousClock.Instant) async throws {
+        try await base.save(snapshot:snapshot,requestID:requestID,command:command,result:result,deadline:deadline)
+        guard snapshot.state == .executingTool,snapshot.steps == 1,snapshot.calls == 1,await model.calls == 1 else { throw Failure.invalid }
+        try JSONEncoder().encode(Manifest(actor:snapshot.actorID,run:snapshot.id,version:snapshot.version)).write(to:marker,options:.atomic)
+        try await Task.sleep(for:.seconds(120));throw Failure.invalid
+    }
+    func load(runID: UUID,deadline: ContinuousClock.Instant) async throws -> StoredReadRunToolResult? {
+        try await base.load(runID:runID,deadline:deadline)
+    }
+}
 @main struct PublicationCrashFixture {
     static func main() async {
         do { try await run() }
@@ -55,7 +67,7 @@ struct SuspendedPlanStore: ReadRunPlanStore {
     }
     static func run() async throws {
         let env = ProcessInfo.processInfo.environment,args = CommandLine.arguments
-        guard args.count == 3,["seed","seed-early","seed-plan","resume-early","resume-plan","verify"].contains(args[1]),env["SQUIDRA_PUBLICATION_CRASH_FIXTURE"] == "1",
+        guard args.count == 3,["seed","seed-early","seed-plan","seed-result","resume-early","resume-plan","resume-result","verify"].contains(args[1]),env["SQUIDRA_PUBLICATION_CRASH_FIXTURE"] == "1",
               let port = env["SQUIDRA_TEST_DB_PORT"].flatMap(Int.init),let password = env["SQUIDRA_TEST_DB_PASSWORD"] else { throw Failure.invalid }
         let marker = URL(fileURLWithPath:args[2])
         let client = try LocalDatabaseConfiguration(port:port,username:"squidra",password:password,database:"squidra").makeClient()
@@ -65,7 +77,7 @@ struct SuspendedPlanStore: ReadRunPlanStore {
                 let actor = UUID(),entity = UUID(),clock = try SystemClock(timeZone:IANATimeZone(identifier:"Etc/UTC")),at = try clock.now()
                 _ = try await client.query("INSERT INTO world_entities(id,actor_id,kind) VALUES(\(entity),\(actor),'fixture')").collect()
                 let request = try ReadRunRequest(actorID:actor,question:"Where is the authored fixture?",planningScope:ReadPlanningScope(entities:[PlanningEntity(id:entity,label:"Fixture")]),
-                    effectiveToolScope:["world:read"],intent:.historical,modelOptions:ReadPlanningOptions(maximumCostMicroUSD:args[1] == "seed-plan" ? 10 : 0,deadline:UTCInstant(secondsSince1970:at.secondsSince1970+15)),budget:RunBudget(activeMilliseconds:15000))
+                    effectiveToolScope:["world:read"],intent:.historical,modelOptions:ReadPlanningOptions(maximumCostMicroUSD:["seed-plan","seed-result"].contains(args[1]) ? 10 : 0,deadline:UTCInstant(secondsSince1970:at.secondsSince1970+15)),budget:RunBudget(activeMilliseconds:15000))
                 let binding = AGUIRunBinding(actorID:actor,runID:request.runID,threadID:UUID(),requestID:request.requestID)
                 let events = PostgresRunEventStore(client:client,actorID:actor),publication = PostgresRunPublicationStore(client:client,actorID:actor)
                 _ = try await events.create(binding,retentionSeconds:3600,deadline:.now.advanced(by:.seconds(4)))
@@ -78,7 +90,7 @@ struct SuspendedPlanStore: ReadRunPlanStore {
                     try JSONEncoder().encode(Manifest(actor:actor,run:request.runID,version:checkpoint.version)).write(to:marker,options:.atomic)
                     try await Task.sleep(for:.seconds(120));throw Failure.invalid
                 }
-                let (engine,model) = try makeEngine(request:request,client:client,clock:clock,planMarker:args[1] == "seed-plan" ? marker : nil)
+                let (engine,model) = try makeEngine(request:request,client:client,clock:clock,planMarker:args[1] == "seed-plan" ? marker : nil,resultMarker:args[1] == "seed-result" ? marker : nil)
                 let result = try await engine.execute(request)
                 guard result.snapshot.state == .completed,result.snapshot.calls == 1,await model.calls == 2 else { throw Failure.invalid }
                 let status = try await publication.status(actorID:actor,runID:request.runID,deadline:.now.advanced(by:.seconds(4)))
@@ -87,21 +99,25 @@ struct SuspendedPlanStore: ReadRunPlanStore {
                 try await Task.sleep(for:.seconds(120));throw Failure.invalid
             } else {
                 let m = try JSONDecoder().decode(Manifest.self,from:Data(contentsOf:marker))
-                if args[1] == "resume-early" || args[1] == "resume-plan" {
-                    let savedPlan = args[1] == "resume-plan"
+                if args[1].hasPrefix("resume-") {
+                    let savedResult = args[1] == "resume-result"
+                    let savedPlan = args[1] == "resume-plan" || savedResult
                     guard let task = try await PostgresReadRunTaskStore(client:client,actorID:m.actor).load(runID:m.run,deadline:.now.advanced(by:.seconds(4))) else { throw Failure.invalid }
                     let original = try await PostgresRunStore(client:client).load(actorID:m.actor,runID:m.run,deadline:.now.advanced(by:.seconds(4)))
                     guard original.version == m.version,original.budget.activeMilliseconds > 0,original.budget.activeMilliseconds <= 15000 else { throw Failure.invalid }
                     let clock = try SystemClock(timeZone:IANATimeZone(identifier:"Etc/UTC"))
                     let (engine,model) = try makeEngine(request:task.request,client:client,clock:clock,answerOnly:savedPlan)
-                    let result = try await savedPlan ? engine.resumeSavedPlan(task.request,expectedVersion:m.version) : engine.resumeBeforePlanning(task.request,expectedVersion:m.version)
+                    let result: ReadRunResult
+                    if savedResult { result = try await engine.resumeSavedToolResult(task.request,expectedVersion:m.version) }
+                    else if savedPlan { result = try await engine.resumeSavedPlan(task.request,expectedVersion:m.version) }
+                    else { result = try await engine.resumeBeforePlanning(task.request,expectedVersion:m.version) }
                     guard result.snapshot.state == .completed,result.snapshot.calls == 1,result.snapshot.steps == 1,
                           result.snapshot.budget == original.budget,result.snapshot.activeMilliseconds >= original.activeMilliseconds,await model.calls == (savedPlan ? 1 : 2) else { throw Failure.invalid }
                     try JSONEncoder().encode(Manifest(actor:m.actor,run:m.run,version:result.snapshot.version)).write(to:marker,options:.atomic)
                     if savedPlan {
                         guard result.planningRouting.reservedCostUpperBoundMicroUSD == 5,result.reservedModelCostUpperBoundMicroUSD == 10 else { throw Failure.invalid }
                     }
-                    print(savedPlan ? "SAVED_PLAN_RECOVERY_VERIFIED" : "PREPLANNING_RECOVERY_VERIFIED")
+                    print(savedResult ? "SAVED_RESULT_RECOVERY_VERIFIED" : (savedPlan ? "SAVED_PLAN_RECOVERY_VERIFIED" : "PREPLANNING_RECOVERY_VERIFIED"))
                     return
                 }
                 let state = try await PostgresRunStore(client:client).load(actorID:m.actor,runID:m.run,deadline:.now.advanced(by:.seconds(4)))
@@ -121,7 +137,7 @@ struct SuspendedPlanStore: ReadRunPlanStore {
             }
         }
     }
-    static func makeEngine(request:ReadRunRequest,client:PostgresClient,clock:SystemClock,planMarker: URL? = nil,answerOnly: Bool = false) throws -> (ReadRunEngine,AuthoredModel) {
+    static func makeEngine(request:ReadRunRequest,client:PostgresClient,clock:SystemClock,planMarker: URL? = nil,resultMarker: URL? = nil,answerOnly: Bool = false) throws -> (ReadRunEngine,AuthoredModel) {
         let actor = request.actorID,entity = request.planningScope.entities[0].id
         let model = try AuthoredModel(entity:entity,at:RFC3339.format(clock.now()),answerOnly:answerOnly,cost:request.modelOptions.maximumCostMicroUSD == 10 ? 5 : 0)
         let tool = try WorldLocationTool(world:PostgresLocationProjection(actorID:actor,client:client)).registration()
@@ -130,9 +146,12 @@ struct SuspendedPlanStore: ReadRunPlanStore {
         let planStore = PostgresReadRunPlanStore(client:client,actorID:actor)
         let plans: any ReadRunPlanStore
         if let planMarker { plans = SuspendedPlanStore(base:planStore,marker:planMarker,model:model) } else { plans = planStore }
+        let resultStore = PostgresReadRunToolResultStore(client:client,actorID:actor)
+        let results: any ReadRunToolResultStore
+        if let resultMarker { results = SuspendedToolResultStore(base:resultStore,marker:resultMarker,model:model) } else { results = resultStore }
         let engine = try ReadRunEngine(router:ModelRouter(models:[model],clock:clock),gateway:ActionGateway(tools:[tool],policy:HostActionPolicy(permissions:[permission])),
             store:PostgresRunStore(client:client),clock:clock,freshness:AnswerFreshnessPolicy(maximumObservationAgeSeconds:60,minimumCurrentConfidence:Confidence(0.5)),
-            completions:PostgresReadRunCompletionStore(client:client,actorID:actor),plans:plans)
+            completions:PostgresReadRunCompletionStore(client:client,actorID:actor),plans:plans,toolResults:results)
         return (engine,model)
     }
 

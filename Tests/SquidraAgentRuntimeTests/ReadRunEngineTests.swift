@@ -20,6 +20,8 @@ private struct EngineClockFixture: SquidraDomain.Clock {
 private actor EngineRunStore: RunStore {
     let ambiguousReservation: Bool
     private var ambiguousPlanningClaim: Bool
+    private var ambiguousReadCheckpoint = false
+    func failNextReadCheckpoint() { ambiguousReadCheckpoint = true }
     private(set) var values: [UUID:RunSnapshot] = [:]
     private(set) var history: [RunState] = []
     init(ambiguousReservation: Bool = false,ambiguousPlanningClaim: Bool = false) { self.ambiguousReservation = ambiguousReservation;self.ambiguousPlanningClaim = ambiguousPlanningClaim }
@@ -35,6 +37,7 @@ private actor EngineRunStore: RunStore {
         try Task.checkCancellation()
         guard let old = values[snapshot.id], old.version == expectedVersion, !old.state.isTerminal else { throw RunStoreError.conflict }
         try snapshot.validate(); values[snapshot.id] = snapshot; history.append(snapshot.state)
+        if ambiguousReadCheckpoint && old.state == .executingTool && snapshot.state == .executingTool && old.calls == 1 { ambiguousReadCheckpoint = false;throw RunStoreError.unavailable }
         if ambiguousPlanningClaim && old.state == .planning && snapshot.state == .planning { ambiguousPlanningClaim = false;throw RunStoreError.unavailable }
         if ambiguousReservation && snapshot.state == .executingTool && snapshot.calls == 1 { throw RunStoreError.unavailable }
     }
@@ -113,10 +116,12 @@ private actor CompletionFixture: ReadRunCompletionStore {
 }
 
 private actor PlanFixture: ReadRunPlanStore {
+    let fail: Bool
+    init(fail: Bool = true) { self.fail = fail }
     private(set) var saved: StoredReadRunPlan?
     func save(snapshot: RunSnapshot,requestID: UUID,plan: PlannedRead,deadline: ContinuousClock.Instant) throws {
         saved = StoredReadRunPlan(actorID:snapshot.actorID,runID:snapshot.id,requestID:requestID,planningVersion:snapshot.version,archive:try ReadPlanArchive.encode(plan))
-        throw ReadRunTaskError.unavailable // durable commit followed by lost acknowledgement
+        if fail { throw ReadRunTaskError.unavailable } // durable commit followed by lost acknowledgement
     }
     func load(runID: UUID,deadline: ContinuousClock.Instant) -> StoredReadRunPlan? { saved }
     func corrupt() throws {
@@ -129,16 +134,26 @@ private actor PlanFixture: ReadRunPlanStore {
 
 private actor ToolResultFixture: ReadRunToolResultStore {
     let fail: Bool
+    let store: EngineRunStore?
     private(set) var saved: StoredReadRunToolResult?
     private(set) var state: RunState?
-    init(fail: Bool) { self.fail = fail }
-    func save(snapshot: RunSnapshot,requestID: UUID,command: ActionCommand,result: UntrustedToolResult,deadline: ContinuousClock.Instant) throws {
+    init(fail: Bool,store: EngineRunStore? = nil) { self.fail = fail;self.store = store }
+    func save(snapshot: RunSnapshot,requestID: UUID,command: ActionCommand,result: UntrustedToolResult,deadline: ContinuousClock.Instant) async throws {
         state = snapshot.state
         saved = StoredReadRunToolResult(actorID:snapshot.actorID,runID:snapshot.id,requestID:requestID,callID:result.callID,
             executionVersion:snapshot.version,commandFingerprint:command.fingerprintHex,toolIdentifier:result.tool.identifier,payload:result.payload)
+        await store?.failNextReadCheckpoint()
         if fail { throw ReadRunTaskError.unavailable }
     }
     func load(runID: UUID,deadline: ContinuousClock.Instant) -> StoredReadRunToolResult? { saved }
+    func corrupt(_ field: String) {
+        if field == "missing" { saved = nil;return }
+        guard let old = saved else { return }
+        saved = StoredReadRunToolResult(actorID:field == "actor" ? UUID() : old.actorID,runID:old.runID,requestID:old.requestID,callID:old.callID,
+            executionVersion:old.executionVersion,commandFingerprint:field == "command" ? String(repeating:"0",count:64) : old.commandFingerprint,
+            toolIdentifier:old.toolIdentifier,payload:field == "payload" ? Data("{}".utf8) : old.payload)
+    }
+
 }
 
 // SAFETY: stateless suite; models, query counters and stores are actors.
@@ -157,6 +172,77 @@ final class ReadRunEngineTests: XCTestCase, @unchecked Sendable {
         let policy: any PolicyEngine = deny ? DenyAllActionPolicy() : HostActionPolicy(permissions:permissions)
         return try ReadRunEngine(router:ModelRouter(models:[model],clock:clock),gateway:ActionGateway(tools:registrations,policy:policy),store:store,
             clock:clock,freshness:AnswerFreshnessPolicy(maximumObservationAgeSeconds:2000,minimumCurrentConfidence:Confidence(0.5)),memory:memory,completions:completions,plans:plans,toolResults:toolResults)
+    }
+    func testSavedToolResultResumesWithoutAnotherReadAndPreservesModelReservation() async throws {
+        for boundary in ["archive","confirmation","claim"] {
+            let clock = EngineClockFixture(),store = EngineRunStore(),world = EngineWorldFixture(),plans = PlanFixture(fail:false)
+            let archive = ToolResultFixture(fail:boundary != "confirmation",store:boundary == "confirmation" ? store : nil)
+            let planning = EngineModelFixture(cost:5),request = try Self.request(clock:clock,cost:10)
+            do { _ = try await Self.engine(clock:clock,store:store,model:planning,world:world,plans:plans,toolResults:archive).execute(request);XCTFail("Lost acknowledgement ignored") }
+            catch let failure as ReadRunFailure { XCTAssertEqual(failure.code,.recoveryRequired) }
+            let original = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2)))
+            let answer = EngineModelFixture(.answerOnly,cost:5)
+            let engine = try Self.engine(clock:clock,store:store,model:answer,world:world,deny:true,plans:plans,toolResults:archive)
+            var version = original.version
+            if boundary == "claim" {
+                await store.failNextReadCheckpoint()
+                do { _ = try await engine.resumeSavedToolResult(request,expectedVersion:version);XCTFail("Ambiguous claim ignored") }
+                catch let failure as ReadRunFailure { XCTAssertEqual(failure.code,.recoveryRequired) }
+                version = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2))).version
+            }
+            let completed = try await engine.resumeSavedToolResult(request,expectedVersion:version)
+            XCTAssertEqual(completed.snapshot.state,.completed);XCTAssertEqual(completed.snapshot.budget,original.budget)
+            XCTAssertGreaterThanOrEqual(completed.snapshot.activeMilliseconds,original.activeMilliseconds)
+            XCTAssertEqual(completed.snapshot.steps,1);XCTAssertEqual(completed.snapshot.calls,1)
+            XCTAssertEqual(completed.reservedModelCostUpperBoundMicroUSD,10)
+            do { _ = try await engine.resumeSavedToolResult(request,expectedVersion:completed.snapshot.version);XCTFail("Completed run resumed") }
+            catch let failure as ReadRunFailure { XCTAssertEqual(failure.code,.recoveryRequired) }
+            let planningCalls = await planning.requests.count,answerCalls = await answer.requests.count,reads = await world.calls
+            XCTAssertEqual(planningCalls,1);XCTAssertEqual(answerCalls,1);XCTAssertEqual(reads,1)
+        }
+    }
+    func testSavedToolResultRejectsCorruptionBeforeChangingCheckpoint() async throws {
+        for field in ["actor","command","payload","missing","version"] {
+            let clock = EngineClockFixture(),store = EngineRunStore(),world = EngineWorldFixture(),plans = PlanFixture(fail:false),archive = ToolResultFixture(fail:true)
+            let model = EngineModelFixture(),request = try Self.request(clock:clock)
+            let engine = try Self.engine(clock:clock,store:store,model:model,world:world,plans:plans,toolResults:archive)
+            do { _ = try await engine.execute(request);XCTFail("Archive failure ignored") } catch {}
+            let original = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2)))
+            await archive.corrupt(field)
+            do { _ = try await engine.resumeSavedToolResult(request,expectedVersion:original.version-(field == "version" ? 1 : 0));XCTFail("Corrupt archive accepted") }
+            catch let failure as ReadRunFailure { XCTAssertEqual(failure.code,.recoveryRequired) }
+            let after = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2)))
+            XCTAssertEqual(after,original)
+            let models = await model.requests.count,reads = await world.calls
+            XCTAssertEqual(models,1);XCTAssertEqual(reads,1)
+        }
+    }
+    func testSavedToolResultExpiresWithoutAnotherModelOrRead() async throws {
+        let clock = EngineClockFixture(),store = EngineRunStore(),world = EngineWorldFixture(),plans = PlanFixture(fail:false),archive = ToolResultFixture(fail:true)
+        let model = EngineModelFixture(),request = try Self.request(clock:clock,seconds:1)
+        let engine = try Self.engine(clock:clock,store:store,model:model,world:world,plans:plans,toolResults:archive)
+        do { _ = try await engine.execute(request);XCTFail("Archive failure ignored") } catch {}
+        let original = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2)))
+        XCTAssertEqual(original.state,.executingTool)
+        try await Task.sleep(for:.milliseconds(1100))
+        do { _ = try await engine.resumeSavedToolResult(request,expectedVersion:original.version);XCTFail("Expired run resumed") }
+        catch let failure as ReadRunFailure { XCTAssertEqual(failure.code,.deadlineExceeded) }
+        let after = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2)))
+        XCTAssertEqual(after.state,.timedOut);XCTAssertEqual(after.budget,original.budget)
+        let models = await model.requests.count,reads = await world.calls
+        XCTAssertEqual(models,1);XCTAssertEqual(reads,1)
+    }
+    func testSavedToolResultCannotRepeatAnAnswerThatAlreadyStarted() async throws {
+        let clock = EngineClockFixture(),store = EngineRunStore(),world = EngineWorldFixture(),plans = PlanFixture(fail:false),archive = ToolResultFixture(fail:false)
+        let model = EngineModelFixture(),request = try Self.request(clock:clock)
+        let engine = try Self.engine(clock:clock,store:store,model:model,world:world,completions:CompletionFixture(fail:true),plans:plans,toolResults:archive)
+        do { _ = try await engine.execute(request);XCTFail("Completion failure ignored") } catch {}
+        let original = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2)))
+        XCTAssertEqual(original.state,.responding)
+        do { _ = try await engine.resumeSavedToolResult(request,expectedVersion:original.version);XCTFail("Answer repeated") }
+        catch let failure as ReadRunFailure { XCTAssertEqual(failure.code,.recoveryRequired) }
+        let models = await model.requests.count,reads = await world.calls
+        XCTAssertEqual(models,2);XCTAssertEqual(reads,1)
     }
     func testToolResultArchivePrecedesConfirmationAndLostAcknowledgementStopsAnswer() async throws {
         for fail in [false,true] {

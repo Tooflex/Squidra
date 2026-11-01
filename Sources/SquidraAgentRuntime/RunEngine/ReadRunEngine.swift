@@ -109,10 +109,40 @@ public struct ReadRunEngine: Sendable {
         } catch let failure as ReadRunFailure { throw failure }
         catch { throw ReadRunFailure(runID:request.runID,traceID:request.traceID,code:.recoveryRequired,state:nil) }
     }
-    private func run(_ request: ReadRunRequest,controller: RunController,deadline: ContinuousClock.Instant,restoredPlan: PlannedRead? = nil) async throws -> ReadRunResult {
+    /// Continue from a durable read result after the host proves the old worker stopped.
+    /// RESPONDING is excluded because an answer-model call may already have started.
+    public func resumeSavedToolResult(_ request: ReadRunRequest,expectedVersion: Int64) async throws -> ReadRunResult {
+        do {
+            guard request.effectiveToolScope == ["world:read"],let plans,let toolResults,
+                  let savedPlan = try await plans.load(runID:request.runID,deadline:.now.advanced(by:.seconds(4))),
+                  let saved = try await toolResults.load(runID:request.runID,deadline:.now.advanced(by:.seconds(4))),
+                  savedPlan.actorID == request.actorID,savedPlan.runID == request.runID,savedPlan.requestID == request.requestID,
+                  saved.actorID == request.actorID,saved.runID == request.runID,saved.requestID == request.requestID,
+                  savedPlan.planningVersion > 0,savedPlan.planningVersion < saved.executionVersion,saved.executionVersion <= expectedVersion else { throw RunError.recoveryRequired }
+            let plan = try planner.restore(savedPlan.archive,scope:request.planningScope,maximumCostMicroUSD:request.modelOptions.maximumCostMicroUSD,maximumOutputTokens:request.modelOptions.maximumOutputTokens)
+            let proposal = plan.proposal,key = "read:"+request.runID.uuidString.lowercased()
+            let command = try ActionCommand(actorID:request.actorID,runID:request.runID,tool:proposal.tool,idempotencyKey:key,
+                target:proposal.target,arguments:proposal.arguments,scope:Array(request.effectiveToolScope))
+            guard saved.commandFingerprint == command.fingerprintHex,saved.toolIdentifier == proposal.tool.identifier else { throw RunError.recoveryRequired }
+            // Schema validation only reconstructs untrusted bytes; it grants no tool authority.
+            let catalog = try ToolCatalog(definitions:[WorldLocationTool.definition(),WorldChangesTool.definition()])
+            let result = try catalog.validateOutput(saved.payload,for:proposal.tool)
+            _ = try decoder.decode(result,proposal:proposal,actorID:request.actorID,intent:request.intent,clock:clock,policy:freshness)
+            let controller = try await RunController.restoreSavedRead(actorID:request.actorID,id:request.runID,traceID:request.traceID,
+                expectedVersion:expectedVersion,archiveVersion:saved.executionVersion,fingerprint:command.fingerprintHex,key:key,store:store,clock:clock)
+            let snapshot = try await controller.snapshot()
+            guard !snapshot.state.isTerminal else { throw ReadRunFailure(runID:request.runID,traceID:request.traceID,code:.deadlineExceeded,state:snapshot.state) }
+            guard let wallEnd = snapshot.deadlineSecondsSince1970 else { throw RunError.recoveryRequired }
+            let remaining = min(wallEnd,request.modelOptions.deadline.secondsSince1970)-(try clock.now()).secondsSince1970
+            let ms = max(0,min(Double(snapshot.budget.activeMilliseconds-snapshot.activeMilliseconds),remaining*1000))
+            return try await run(request,controller:controller,deadline:.now.advanced(by:.milliseconds(Int64(ms.rounded(.down)))),restoredPlan:plan,restoredResult:result)
+        } catch let failure as ReadRunFailure { throw failure }
+        catch { throw ReadRunFailure(runID:request.runID,traceID:request.traceID,code:.recoveryRequired,state:nil) }
+    }
+    private func run(_ request: ReadRunRequest,controller: RunController,deadline: ContinuousClock.Instant,restoredPlan: PlannedRead? = nil,restoredResult: UntrustedToolResult? = nil) async throws -> ReadRunResult {
         do {
             return try await withThrowingTaskGroup(of:ReadRunResult.self) { group in
-                group.addTask { try await perform(request,controller:controller,deadline:deadline,restoredPlan:restoredPlan) }
+                group.addTask { try await perform(request,controller:controller,deadline:deadline,restoredPlan:restoredPlan,restoredResult:restoredResult) }
                 group.addTask { try await Task.sleep(until:deadline); throw ReadRunFailureCode.deadlineExceeded }
                 defer { group.cancelAll() }
                 guard let result = try await group.next() else { throw ReadRunFailureCode.readFailed }; return result
@@ -152,12 +182,12 @@ public struct ReadRunEngine: Sendable {
             allowFallback:request.modelOptions.allowFallback,maximumCostMicroUSD:remainingCost,
             maximumOutputTokens:request.modelOptions.maximumOutputTokens,deadline:UTCInstant(secondsSince1970:bound))
     }
-    private func perform(_ request: ReadRunRequest, controller: RunController, deadline: ContinuousClock.Instant,restoredPlan: PlannedRead?) async throws -> ReadRunResult {
+    private func perform(_ request: ReadRunRequest, controller: RunController, deadline: ContinuousClock.Instant,restoredPlan: PlannedRead?,restoredResult: UntrustedToolResult?) async throws -> ReadRunResult {
         try Task.checkCancellation()
         guard ContinuousClock.now < deadline else { throw ReadRunFailureCode.deadlineExceeded }
         let planned: PlannedRead
         if let restoredPlan {
-            guard try await controller.snapshot().state == .planning else { throw ReadRunFailureCode.recoveryRequired }
+            guard try await controller.snapshot().state == (restoredResult == nil ? .planning : .executingTool) else { throw ReadRunFailureCode.recoveryRequired }
             planned = restoredPlan
         } else {
             let start = try await controller.snapshot()
@@ -178,28 +208,31 @@ public struct ReadRunEngine: Sendable {
                 catch { throw ReadRunFailureCode.recoveryRequired }
             }
         }
-        let proposal = planned.proposal, key = "read:"+request.runID.uuidString.lowercased()
-        let command = try ActionCommand(actorID:request.actorID,runID:request.runID,tool:proposal.tool,idempotencyKey:key,
-            target:proposal.target,arguments:proposal.arguments,scope:Array(request.effectiveToolScope))
-        try Self.active(await controller.validatedProposal(semanticDigest:command.fingerprintHex,invocationKey:key))
-        try Self.active(await controller.transition(to:.validating,substate:.policyCheck))
-        try Self.active(await controller.transition(to:.executingTool,substate:.executing))
-        guard let permit = try await controller.reserveToolAttempt(timeoutMilliseconds:5000) else { throw ReadRunFailureCode.budgetExceeded }
-        let result: UntrustedToolResult
-        do {
-            let action = GatewayAction(actorID:permit.actorID,runID:permit.runID,tool:proposal.tool,target:proposal.target,
-                arguments:proposal.arguments,scope:request.effectiveToolScope,idempotencyKey:permit.idempotencyKey,deadline:min(permit.deadline,deadline))
-            guard case .completed(let value) = try await gateway.invoke(action) else { throw ReadRunFailureCode.readFailed }; result = value
-        } catch is CancellationError { throw CancellationError() }
-        catch let error as ActionGatewayError where [.denied,.approvalRequired,.policyUnavailable].contains(error) { throw ReadRunFailureCode.denied }
-        catch let error as ActionGatewayError where error == .timedOut { throw ReadRunFailureCode.deadlineExceeded }
-        catch { throw ReadRunFailureCode.readFailed }
-        if let toolResults {
-            do { try await toolResults.save(snapshot:controller.snapshot(),requestID:request.requestID,command:command,result:result,deadline:min(deadline,.now.advanced(by:.seconds(4)))) }
-            catch { throw ReadRunFailureCode.recoveryRequired }
+        let proposal = planned.proposal,result: UntrustedToolResult
+        if let restoredResult { result = restoredResult }
+        else {
+            let key = "read:"+request.runID.uuidString.lowercased()
+            let command = try ActionCommand(actorID:request.actorID,runID:request.runID,tool:proposal.tool,idempotencyKey:key,
+                target:proposal.target,arguments:proposal.arguments,scope:Array(request.effectiveToolScope))
+            try Self.active(await controller.validatedProposal(semanticDigest:command.fingerprintHex,invocationKey:key))
+            try Self.active(await controller.transition(to:.validating,substate:.policyCheck))
+            try Self.active(await controller.transition(to:.executingTool,substate:.executing))
+            guard let permit = try await controller.reserveToolAttempt(timeoutMilliseconds:5000) else { throw ReadRunFailureCode.budgetExceeded }
+            do {
+                let action = GatewayAction(actorID:permit.actorID,runID:permit.runID,tool:proposal.tool,target:proposal.target,
+                    arguments:proposal.arguments,scope:request.effectiveToolScope,idempotencyKey:permit.idempotencyKey,deadline:min(permit.deadline,deadline))
+                guard case .completed(let value) = try await gateway.invoke(action) else { throw ReadRunFailureCode.readFailed }; result = value
+            } catch is CancellationError { throw CancellationError() }
+            catch let error as ActionGatewayError where [.denied,.approvalRequired,.policyUnavailable].contains(error) { throw ReadRunFailureCode.denied }
+            catch let error as ActionGatewayError where error == .timedOut { throw ReadRunFailureCode.deadlineExceeded }
+            catch { throw ReadRunFailureCode.readFailed }
+            if let toolResults {
+                do { try await toolResults.save(snapshot:controller.snapshot(),requestID:request.requestID,command:command,result:result,deadline:min(deadline,.now.advanced(by:.seconds(4)))) }
+                catch { throw ReadRunFailureCode.recoveryRequired }
+            }
+            // A read succeeded; factual claims are not confirmed until validation.
+            try Self.active(await controller.finishToolAttempt(.confirmed))
         }
-        // A read succeeded; factual claims are not confirmed until validation.
-        try Self.active(await controller.finishToolAttempt(.confirmed))
         let evidence: WorldReadEvidence
         do { evidence = try decoder.decode(result,proposal:proposal,actorID:request.actorID,intent:request.intent,clock:clock,policy:freshness) }
         catch { throw ReadRunFailureCode.invalidEvidence }

@@ -30,11 +30,33 @@ public actor RunController {
     /// supplied by the engine; ordinary early continuation excludes that state.
     static func restoreBeforePlanning(actorID: UUID,id: UUID,traceID: UUID,expectedVersion: Int64,
         store: any RunStore,clock: any SquidraDomain.Clock,allowPlanning: Bool = false) async throws -> RunController {
-        var record = try await store.load(actorID:actorID,runID:id,deadline:.now.advanced(by:.seconds(4)))
+        let record = try await store.load(actorID:actorID,runID:id,deadline:.now.advanced(by:.seconds(4)))
         try record.validate()
         guard record.actorID == actorID,record.id == id,record.traceID == traceID,record.version == expectedVersion,
               ([.created,.validating,.contextLoading].contains(record.state) || (allowPlanning && record.state == .planning)),record.steps == 0,record.calls == 0,
               record.iteration == nil,record.invocation == nil,let wallEnd = record.deadlineSecondsSince1970 else { throw RunError.recoveryRequired }
+        return try await claimStopped(record,expectedVersion:expectedVersion,store:store,clock:clock,wallEnd:wallEnd)
+    }
+
+    /// The engine has revalidated the saved result and exact original command.
+    /// Reconcile only this R0 read; never issue a dispatch permit or retry here.
+    static func restoreSavedRead(actorID: UUID,id: UUID,traceID: UUID,expectedVersion: Int64,
+        archiveVersion: Int64,fingerprint: String,key: String,store: any RunStore,clock: any SquidraDomain.Clock) async throws -> RunController {
+        var record = try await store.load(actorID:actorID,runID:id,deadline:.now.advanced(by:.seconds(4)))
+        try record.validate()
+        guard record.actorID == actorID,record.id == id,record.traceID == traceID,record.version == expectedVersion,
+              archiveVersion > 0,archiveVersion <= expectedVersion,record.state == .executingTool,record.steps == 1,record.calls == 1,
+              record.iteration?.semanticDigest == fingerprint,record.invocation?.key == key,record.invocation?.attempts == 1,
+              let invocation = record.invocation,
+              (invocation.inFlight && invocation.outcome == nil) || (!invocation.inFlight && invocation.outcome == .confirmed),
+              let wallEnd = record.deadlineSecondsSince1970 else { throw RunError.recoveryRequired }
+        record.invocation?.inFlight = false
+        record.invocation?.outcome = .confirmed
+        return try await claimStopped(record,expectedVersion:expectedVersion,store:store,clock:clock,wallEnd:wallEnd)
+    }
+    private static func claimStopped(_ loaded: RunSnapshot,expectedVersion: Int64,store: any RunStore,
+        clock: any SquidraDomain.Clock,wallEnd: Double) async throws -> RunController {
+        var record = loaded
         let tick = clock.monotonicElapsed(),now = try clock.now().secondsSince1970
         let remaining = (wallEnd-now)*1000
         guard tick >= .zero,remaining.isFinite,remaining <= Double(record.budget.activeMilliseconds-record.activeMilliseconds)+0.001 else { throw RunError.clockRegression }

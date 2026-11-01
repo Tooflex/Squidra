@@ -823,5 +823,20 @@
       "model_free_server_recovery",
       "second_server_replay"
     ]
+  },
+  "SQD-028-SAVED-RESULT-CRASH": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-saved-result-crash"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "saved_result_worker_sigkill",
+      "saved_result_continuation",
+      "model_free_server_recovery",
+      "second_server_replay"
+    ]
   }
 }
