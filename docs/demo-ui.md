@@ -192,7 +192,8 @@ creating another observation. Reloading this page does not recover receipts.
 
 The capability endpoint reports whether a read host exists. The default CLI has
 none, and the page explicitly reports that free-text questions are unavailable.
-This page does not yet submit questions even when a host advertises support.
+Use the linked `/questions` page to submit to a host that advertises support.
+The default CLI still has no configured read host.
 It does not substitute a structured temporal lookup for a free-text answer.
 
 `bash Scripts/test-issue.sh T06-IMPORT` runs six typed Chromium scenarios with
@@ -234,3 +235,43 @@ receive database credentials.
 This qualifies real browser import and durable structured evidence on local
 macOS. It does not qualify free-text question submission, SAM, SIGKILL recovery,
 manual screen-reader use or Linux execution. The full #42 workflow remains open.
+
+
+## Historical question and grounded evidence client
+
+The `/questions` page submits a free-text question to the existing run API for
+one selected entity, with historical intent. The host must advertise text-run
+support and authorize that entity. The normal CLI remains model-free by default;
+the page shows unavailability and does not substitute a structured lookup or a
+fixture answer. Moving from the import page requires a new local session and
+copying the receipt's entity and exact dates into the question. No token or
+receipt is passed in URLs or browser storage.
+
+Only one admission is sent per explicit question. Interrupted admission is shown
+as uncertain because the server may already have accepted it; there is no
+automatic POST retry. Once accepted, the client reads finite authenticated SSE
+pages and sends the exact received Last-Event-ID. Four pages are read per action;
+if still pending, an explicit continuation reads the same run. Failed reads keep
+the previous complete page cursor. Missing/expired retention cannot reconstruct
+the answer. A new question or logout does not cancel an already accepted run.
+Reloading the page loses its in-memory run and cursor.
+
+The client validates bounded events, continuous sequence, run/thread/actor/request
+bindings, the grounded-answer payload, selected entity, citation references and
+message agreement. An entire response page is validated before its cursor is
+committed. Only a successful terminal event with a complete matching message
+reveals the answer. Server errors and cancellation remain distinct from an
+unknown grounded answer. The UI displays partial/unknown status, uncertainty,
+source IDs, observed/inferred basis, confidence, exact source timestamps, age and
+freshness. Citation links open and focus native evidence details using the
+keyboard. Content is rendered as text, never HTML. These client checks are
+presentation checks; they do not replace the server's authorization and grounding.
+
+`bash Scripts/test-issue.sh T06-QUESTIONS` requires all ten Chromium scenarios:
+paged answers and keyboard citations, absent capability, partial/unknown states,
+read interruption/resume, invalid bindings/citations/order, error/cancellation/
+retention, duplicate and uncertain admission, origin/logout isolation, bounded
+heartbeats and change claims, UTF-8/body limits and revoked authentication. The
+responses are mocked for these client tests. They do not yet prove the complete
+import → free-text model planning → answer workflow against a configured host.
+That integrated qualification and manual screen-reader evaluation remain open.

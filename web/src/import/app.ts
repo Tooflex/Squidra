@@ -32,7 +32,7 @@ el('login').addEventListener('submit',event=>{event.preventDefault();if(busy)ret
  session={origin:origin.origin,token};el<HTMLInputElement>('token').value='';el('logout').hidden=false;
  const p=object(await request('/api/v1/run-capabilities'));if(generation!==epoch)return;
  if(p.schemaVersion!=='1'||typeof p.textRuns!=='boolean'||(!p.textRuns&&p.limitation!=='no_configured_read_host'))throw Error('Capacités du serveur invalides.');
- el('capability').textContent=p.textRuns?'Le serveur annonce un moteur de questions. Cette page fournit le reçu d’import ; la soumission de questions reste à raccorder.':'Questions en langage libre indisponibles : aucun moteur de lecture configuré sur ce serveur.';
+ el('capability').textContent=p.textRuns?'Le serveur annonce un moteur de questions. La page « Question historique » permet de soumettre une question pour une entité autorisée.':'Questions en langage libre indisponibles : aucun moteur de lecture configuré sur ce serveur.';
  el('connection').hidden=true;el('workspace').hidden=false;prepare();el('status').textContent='Session ouverte.';el('image').focus();
  }catch(cause){if(generation===epoch)failure(cause,false);}finally{if(generation===epoch)busy=false;}})();});
 function prepare(){el('status').textContent='Sélectionnez une image et confirmez le consentement local.';attempted=false;resetFile();el('receipt').replaceChildren();el('import-form').hidden=false;el('new-import').hidden=true;el<HTMLButtonElement>('submit-import').disabled=false;el('error').hidden=true;el('image').focus();}

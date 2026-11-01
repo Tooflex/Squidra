@@ -5,3 +5,5 @@
 #detail pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:16px;background:#fff;border:1px solid #c6d1c9}
 
 #import-form input[type=checkbox]{width:auto;margin-right:8px}#receipt{overflow-wrap:anywhere}#receipt pre{white-space:pre-wrap;overflow-wrap:anywhere}
+
+#question{font:inherit;width:100%;padding:10px}#question:focus-visible{outline:3px solid #a04a00;outline-offset:4px}#answer,#run-info{overflow-wrap:anywhere;white-space:pre-wrap}#answer li{margin:16px 0}#answer a{display:block}

@@ -1080,5 +1080,16 @@
       "frame_sql_import",
       "frame_sql_reload"
     ]
+  },
+  "T06-QUESTIONS": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/test-web-review.py",
+      "questions"
+    ],
+    "tests": [
+      "typed_web_questions"
+    ]
   }
 }
