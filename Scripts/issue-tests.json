@@ -1426,5 +1426,20 @@
       "security_lint_contracts",
       "security_lint"
     ]
+  },
+  "T08-REPLAY": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/demo.sh"
+    ],
+    "tests": [
+      "historical_knowledge_correction",
+      "unique_movement_notification",
+      "fresh_process_reproduction",
+      "unknown_and_actor_isolation",
+      "demo_cleanup"
+    ],
+    "requires_database": true
   }
 }
