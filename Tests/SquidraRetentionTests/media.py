@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import secrets
 import socket
+import sys
 import subprocess
 import tempfile
 import time
@@ -15,6 +16,11 @@ engine = os.environ.get('SQUIDRA_CONTAINER_ENGINE', 'docker')
 name = 'squidra-client-test-' + uuid.uuid4().hex[:12]
 nonce = uuid.uuid4().hex
 identity = None
+suite = sys.argv[1] if len(sys.argv) == 2 else 'T12-MEDIA-SWIFT'
+if suite not in {'T12-MEDIA-SWIFT', 'T12-EXPORT-SWIFT'} or len(sys.argv)>2:
+    raise SystemExit('Unknown lifecycle suite')
+expected = 5
+marker = 'media_adapter' if suite == 'T12-MEDIA-SWIFT' else 'structural_export'
 
 def run(args, **kwargs):
     return subprocess.run(args, check=True, timeout=180, capture_output=True, **kwargs)
@@ -43,15 +49,15 @@ try:
                 time.sleep(.1)
         env=dict(os.environ,SQUIDRA_DB_CONTAINER=name,SQUIDRA_CONTAINER_ENGINE=engine)
         run(['bash','Scripts/dev-db.sh','migrate'],cwd=root,env=env)
-        report=root/'.build/issue-tests/T12-MEDIA-SWIFT/summary.json'
+        report=root/'.build/issue-tests'/suite/'summary.json'
         report.unlink(missing_ok=True)
-        result=subprocess.run(['python3','Scripts/run-db-client-tests.py',str(credentials),binding.split(':')[1],'T12-MEDIA-SWIFT'],cwd=root,env=env,capture_output=True,timeout=300)
+        result=subprocess.run(['python3','Scripts/run-db-client-tests.py',str(credentials),binding.split(':')[1],suite],cwd=root,env=env,capture_output=True,timeout=300)
         output=result.stdout.decode()+result.stderr.decode()
         print('\n'.join(line for line in output.splitlines() if not line.startswith('SQUIDRA_TEST_PASS:')))
         if result.returncode: raise SystemExit(result.returncode)
         data=json.loads(report.read_text())
-        if data['status']!='passed' or data['selected']!=5 or data['passed']!=5 or any(data[k] for k in ['failed','skipped','not_executed']): raise RuntimeError('Incomplete Swift checks')
-        print('SQUIDRA_TEST_PASS:media_adapter')
+        if data['status']!='passed' or data['selected']!=expected or data['passed']!=expected or any(data[k] for k in ['failed','skipped','not_executed']): raise RuntimeError('Incomplete Swift checks')
+        print('SQUIDRA_TEST_PASS:'+marker)
 finally:
     if identity:
         info=json.loads(run([engine,'inspect',identity]).stdout)[0]

@@ -100,6 +100,7 @@
   "SQD-020-HTTP",
   "SQD-030-SQL",
   "T12-MEDIA",
+  "T12-EXPORT",
   "T12-BACKUP",
   "T02",
   "T03"

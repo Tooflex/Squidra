@@ -281,6 +281,9 @@ jobs:
       - name: Verify transactional media expiry and actor isolation
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh T12-MEDIA
+      - name: Verify actor scoped structural export
+        if: runner.os == 'Linux'
+        run: bash Scripts/test-issue.sh T12-EXPORT
       - name: Verify private backups and fresh database restores
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh T12-BACKUP

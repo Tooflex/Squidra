@@ -1259,5 +1259,21 @@
       "media_adapter"
     ],
     "requires_database": true
+  },
+  "T12-EXPORT-SWIFT": {
+    "kind": "xctest",
+    "filter": "^SquidraRetentionTests\\.ExportTests/"
+  },
+  "T12-EXPORT": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Tests/SquidraRetentionTests/media.py",
+      "T12-EXPORT-SWIFT"
+    ],
+    "tests": [
+      "structural_export"
+    ],
+    "requires_database": true
   }
 }
