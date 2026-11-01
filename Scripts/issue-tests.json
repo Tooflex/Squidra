@@ -1131,5 +1131,42 @@
   "T11-SAM-ADMISSION": {
     "kind": "xctest",
     "filter": "^SquidraMetaTests\\.SAMCloudAdmissionTests/"
+  },
+  "T11": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/test-provider-acceptance.py",
+      "T11"
+    ],
+    "tests": [
+      "t11_contracts",
+      "t11_meta_responses",
+      "t11_meta_transport",
+      "t11_meta_cost",
+      "t11_meta_model",
+      "t11_meta_budget",
+      "t11_meta_host",
+      "t11_sam_image",
+      "t11_sam_native",
+      "t11_sam_admission"
+    ]
+  },
+  "SQD-020": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/test-provider-acceptance.py",
+      "SQD-020"
+    ],
+    "tests": [
+      "sqd_020_offline",
+      "t11_sam_image",
+      "t11_sam_native",
+      "t11_sam_admission",
+      "sqd_020_publish",
+      "sqd_020_http"
+    ],
+    "requires_database": true
   }
 }

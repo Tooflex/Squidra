@@ -5,6 +5,13 @@ text/image inference verified on 2026-11-01 as detailed below. The default serve
 remains offline-only. These bounded probes do not establish general quality,
 account retention, billing reconciliation or safe production spending bounds.
 
+The current machine-readable matrix is `fixtures/providers/qualification.v2.json`.
+Version 1 remains the historical 2026-10-31 snapshot before authenticated access;
+its zero-call and untested states must not be used as the current state. Version 2
+links each bounded success to its actual public evidence, separates eight verified
+inference calls from one uncertain reservation, and keeps production, Linux,
+account retention and invoice reconciliation explicitly unqualified.
+
 ## Documented contracts versus execution
 
 | Family | Documented identifier | Documented interface | Squidra execution status |
@@ -61,6 +68,14 @@ Sources: [SAM source at observed revision](https://github.com/facebookresearch/s
 [SAM weights](https://huggingface.co/facebook/sam3),
 [SAM 3.1 weights](https://huggingface.co/facebook/sam3.1),
 [Glimmer card](https://huggingface.co/meta-models/Muse-Glimmer-30B).
+
+Hosted Spark, Wonder and SAM access is governed by the
+[Meta Model API Terms of Service](https://dev.meta.ai/legal/terms-of-service)
+(updated 2026-10-09, observed 2026-11-01), rather than a separate weight license.
+The [model designation policy](https://dev.meta.ai/legal/geographic-use-policy)
+(updated 2026-10-12, observed 2026-11-01) lists the selected hosted aliases as
+Standard models. This does not establish account-specific retention or override
+separate licensing for the SAM decoder and self-hosted Glimmer artifacts.
 
 ## Costs and data handling remain unqualified
 
@@ -647,3 +662,24 @@ entry was added. Failure reports distinguish browser, SQL and harness outcomes.
 The offline synthetic browser import/restart suite and 25 Python checks also
 passed after extending the harness. General quality, account retention,
 immutable hosted revisions and Linux runtime qualification remain unverified.
+
+## Original issue acceptance commands
+
+`bash Scripts/test-issue.sh T11` runs the provider contract, text wire/transport/
+pricing/adapter/budget/host and SAM wire/native/admission suites offline. The
+aggregate rejects a missing, stale, empty, skipped, partial or failed child report.
+Actual live qualification remains the dated evidence above, not an implicit paid
+step in this command. `bash Scripts/test-issue.sh SQD-020` combines bounded frame
+validation, SAM wire/native/admission, durable SQL publication and authenticated
+HTTP import. Its SQL children need the configured local container engine.
+Existing local/CI component mappings remain unchanged to avoid running each
+component twice; no paid harness is included in either aggregate.
+
+The acceptance audit for #47 is scoped to the explicitly requested matrix of
+verified, unavailable and untested capabilities. It does not turn unavailable
+Glimmer hosting or untested production/account properties into a success.
+The retained public sources cover identifiers, modalities, endpoints, bearer
+authentication, versions/aliases, licenses, published rates and documented
+retention distinctions; authenticated probes establish access only for the tested
+Spark, Wonder and SAM interfaces. Authorized public responses and the authored
+fake contract remain separate.

@@ -119,6 +119,53 @@ final class ProviderContractTests: XCTestCase, @unchecked Sendable {
             XCTAssertFalse(try XCTUnwrap(provider["blockers"] as? [String]).isEmpty)
         }
     }
+    func testCurrentMatrixLinksBoundedQualificationToActualEvidenceWithoutPromotingUnknowns() throws {
+        func object(_ path: String) throws -> [String:Any] {
+            try XCTUnwrap(JSONSerialization.jsonObject(with:Self.data("fixtures/providers/"+path)) as? [String:Any])
+        }
+        let matrix = try object("qualification.v2.json")
+        XCTAssertEqual(matrix["schemaVersion"] as? String,"2");XCTAssertEqual(matrix["defaultProfile"] as? String,"offline")
+        XCTAssertEqual(matrix["productionQualified"] as? Bool,false)
+        let providers = try XCTUnwrap(matrix["providers"] as? [[String:Any]])
+        XCTAssertEqual(Set(providers.compactMap { $0["family"] as? String }),["Spark","Wonder","Glimmer","SAM"])
+        let initial = try XCTUnwrap(object("meta-text-live.v1.json")["reports"] as? [[String:Any]])
+        let sam = try XCTUnwrap(object("sam-image-live.v1.json")["report"] as? [String:Any])
+        let question = try object("meta-question-live.v1.json"),chain = try object("sam-meta-question-live.v1.json")
+        for text in initial { XCTAssertEqual(text["outcome"] as? String,"passed");XCTAssertEqual(text["httpStatus"] as? Int,200) }
+        XCTAssertEqual(sam["outcome"] as? String,"passed");XCTAssertEqual(sam["httpStatus"] as? Int,200)
+        XCTAssertEqual(question["outcome"] as? String,"grounded_answer_verified")
+        XCTAssertEqual(question["harnessOutcome"] as? String,"failed") // Preserve the earlier keyboard-harness failure.
+        XCTAssertEqual(chain["outcome"] as? String,"passed");XCTAssertEqual(chain["harnessOutcome"] as? String,"passed")
+        XCTAssertEqual(chain["sqlVerification"] as? String,"passed")
+        let oldUsage = try XCTUnwrap(question["modelUsage"] as? [[String:Any]]),newUsage = try XCTUnwrap(chain["modelUsage"] as? [[String:Any]])
+        let verifiedCalls = initial.count + 1 + oldUsage.count + newUsage.count + 1
+        XCTAssertEqual(matrix["verifiedInferenceCalls"] as? Int,verifiedCalls)
+        XCTAssertEqual(matrix["uncertainReservedCalls"] as? Int,1)
+        XCTAssertEqual(matrix["reservedEURCents"] as? Int,chain["reservedEURCentsAfter"] as? Int)
+        XCTAssertEqual(matrix["invoicedCost"] as? String,"not_reconciled")
+        let allowedEvidence:Set<String> = ["meta-text-live.v1.json","sam-image-live.v1.json","meta-question-live.v1.json","sam-meta-question-live.v1.json","sources.v1.json"]
+        for provider in providers {
+            let family = try XCTUnwrap(provider["family"] as? String),hosted = family != "Glimmer"
+            XCTAssertEqual(provider["productionQualified"] as? Bool,false)
+            XCTAssertEqual(provider["liveInference"] as? String,hosted ? "verified_bounded" : "untested")
+            XCTAssertEqual(provider["accountAccess"] as? String,hosted ? "verified" : "untested")
+            XCTAssertEqual(provider["accountRetention"] as? String,"untested")
+            let runtime = try XCTUnwrap(provider["runtimeCompatibility"] as? [String:String]);XCTAssertEqual(runtime["Linux"],"untested")
+            let evidence = try XCTUnwrap(provider["evidence"] as? [String]);XCTAssertFalse(evidence.isEmpty)
+            for file in evidence { XCTAssertTrue(allowedEvidence.contains(file));_ = try object(file) }
+            if family == "Spark" || family == "Wonder" {
+                XCTAssertTrue(initial.contains { $0["model"] as? String == provider["documentedId"] as? String })
+                XCTAssertTrue(evidence.contains("meta-text-live.v1.json"))
+            } else if family == "SAM" {
+                let receipt = try XCTUnwrap(chain["receipt"] as? [String:Any])
+                XCTAssertEqual(receipt["deployment"] as? String,"cloud");XCTAssertEqual(receipt["modelVersion"] as? String,"alias:sam-3.1")
+                XCTAssertTrue(evidence.contains("sam-image-live.v1.json"));XCTAssertTrue(evidence.contains("sam-meta-question-live.v1.json"))
+            } else {
+                XCTAssertEqual(provider["verifiedScope"] as? [String],[])
+                XCTAssertTrue(provider["hostedEndpoint"] is NSNull)
+            }
+        }
+    }
     func testSourceObservationsHaveDigestsAndSeparateImmutableRevisions() throws {
         let catalog = try XCTUnwrap(JSONSerialization.jsonObject(with: Self.data("fixtures/providers/sources.v1.json")) as? [String: Any])
         let sources = try XCTUnwrap(catalog["sources"] as? [[String: Any]])

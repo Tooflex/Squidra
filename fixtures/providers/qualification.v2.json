@@ -1,0 +1,206 @@
+{
+  "schemaVersion": "2",
+  "observedOn": "2026-11-01",
+  "defaultProfile": "offline",
+  "productionQualified": false,
+  "historicalSnapshot": "qualification.v1.json",
+  "verifiedInferenceCalls": 8,
+  "uncertainReservedCalls": 1,
+  "reservedEURCents": 9000,
+  "authorizedEURCents": 10000,
+  "invoicedCost": "not_reconciled",
+  "providers": [
+    {
+      "family": "Spark",
+      "documentedId": "muse-spark-1.3",
+      "mode": "hosted",
+      "documentationStatus": "verified",
+      "immutableRevisionSource": null,
+      "inputModalities": [
+        "text",
+        "image",
+        "audio",
+        "video",
+        "pdf"
+      ],
+      "outputContract": "text",
+      "accountAccess": "verified",
+      "liveInference": "verified_bounded",
+      "productionQualified": false,
+      "runtimeCompatibility": {
+        "macOS": "verified_bounded",
+        "Linux": "untested"
+      },
+      "hostedEndpoint": "https://api.meta.ai/v1/responses",
+      "authentication": "bearer_MODEL_API_KEY",
+      "accountRetention": "untested",
+      "invoiceReconciliation": "untested",
+      "verifiedScope": [
+        "text_json_probe",
+        "historical_grounded_question"
+      ],
+      "unqualifiedScope": [
+        "image",
+        "audio",
+        "video",
+        "pdf",
+        "general_quality",
+        "immutable_hosted_revision"
+      ],
+      "evidence": [
+        "meta-text-live.v1.json",
+        "meta-question-live.v1.json",
+        "sam-meta-question-live.v1.json"
+      ],
+      "remainingLimitations": [
+        "account_retention_not_qualified",
+        "invoice_not_reconciled",
+        "linux_runtime_untested"
+      ],
+      "licenseBasis": "Meta Model API Terms of Service (hosted access)"
+    },
+    {
+      "family": "Wonder",
+      "documentedId": "muse-wonder-1.0",
+      "mode": "hosted",
+      "documentationStatus": "verified",
+      "immutableRevisionSource": null,
+      "inputModalities": [
+        "text",
+        "image",
+        "audio",
+        "video",
+        "pdf"
+      ],
+      "outputContract": "text",
+      "accountAccess": "verified",
+      "liveInference": "verified_bounded",
+      "productionQualified": false,
+      "runtimeCompatibility": {
+        "macOS": "verified_http_probe",
+        "Linux": "untested"
+      },
+      "hostedEndpoint": "https://api.meta.ai/v1/responses",
+      "authentication": "bearer_MODEL_API_KEY",
+      "accountRetention": "untested",
+      "invoiceReconciliation": "untested",
+      "verifiedScope": [
+        "text_json_probe"
+      ],
+      "unqualifiedScope": [
+        "image",
+        "audio",
+        "video",
+        "pdf",
+        "grounded_question_host",
+        "general_quality",
+        "immutable_hosted_revision"
+      ],
+      "evidence": [
+        "meta-text-live.v1.json"
+      ],
+      "remainingLimitations": [
+        "account_retention_not_qualified",
+        "invoice_not_reconciled",
+        "linux_runtime_untested"
+      ],
+      "licenseBasis": "Meta Model API Terms of Service (hosted access)"
+    },
+    {
+      "family": "Glimmer",
+      "documentedId": "meta-models/Muse-Glimmer-30B",
+      "mode": "self_hosted",
+      "documentationStatus": "verified",
+      "immutableRevisionSource": "glimmer-weights",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputContract": "text",
+      "accountAccess": "untested",
+      "liveInference": "untested",
+      "productionQualified": false,
+      "runtimeCompatibility": {
+        "macOS": "untested",
+        "Linux": "untested"
+      },
+      "hostedEndpoint": null,
+      "authentication": "not_applicable_self_hosted",
+      "accountRetention": "untested",
+      "invoiceReconciliation": "untested",
+      "verifiedScope": [],
+      "unqualifiedScope": [
+        "weights_download",
+        "runtime",
+        "inference",
+        "resource_cost"
+      ],
+      "evidence": [
+        "sources.v1.json"
+      ],
+      "remainingLimitations": [
+        "no_documented_hosted_meta_endpoint",
+        "weights_not_downloaded",
+        "runtime_not_installed_or_qualified",
+        "resource_cost_and_latency_unmeasured"
+      ],
+      "licenseBasis": "Apache-2.0 model metadata; runtime not installed"
+    },
+    {
+      "family": "SAM",
+      "documentedId": "sam-3.1",
+      "mode": "hosted",
+      "documentationStatus": "verified",
+      "immutableRevisionSource": null,
+      "inputModalities": [
+        "image",
+        "video",
+        "text_prompt"
+      ],
+      "outputContract": "special_token_segmentation",
+      "accountAccess": "verified",
+      "liveInference": "verified_bounded",
+      "productionQualified": false,
+      "runtimeCompatibility": {
+        "macOS": "verified_bounded",
+        "Linux": "untested"
+      },
+      "hostedEndpoint": "https://api.meta.ai/v1/responses",
+      "authentication": "bearer_MODEL_API_KEY",
+      "accountRetention": "untested",
+      "invoiceReconciliation": "untested",
+      "verifiedScope": [
+        "public_png_one_bit_mask",
+        "cloud_import_and_grounded_question"
+      ],
+      "unqualifiedScope": [
+        "video",
+        "general_scene_quality",
+        "pixel_to_world_calibration",
+        "immutable_hosted_revision"
+      ],
+      "evidence": [
+        "sam-image-live.v1.json",
+        "sam-meta-question-live.v1.json"
+      ],
+      "remainingLimitations": [
+        "account_retention_not_qualified",
+        "invoice_not_reconciled",
+        "linux_runtime_untested"
+      ],
+      "licenseBasis": "Meta Model API Terms of Service (hosted access); separate SAM License for decoder"
+    }
+  ],
+  "additionalSourceObservations": [
+    {
+      "url": "https://dev.meta.ai/legal/terms-of-service",
+      "observedOn": "2026-11-01",
+      "documentUpdatedOn": "2026-10-09"
+    },
+    {
+      "url": "https://dev.meta.ai/legal/geographic-use-policy",
+      "observedOn": "2026-11-01",
+      "documentUpdatedOn": "2026-10-12"
+    }
+  ]
+}
