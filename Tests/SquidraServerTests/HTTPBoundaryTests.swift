@@ -181,7 +181,7 @@ final class HTTPBoundaryTests: XCTestCase, @unchecked Sendable {
         }
     }
 
-    func testSafeConfigurationAndDiagnosticRedaction() throws {
+    func testSafeConfigurationAndDiagnosticRedaction() async throws {
         let token = Self.credential(), actor = UUID()
         for origin in ["*", "null", "https://*.example", "http://remote.example", "https://user:password@example.com", "https://example.com/path", "https://example.com?token=secret"] {
             XCTAssertThrowsError(try BoundaryConfiguration(credential: token, actorID: actor, approvedOrigin: origin))
@@ -192,7 +192,8 @@ final class HTTPBoundaryTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(config.listenHost, "127.0.0.1")
         XCTAssertFalse(String(describing: config).contains(token))
         XCTAssertFalse(String(reflecting: config).contains(token))
-        XCTAssertFalse(config.authenticates("Bearer "+token+"x"))
+        let accepted = try await config.authenticates("Bearer "+token+"x")
+        XCTAssertFalse(accepted)
     }
 
     func testPaginationDefaultsBoundariesAndInvalidCursors() throws {
