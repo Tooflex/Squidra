@@ -32,7 +32,7 @@ let package = Package(
             (name == "SquidraCognition" ? [.byName(name: "SquidraWorld"), .byName(name: "SquidraTools"), .byName(name: "SquidraMemory")] : []) +
             (name == "SquidraAgentRuntime" ? [.byName(name: "SquidraSecurity"), .byName(name: "SquidraCognition"), .byName(name: "SquidraTools")] : []) +
             (name == "SquidraProtocols" ? [.byName(name: "SquidraCognition")] : []) +
-            (name == "SquidraPerception" ? [.byName(name: "SquidraSpatial"), .product(name: "Crypto", package: "swift-crypto")] : []) +
+            (name == "SquidraPerception" ? [.byName(name: "SquidraWorld"), .byName(name: "SquidraSpatial"), .product(name: "Crypto", package: "swift-crypto")] : []) +
             (name == "SquidraObservability" ? [.byName(name: "SquidraCognition"), .byName(name: "SquidraWorld"), .byName(name: "SquidraTools"), .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"), .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"), .product(name: "NIOConcurrencyHelpers", package: "swift-nio")] : []) +
             (name == "SquidraSecurity" ? [.product(name: "Crypto", package: "swift-crypto")] : []) +
             (name == "SquidraTools" ? [.byName(name: "SquidraWorld"), .byName(name: "SquidraSecurity"), .product(name: "JSONSchema", package: "swift-json-schema"), .product(name: "Crypto", package: "swift-crypto")] : []))
