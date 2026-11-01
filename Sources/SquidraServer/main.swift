@@ -1,5 +1,6 @@
 import Foundation
 import Hummingbird
+import SquidraAgentRuntime
 #if os(Linux)
 import Glibc
 #else
@@ -14,6 +15,7 @@ enum ServerMain {
             print("serve requires SQUIDRA_AUTH_TOKEN, SQUIDRA_ACTOR_ID, SQUIDRA_UI_ORIGIN,")
             print("SQUIDRA_DB_PORT, SQUIDRA_DB_USER, SQUIDRA_DB_PASSWORD and SQUIDRA_DB_NAME.")
             print("Optional: SQUIDRA_PORT (default 8080), SQUIDRA_PROFILE (offline only).")
+            print("Optional: SQUIDRA_RUN_DIRECTORY (existing private local directory for run recovery).")
             return 0
         }
         if arguments == ["--version"] { print("Squidra development (SwiftPM)"); return 0 }
@@ -24,9 +26,13 @@ enum ServerMain {
         do {
             let configuration = try ServerConfiguration(environment: ProcessInfo.processInfo.environment)
             if arguments == ["check-config"] { print("SQUIDRA configuration valid"); return 0 }
+            let ownership = try configuration.localRunDirectory.map {
+                try LocalRunOwnership.acquire(directory:$0,actorID:configuration.boundary.actorID)
+            }
+            defer { ownership?.releaseAfterJoiningWorkers() }
             // Hummingbird ServiceLifecycle handles SIGINT/SIGTERM, drains requests,
             // and then shuts down the owned client pool. No direct signal handler.
-            try await ServerComposition.live(configuration: configuration).runService()
+            try await ServerComposition.live(configuration: configuration,localOwnership:ownership).runService()
             return 0
         } catch {
             // Never print configuration values, raw errors, SQL or connection strings.

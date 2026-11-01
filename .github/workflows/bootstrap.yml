@@ -151,6 +151,8 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-028-CRASH
       - name: Verify completed answer recovery across process crashes
         run: bash Scripts/test-issue.sh SQD-028-PUBLICATION-CRASH
+      - name: Verify CLI owned completion recovery after SIGKILL
+        run: bash Scripts/test-issue.sh SQD-028-OWNED-PUBLICATION-CRASH
       - name: Verify early read continuation after SIGKILL
         run: bash Scripts/test-issue.sh SQD-028-PREPLANNING-CRASH
       - name: Verify saved plan continuation after SIGKILL

@@ -15,13 +15,14 @@ import time
 ROOT = Path(__file__).resolve().parent.parent
 credential_path, port = sys.argv[1:3]
 mode = sys.argv[3] if len(sys.argv) == 4 else "completed"
-if mode not in {"completed", "preplanning", "saved-plan", "saved-result", "saved-answer", "saved-completion"}:
+if mode not in {"owned-completed", "completed", "preplanning", "saved-plan", "saved-result", "saved-answer", "saved-completion"}:
     raise SystemExit("Unknown crash boundary")
-early = mode != "completed"
-seed_mode = {"completed": "seed", "preplanning": "seed-early", "saved-plan": "seed-plan", "saved-result": "seed-result", "saved-answer": "seed-answer", "saved-completion": "seed-completion"}[mode]
+owned = mode == "owned-completed"
+early = mode not in {"completed", "owned-completed"}
+seed_mode = {"owned-completed": "seed", "completed": "seed", "preplanning": "seed-early", "saved-plan": "seed-plan", "saved-result": "seed-result", "saved-answer": "seed-answer", "saved-completion": "seed-completion"}[mode]
 resume_mode = {"preplanning": "resume-early", "saved-plan": "resume-plan", "saved-result": "resume-result", "saved-answer": "resume-answer", "saved-completion": "resume-completion"}.get(mode)
 verified = {"preplanning": "PREPLANNING_RECOVERY_VERIFIED", "saved-plan": "SAVED_PLAN_RECOVERY_VERIFIED", "saved-result": "SAVED_RESULT_RECOVERY_VERIFIED", "saved-answer": "SAVED_ANSWER_RECOVERY_VERIFIED", "saved-completion": "SAVED_ANSWER_RECOVERY_VERIFIED"}.get(mode)
-prefix = {"completed": "completed", "preplanning": "preplanning", "saved-plan": "saved_plan", "saved-result": "saved_result", "saved-answer": "saved_answer", "saved-completion": "saved_completion"}[mode]
+prefix = {"owned-completed": "owned_completed", "completed": "completed", "preplanning": "preplanning", "saved-plan": "saved_plan", "saved-result": "saved_result", "saved-answer": "saved_answer", "saved-completion": "saved_completion"}[mode]
 credentials = dict(line.split('=', 1) for line in Path(credential_path).read_text().splitlines())
 env = dict(os.environ, SQUIDRA_PUBLICATION_CRASH_FIXTURE='1', SQUIDRA_TEST_DB_PORT=port,
            SQUIDRA_TEST_DB_PASSWORD=credentials['POSTGRES_PASSWORD'])
@@ -74,6 +75,12 @@ def get(http_port, path, token):
 
 with tempfile.TemporaryDirectory(prefix='squidra-publication-crash-') as temp:
     marker = Path(temp) / 'committed.json'
+    env.pop('SQUIDRA_RUN_DIRECTORY', None)
+    if owned:
+        ownership_dir = Path(temp) / 'ownership'
+        ownership_dir.mkdir(mode=0o700)
+        env['SQUIDRA_RUN_DIRECTORY'] = str(ownership_dir)
+    started = time.monotonic()
     with (Path(temp) / 'seed.log').open('w') as log:
         seed = subprocess.Popen([fixture, seed_mode, str(marker)], cwd=ROOT, env=env, stdout=log, stderr=log)
         try:
@@ -105,15 +112,43 @@ with tempfile.TemporaryDirectory(prefix='squidra-publication-crash-') as temp:
                       SQUIDRA_AUTH_TOKEN=token, SQUIDRA_UI_ORIGIN='http://localhost:3000',
                       SQUIDRA_DB_PORT=port, SQUIDRA_DB_USER='squidra', SQUIDRA_DB_NAME='squidra',
                       SQUIDRA_DB_PASSWORD=credentials['POSTGRES_PASSWORD'])
+    if owned:
+        config_dir = Path(temp) / 'config-only'
+        config_dir.mkdir(mode=0o700)
+        configured = subprocess.run([str(binaries / 'squidra'), 'check-config'], cwd=ROOT,
+                                    env=dict(server_env, SQUIDRA_RUN_DIRECTORY=str(config_dir)),
+                                    capture_output=True, timeout=10)
+        if configured.returncode or list(config_dir.iterdir()):
+            raise RuntimeError('Configuration check acquired or created ownership')
+        public_dir = Path(temp) / 'unsafe'
+        public_dir.mkdir(mode=0o755)
+        public_dir.chmod(0o755)
+        symlink_dir = Path(temp) / 'symlink'
+        symlink_dir.symlink_to(ownership_dir, target_is_directory=True)
+        for bad_path, command in [('relative/private', 'check-config'), ('', 'check-config'),
+                                  (str(public_dir), 'serve'), (str(symlink_dir), 'serve'),
+                                  (str(Path(temp) / 'missing'), 'serve')]:
+            invalid = subprocess.run([str(binaries / 'squidra'), command], cwd=ROOT,
+                                     env=dict(server_env, SQUIDRA_RUN_DIRECTORY=bad_path),
+                                     capture_output=True, timeout=10)
+            if invalid.returncode != 1 or bad_path and bad_path.encode() in invalid.stderr:
+                raise RuntimeError('Unsafe ownership configuration was accepted or exposed')
     path = '/api/v1/runs/' + manifest['run']
     first = None
     for restart in [False, True]:
         server, http_port = start_server(server_env)
         try:
+            if json.loads(get(http_port, '/ready', token)) != {'status': 'ready'}:
+                raise RuntimeError('Recovery server schema was not ready')
             capabilities = json.loads(get(http_port, '/api/v1/run-capabilities', token))
             if capabilities.get('textRuns') is not False:
                 raise RuntimeError('Recovery server unexpectedly had a model host')
-            end = time.monotonic() + 35
+            if owned and not restart:
+                duplicate = subprocess.run([str(binaries / 'squidra'), 'serve'], cwd=ROOT, env=server_env,
+                                           capture_output=True, timeout=10)
+                if duplicate.returncode != 1 or token.encode() in duplicate.stderr or credentials['POSTGRES_PASSWORD'].encode() in duplicate.stderr:
+                    raise RuntimeError('Second live owner was not refused safely')
+            end = time.monotonic() + (5 if owned else 35)
             while True:
                 status = json.loads(get(http_port, path, token))
                 if status.get('outputReady') is True:
@@ -121,6 +156,8 @@ with tempfile.TemporaryDirectory(prefix='squidra-publication-crash-') as temp:
                 if time.monotonic() >= end or server.poll() is not None:
                     raise RuntimeError('Completed answer was not recovered')
                 time.sleep(0.1)
+            if owned and time.monotonic() - started >= 120:
+                raise RuntimeError('Owned recovery was not proven before the original 185-second lease')
             body = get(http_port, path + '/events', token)
             records = [json.loads(line[6:]) for line in body.decode().splitlines() if line.startswith('data: ')]
             if len(records) != 6 or records[1].get('name') != 'squidra.grounded_answer.v1':

@@ -3,8 +3,18 @@ public enum ExpectedDatabaseSchema {
     public static let migrations: Set<SchemaMigration> = [
         .init(namespace: "world", version: "001_world.sql", checksum: "bb7066871c6eb8823af99da010439e3b4c64f9e9919bb132102e16d8cb57fda1"),
         .init(namespace: "world", version: "002_entity_associations.sql", checksum: "52e3d4db77a88d8cb15f54d7a096e32cf53082df45476076e1bc929fcbc7cc5d"),
+        .init(namespace: "world", version: "003_movement_epochs.sql", checksum: "e96a0eab93d6aea5cbd4f9520070d64b7a710128335c21e6e26a22636927a2a9"),
+        .init(namespace: "world", version: "004_watch_intentions.sql", checksum: "54e1d74d4d901852ea0271c6bd8ddcbc6579ce387f50bd23d42434dccc64f3bf"),
+        .init(namespace: "world", version: "005_watch_dispatch.sql", checksum: "41340bc05d4a408dd110f13d12392f628ec8e92f33596e0c319ed9ef519db9b0"),
         .init(namespace: "runtime", version: "001_runtime.sql", checksum: "7d77c9f2ce1278e85ed3b4992d5ee54f30031d13ecb8e9f5162b3d8ef96e9a68"),
         .init(namespace: "runtime", version: "002_run_events.sql", checksum: "801a6ae6729ec2216e3ffb499818ad6fc2cc0ed13e1db5d8c5ef85246a8e6d39"),
         .init(namespace: "runtime", version: "003_run_publication.sql", checksum: "da4f36d93ea15d108ad1c2ec22121656a6aa9189b636e2e6a56e2b7c5db4ad93"),
+        .init(namespace: "runtime", version: "004_read_run_tasks.sql", checksum: "7870c5986e762c4a3dc5294b6db5e8ca5566a04a10b91d7238ac269a01a6dbb4"),
+        .init(namespace: "runtime", version: "005_read_run_completions.sql", checksum: "fe6a7e79826cc227e68917629dc618998dd3bcbc3867f82f363014eea6314e4c"),
+        .init(namespace: "runtime", version: "006_publication_recovery_index.sql", checksum: "810e6df70590acbb3993aad62033b36ee43e574a93b06ffddb6fea2bb1c75a53"),
+        .init(namespace: "runtime", version: "007_read_run_plans.sql", checksum: "37706638cdbdb5438f03ab94c92bd7e3c9f6ae5795282446dc2020ce07c13668"),
+        .init(namespace: "runtime", version: "008_read_run_tool_results.sql", checksum: "0443a96e1c838f71de55e171548a9619680e54c3fee94b5c93484e7fb8f0c64d"),
+        .init(namespace: "runtime", version: "009_read_run_answers.sql", checksum: "a2f9e3f209de947d3b7f5c393ebb825e5662048208b60b0b628e4e827b6fd9e6"),
+        .init(namespace: "runtime", version: "010_read_run_ownership.sql", checksum: "9d990b238ff4da13fd874eec8becf7c13b37cca205c3e63a56a9baae021a1828"),
     ]
 }
