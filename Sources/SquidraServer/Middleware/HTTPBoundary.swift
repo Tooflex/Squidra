@@ -45,7 +45,7 @@ struct HTTPBoundary<Inner: HTTPResponder>: HTTPResponder where Inner.Context == 
                 let isProbe = request.method == .get && Self.publicProbes.contains(request.uri.path)
                 if !isProbe {
                     guard request.headers[values: .authorization].count == 1,
-                          configuration.authenticates(request.headers[.authorization]) else { throw HTTPError(.unauthorized) }
+                          try await configuration.authenticates(request.headers[.authorization]) else { throw HTTPError(.unauthorized) }
                     context.actorID = configuration.actorID
                     if let suppliedActor = request.headers[.init("X-Actor-ID")!] {
                         guard request.headers[values: .init("X-Actor-ID")!].count == 1,

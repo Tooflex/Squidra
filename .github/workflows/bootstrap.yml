@@ -45,6 +45,8 @@ jobs:
         run: swift build --force-resolved-versions
       - name: Verify structured issue validation
         run: bash Scripts/test-issue.sh SQD-032
+      - name: Verify credential rotation and redaction
+        run: bash Scripts/test-issue.sh SQD-004
       - name: Run T01 Domain tests
         run: bash Scripts/test-issue.sh T01
       - name: Run bounded JSON document tests

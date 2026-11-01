@@ -1,4 +1,5 @@
 import Foundation
+import SquidraSecurity
 
 struct BoundaryConfiguration: Sendable, CustomStringConvertible, CustomReflectable {
     enum Invalid: Error { case credential, origin, limits }
@@ -7,16 +8,24 @@ struct BoundaryConfiguration: Sendable, CustomStringConvertible, CustomReflectab
     let maximumBodyBytes: Int
     let requestTimeout: Duration
     let listenHost = "127.0.0.1"
-    private let credential: [UInt8]
+    private let credentialProvider: any CredentialProvider
+    private let credentialReference: CredentialReference
 
     // Inject 32 cryptographically random bytes encoded as 64 lowercase hex characters.
     // Shape validation cannot prove entropy: provisioning is the host's responsibility.
     init(credential: String, actorID: UUID, approvedOrigin: String,
          maximumBodyBytes: Int = 1_048_576, requestTimeout: Duration = .seconds(30)) throws {
-        guard credential.utf8.count == 64,
-              credential.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
-            throw Invalid.credential
-        }
+        let value: BearerCredential
+        do { value = try BearerCredential(credential) } catch { throw Invalid.credential }
+        let reference = CredentialReference()
+        try self.init(credentialProvider: RotatingCredentialProvider(reference: reference, value: value),
+                      credentialReference: reference, actorID: actorID, approvedOrigin: approvedOrigin,
+                      maximumBodyBytes: maximumBodyBytes, requestTimeout: requestTimeout)
+    }
+
+    init(credentialProvider: any CredentialProvider, credentialReference: CredentialReference,
+         actorID: UUID, approvedOrigin: String,
+         maximumBodyBytes: Int = 1_048_576, requestTimeout: Duration = .seconds(30)) throws {
         guard let url = URLComponents(string: approvedOrigin),
               ["http", "https"].contains(url.scheme), let host = url.host, !host.isEmpty,
               !approvedOrigin.contains("*"), url.user == nil, url.password == nil,
@@ -28,22 +37,29 @@ struct BoundaryConfiguration: Sendable, CustomStringConvertible, CustomReflectab
         }
         guard (1...16_777_216).contains(maximumBodyBytes), requestTimeout > .zero,
               requestTimeout <= .seconds(180) else { throw Invalid.limits }
-        self.credential = Array(credential.utf8)
+        self.credentialProvider = credentialProvider
+        self.credentialReference = credentialReference
         self.actorID = actorID
         self.approvedOrigin = approvedOrigin
         self.maximumBodyBytes = maximumBodyBytes
         self.requestTimeout = requestTimeout
     }
 
-    func authenticates(_ authorization: String?) -> Bool {
-        guard let authorization, authorization.hasPrefix("Bearer ") else { return false }
-        let supplied = Array(authorization.utf8.dropFirst(7))
-        guard supplied.count == credential.count else { return false }
-        // No early exit on differing bytes. This is not a formal constant-time guarantee
-        // for Swift compiler output; use TLS and keep this local listener on loopback.
-        var difference: UInt8 = 0
-        for index in credential.indices { difference |= credential[index] ^ supplied[index] }
-        return difference == 0
+    func authenticates(_ authorization: String?) async throws -> Bool {
+        guard let authorization, authorization.utf8.count == 71, authorization.hasPrefix("Bearer ") else { return false }
+        let deadline = ContinuousClock.now.advanced(by: min(requestTimeout, .seconds(2)))
+        return try await withThrowingTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                let value = try await credentialProvider.credential(for: credentialReference, deadline: deadline)
+                return value.matches(authorization)
+            }
+            group.addTask {
+                try await ContinuousClock().sleep(until: deadline)
+                throw CredentialError.deadlineExceeded
+            }
+            defer { group.cancelAll() }
+            return try await group.next()!
+        }
     }
 
     var description: String { "BoundaryConfiguration(credential: [REDACTED])" }
