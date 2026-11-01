@@ -59,9 +59,40 @@ exact POST bodies, hostile evidence, rejection, logout/storage, stale decisions,
 unavailability/malformed data, off-host origin refusal and late-response isolation.
 The screenshot at `web/test-results/review.png` is an authored fixture.
 
-These browser tests intercept API responses; they do not claim a live browser-to-
-PostgreSQL round trip. `SQD-029-HTTP` separately exercises the real server/SQL path.
-An integrated browser fixture, live batch extraction/provisioning, frame import,
-questions and external-command approval expiry/rejection remain part of #42/#29.
+The `T06-REVIEW` scenarios intercept API responses for deterministic fault cases.
+The integrated suite below separately verifies the live browser-to-PostgreSQL path.
+Live batch extraction/provisioning, frame import, questions and external-command
+approval expiry/rejection remain part of #42/#29.
 Hosted CI is still paused; its future Node/browser steps and the local gate include
 this suite. Actual Linux execution awaits restored CI.
+
+
+## Real browser / server / database qualification
+
+Run `bash Scripts/test-issue.sh T06-REVIEW-LIVE` with the local container engine
+configured as for other database suites. It creates an isolated database, builds
+an opt-in test fixture executable and the normal `squidra` CLI, then installs and
+builds the locked Web tools. The static server supports `SQUIDRA_WEB_PORT=0` for an
+owned ephemeral port and prints the selected loopback address. The fixture harness
+starts both listeners on ephemeral ports and configures the real CORS origin.
+
+The authored dataset contains one approvable proposal, one rejected proposal and
+a contradictory pair, each with original texts and source IDs. Chromium uses the
+actual page and API without request interception: inspect sources, approve/reject,
+refuse contradictory decisions, logout and reject an invalid token. The harness
+then stops the server cleanly, starts another normal CLI process and repeats the
+browser reads. A fresh SQL client verifies review actor, private-only promotion,
+source preservation, no promotion for rejection/conflict and byte-identical
+canonical archives across the restart.
+
+Three required integration markers cover loopback database isolation, completed
+browser decisions plus SQL verification, and post-restart browser/SQL verification.
+Only owned processes are signaled and joined. Temporary logs/manifests are private
+and removed; raw browser failures are never echoed because fill errors may contain
+credentials. Browser/static processes receive an allowlisted environment with no
+database credentials. The normal CLI receives a fresh test token and only the
+isolated database credentials. This harness does not add a production fixture mode.
+
+This proves end-to-end consolidation review with authored data and graceful restart.
+It does not claim live extraction accuracy, abrupt process-crash coverage, frame
+import/questions, external-action approval, or manual screen-reader qualification.

@@ -10,6 +10,6 @@ const server = http.createServer(async (request, response) => {
   catch { response.writeHead(503, headers); response.end('Build the static UI first.'); }
 });
 const port = Number(process.env.SQUIDRA_WEB_PORT ?? '3000');
-if (!Number.isInteger(port) || port < 1 || port > 65535) throw Error('Invalid UI port');
-server.listen(port, '127.0.0.1');
+if (!Number.isInteger(port) || port < 0 || port > 65535) throw Error('Invalid UI port');
+server.listen(port, '127.0.0.1', () => { const address = server.address(); console.log('SQUIDRA web listening 127.0.0.1:' + address.port); });
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close());
