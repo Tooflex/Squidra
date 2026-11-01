@@ -149,6 +149,8 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-028-UNIT
       - name: Verify exclusive local process ownership
         run: bash Scripts/test-issue.sh SQD-028-OWNERSHIP
+      - name: Bounded delegation contracts
+        run: bash Scripts/test-issue.sh SQD-010
       - name: Run host FSM and budget tests
         if: runner.os == 'macOS'
         run: bash Scripts/test-issue.sh SQD-005-UNIT
