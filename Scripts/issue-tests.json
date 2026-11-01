@@ -902,5 +902,22 @@
       "client_loopback_boundary",
       "automatic_host_crash_recovery"
     ]
+  },
+  "SQD-028": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/test-run-recovery.py"
+    ],
+    "tests": [
+      "recovery_checkpoints",
+      "recovery_approval_waits",
+      "recovery_durable_reconciliation",
+      "recovery_effect_process_crashes",
+      "recovery_local_ownership",
+      "recovery_cli_publication",
+      "recovery_automatic_host",
+      "recovery_http_status"
+    ]
   }
 }
