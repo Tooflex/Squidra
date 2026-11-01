@@ -91,6 +91,8 @@ jobs:
         run: bash Scripts/test-issue.sh T14-EVIDENCE
       - name: Qualify one durable read-and-answer iteration
         run: bash Scripts/test-issue.sh T14-RUN
+      - name: Offline read host authorization
+        run: bash Scripts/test-issue.sh T14-HOST
       - name: Run checkpoint recovery contracts
         run: bash Scripts/test-issue.sh SQD-028-UNIT
       - name: Run host FSM and budget tests
