@@ -58,12 +58,33 @@ Cancellation or an expired deadline prevents further appends. The location
 projector advances over movement evidence without generating `located_at` facts.
 No notification or physical action is dispatched.
 
-A host must still persist the full epoch boundary and source history (including
-contradictions and occlusions) to reconstruct the report automatically after a
-process restart. Published event evidence alone is not that full input history.
-Arbitrary sliding windows are **not** equivalent epochs. Automatic host restart
-and full source-history recovery remain part of open issue #43; the component and
-publication gates alone do not close it.
+`MovementEpoch` seals the complete input history, policy, entity type, origin and
+epoch identity. `PostgresMovementEpochStore` stores it before publication in the
+actor-scoped `movement_epochs` table. Saves are create-only: an exact retry is
+idempotent, while changed input or policy under the same epoch ID conflicts.
+Database triggers reject updates, deletion and truncation. The entity foreign key
+must already belong to the actor. Unknown confidence and occlusions are stored
+without conversion to journal confidence.
+
+The versioned codec preserves floating-point bit patterns (including timestamps),
+all geometry kinds, coordinate/calibration metadata, candidates and missing
+observations. Typed reconstruction reruns the source and detector validations;
+canonical round-trip comparison rejects unknown fields and noncanonical values.
+The maximum is 1,024 samples and 2 MiB of serialized state, with explicit failure
+rather than truncation. This is private evidence with the same access boundary as
+the actor's world journal; it is not an HTTP input format.
+
+`MovementEpochRecovery.submit` saves, reloads and publishes. Its `recover(epochID:)`
+entry point reloads the entire epoch and recomputes the report before publishing;
+callers cannot replace the policy or input during recovery. An unknown-confidence
+publication remains explicitly nonpublishable with its original history retained.
+Recovery may be repeated after partial publication because event keys are stable.
+
+This sealed-epoch profile is for completed bounded sequences. Arbitrary sliding
+windows are **not** equivalent epochs; changing boundaries can change detected
+movement identity. Continuous streaming, automatic enumeration of pending epochs
+and process-kill qualification are not implied by the explicit recovery API.
+Issue #43 remains open until the final end-to-end qualification is complete.
 
 Run `bash Scripts/test-issue.sh T07-UNIT` for controlled movement, jitter,
 repetition/duration, uncertainty, contradictions, occlusion, identity/calibration
@@ -74,4 +95,11 @@ Run `bash Scripts/test-issue.sh T07-SQL` through the isolated database helper fo
 real journal publication, loss of acknowledgement after commit, resumption of a
 partially published report, concurrent duplicate replay, changed-provenance
 conflicts, actor isolation and location-projection separation. This test uses two
-PostgreSQL clients; it does not claim an actual process-kill recovery test.
+PostgreSQL clients and reloads saved input by epoch ID. It also checks immutable
+state, foreign-actor lookup, unknown-field rejection and exact codec round trips
+for missing depth, 2D evidence, candidate identities, unknown confidence and
+occlusions. It does not claim an actual process-kill recovery test.
+
+Migration: `world/003_movement_epochs.sql` adds one immutable table and two mutation
+triggers. Application rollback can leave this evidence table intact. No existing
+world event or fact is rewritten, and deleting evidence is not a rollback step.

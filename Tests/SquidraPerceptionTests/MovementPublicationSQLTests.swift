@@ -3,7 +3,7 @@ import PostgresNIO
 import SquidraDomain
 import SquidraSpatial
 import SquidraPerception
-import SquidraPostgres
+@testable import SquidraPostgres
 import SquidraWorld
 import XCTest
 
@@ -33,6 +33,21 @@ final class MovementPublicationSQLTests: XCTestCase, @unchecked Sendable {
         return try ConfirmedMovementDetector(actorID: actor,entityID: entity,epochID: UUID(),entityType: "cup",
             policy: MovementPolicy(id: UUID(),thresholdsByType: ["cup": MovementThreshold(minimumDisplacementMeters: 0.1)])).evaluate(samples)
     }
+    func testEpochCodecPreservesUnqualifiedEvidenceAndOcclusionsExactly() throws {
+        let actor = UUID(),entity = UUID(),report = try Self.report(actor: actor,entity: entity,unknownFinalConfidence: true)
+        let event = report.events[0],original = report.samples.last!.observation!
+        let detector = try ConfirmedMovementDetector(actorID: actor,entityID: entity,epochID: event.epochID,entityType: event.entityType,policy: event.policy)
+        for geometry in [SpatialGeometry.missingDepth,.uncalibrated2D,original.geometry] {
+            let observation = SpatialObservation(actorID: actor,entityID: entity,coordinateFrameID: nil,geometry: geometry,
+                association: .candidate,validity: original.validity,source: original.source)
+            let samples = [MovementSample(observedAt: original.source.times.observedAt,observation: observation,frame: nil),
+                MovementSample(observedAt: try UTCInstant(secondsSince1970: original.source.times.observedAt.secondsSince1970+1),observation: nil,frame: nil)]
+            let epoch = try MovementEpoch(detector: detector,samples: samples,origin: .synthetic)
+            let decoded = try MovementEpochCodec.decode(MovementEpochCodec.encode(epoch))
+            XCTAssertEqual(decoded.samples,samples)
+            XCTAssertTrue(try decoded.evaluate().events.isEmpty)
+        }
+    }
     func testDurableReplayLostAcknowledgementConcurrentPublicationAndProjectionIsolation() async throws {
         let env = ProcessInfo.processInfo.environment
         guard let value = env["SQUIDRA_TEST_DB_PORT"],let port = Int(value),let password = env["SQUIDRA_TEST_DB_PASSWORD"] else {
@@ -45,6 +60,28 @@ final class MovementPublicationSQLTests: XCTestCase, @unchecked Sendable {
             _ = try await first.query("INSERT INTO world_entities(id,actor_id,kind) VALUES(\(entity),\(actor),'fixture')").collect()
             let report = try Self.report(actor: actor,entity: entity)
             XCTAssertEqual(report.events.count,2)
+            let event = report.events[0]
+            let detector = try ConfirmedMovementDetector(actorID: actor,entityID: entity,epochID: event.epochID,entityType: event.entityType,policy: event.policy)
+            let epoch = try MovementEpoch(detector: detector,samples: report.samples,origin: .synthetic)
+            let epochs = PostgresMovementEpochStore(client: first,actorID: actor)
+            try await epochs.save(epoch,deadline: .now.advanced(by: .seconds(4)))
+            let reopenedEpochs = PostgresMovementEpochStore(client: second,actorID: actor)
+            try await reopenedEpochs.save(epoch,deadline: .now.advanced(by: .seconds(4)))
+            let loadedValue = try await reopenedEpochs.load(epochID: event.epochID,deadline: .now.advanced(by: .seconds(4)))
+            let loaded = try XCTUnwrap(loadedValue)
+            XCTAssertEqual(loaded.samples,epoch.samples)
+            XCTAssertEqual(loaded.detector.policy,epoch.detector.policy)
+            XCTAssertEqual(try loaded.evaluate().events.map(\.id),report.events.map(\.id))
+            let changed = try MovementEpoch(detector: detector,samples: report.samples,origin: .sensor)
+            do { try await reopenedEpochs.save(changed,deadline: .now.advanced(by: .seconds(4)));XCTFail("Epoch overwritten") }
+            catch { XCTAssertEqual(error as? MovementEpochError,.conflict) }
+            do { _ = try await second.query("DELETE FROM movement_epochs WHERE actor_id=\(actor)").collect();XCTFail("Immutable epoch deleted") }
+            catch { /* Database trigger refuses mutation. */ }
+            let foreignEpoch = try await PostgresMovementEpochStore(client: second,actorID: UUID()).load(epochID: event.epochID,deadline: .now.advanced(by: .seconds(4)))
+            XCTAssertNil(foreignEpoch)
+            var wire = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(MovementEpochCodec.encode(epoch).utf8)) as? [String:Any])
+            wire["unexpected"] = true
+            XCTAssertThrowsError(try MovementEpochCodec.decode(String(decoding: JSONSerialization.data(withJSONObject: wire),as: UTF8.self)))
             let store = PostgresWorldRepository(client: first),reopened = PostgresWorldRepository(client: second)
             do {
                 _ = try await MovementPublisher(actorID: actor,repository: LostMovementAcknowledgement(base: store)).publish(report,origin: .synthetic,deadline: .now.advanced(by: .seconds(4)))
@@ -52,8 +89,11 @@ final class MovementPublicationSQLTests: XCTestCase, @unchecked Sendable {
             } catch { XCTAssertEqual(error as? WorldJournalError,.unavailable) }
             let committed = try await reopened.page(actorID: actor,afterSequence: 0,cursor: nil,limit: 10,deadline: .now.advanced(by: .seconds(4)))
             XCTAssertEqual(committed.events.count,1)
-            let resumed = try await MovementPublisher(actorID: actor,repository: reopened).publish(report,origin: .synthetic,deadline: .now.advanced(by: .seconds(4)))
-            XCTAssertEqual(resumed.map(\.created),[false,true])
+            // Recover by ID only through a new store/client; input, policy and
+            // origin are reconstructed from durable state rather than the report.
+            let resumed = try await MovementEpochRecovery(store: reopenedEpochs,publisher: MovementPublisher(actorID: actor,repository: reopened)).recover(epochID: event.epochID,deadline: .now.advanced(by: .seconds(4)))
+            XCTAssertEqual(resumed.count,2)
+            XCTAssertEqual(resumed[0],committed.events[0].draft.id)
             async let a = MovementPublisher(actorID: actor,repository: store).publish(report,origin: .synthetic,deadline: .now.advanced(by: .seconds(4)))
             async let b = MovementPublisher(actorID: actor,repository: reopened).publish(report,origin: .synthetic,deadline: .now.advanced(by: .seconds(4)))
             let duplicateResults = try await [a,b]
@@ -93,6 +133,17 @@ final class MovementPublicationSQLTests: XCTestCase, @unchecked Sendable {
             do {
                 _ = try await MovementPublisher(actorID: otherActor,repository: reopened).publish(unknown,origin: .synthetic,deadline: .now.advanced(by: .seconds(4)))
                 XCTFail("Unknown confidence accepted")
+            } catch { XCTAssertEqual(error as? MovementPublicationError,.unknownConfidence) }
+            _ = try await second.query("INSERT INTO world_entities(id,actor_id,kind) VALUES(\(otherEntity),\(otherActor),'fixture')").collect()
+            let unknownEvent = unknown.events[0]
+            let unknownEpoch = try MovementEpoch(detector: ConfirmedMovementDetector(actorID: otherActor,entityID: otherEntity,epochID: unknownEvent.epochID,entityType: unknownEvent.entityType,policy: unknownEvent.policy),samples: unknown.samples,origin: .synthetic)
+            let unknownStore = PostgresMovementEpochStore(client: second,actorID: otherActor)
+            try await unknownStore.save(unknownEpoch,deadline: .now.advanced(by: .seconds(4)))
+            let unknownLoaded = try await unknownStore.load(epochID: unknownEvent.epochID,deadline: .now.advanced(by: .seconds(4)))
+            XCTAssertNil(unknownLoaded?.samples.last?.observation?.source.confidence)
+            do {
+                _ = try await MovementEpochRecovery(store: unknownStore,publisher: MovementPublisher(actorID: otherActor,repository: reopened)).recover(epochID: unknownEvent.epochID,deadline: .now.advanced(by: .seconds(4)))
+                XCTFail("Unknown confidence fabricated during recovery")
             } catch { XCTAssertEqual(error as? MovementPublicationError,.unknownConfidence) }
             let absent = try await reopened.page(actorID: otherActor,afterSequence: 0,cursor: nil,limit: 10,deadline: .now.advanced(by: .seconds(4)))
             XCTAssertTrue(absent.events.isEmpty,"Preflight must reject whole report before writing its valid first event")
