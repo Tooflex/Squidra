@@ -1,4 +1,5 @@
 import Foundation
+import CSquidraPlatform
 import SquidraAgentRuntime
 import XCTest
 #if canImport(Darwin)
@@ -12,6 +13,16 @@ final class LocalRunOwnershipTests: XCTestCase, @unchecked Sendable {
         let path = FileManager.default.temporaryDirectory.appendingPathComponent("squidra-owner-"+UUID().uuidString)
         try FileManager.default.createDirectory(at:path,withIntermediateDirectories:false,attributes:[.posixPermissions:0o700])
         return path
+    }
+    func testFilesystemBridgeFailsClosedAndPreservesLocalAllowlist() {
+        XCTAssertEqual(squidra_filesystem_is_local(-1), -1)
+        for magic: UInt64 in [0xef53,0x01021994,0x58465342,0x9123683e,0x794c7630,0x2fc12fc1,0x858458f6] {
+            XCTAssertEqual(squidra_linux_filesystem_type_is_local(magic), 1)
+        }
+        // NFS, CIFS, SMB2, FUSE, unknown and zero are not qualified local stores.
+        for magic: UInt64 in [0x6969,0xff534d42,0xfe534d42,0x65735546,UInt64.max,0] {
+            XCTAssertEqual(squidra_linux_filesystem_type_is_local(magic), 0)
+        }
     }
     func testExclusiveOwnershipStableDomainAndIndependentActors() throws {
         let path = try directory();defer { try? FileManager.default.removeItem(at:path) }

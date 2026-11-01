@@ -1,4 +1,5 @@
 import Foundation
+import CSquidraPlatform
 #if canImport(Darwin)
 import Darwin
 #else
@@ -36,14 +37,11 @@ public final class LocalRunOwnership: @unchecked Sendable {
         var info = stat()
         guard fstat(fd,&info) == 0,info.st_uid == geteuid(),info.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG),
               info.st_mode & 0o077 == 0,info.st_nlink == 1 else { throw LocalRunOwnershipError.unsafePath }
-        var filesystem = statfs()
-        guard fstatfs(fd,&filesystem) == 0 else { throw LocalRunOwnershipError.unavailable }
-        #if canImport(Darwin)
-        guard filesystem.f_flags & UInt32(MNT_LOCAL) != 0 else { throw LocalRunOwnershipError.unsupportedFilesystem }
-        #else
-        // Local filesystems only: ext, tmpfs, XFS, Btrfs, overlay, ZFS, ramfs.
-        guard [Int64(0xef53),0x01021994,0x58465342,0x9123683e,0x794c7630,0x2fc12fc1,0x858458f6].contains(Int64(filesystem.f_type)) else { throw LocalRunOwnershipError.unsupportedFilesystem }
-        #endif
+        // System C headers expose statfs correctly on both Darwin and Linux;
+        // no ABI-dependent struct layout is duplicated in Swift.
+        let localFilesystem = squidra_filesystem_is_local(fd)
+        guard localFilesystem >= 0 else { throw LocalRunOwnershipError.unavailable }
+        guard localFilesystem == 1 else { throw LocalRunOwnershipError.unsupportedFilesystem }
         guard flock(fd,LOCK_EX | LOCK_NB) == 0 else {
             throw errno == EWOULDBLOCK || errno == EAGAIN ? LocalRunOwnershipError.busy : LocalRunOwnershipError.unavailable
         }

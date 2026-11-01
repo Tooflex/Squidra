@@ -1302,5 +1302,15 @@
       "owned_cleanup"
     ],
     "requires_database": true
+  },
+  "SQD-269-LINUX": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Tests/InstallTests/linux_ownership.py"
+    ],
+    "tests": [
+      "linux_ownership"
+    ]
   }
 }
