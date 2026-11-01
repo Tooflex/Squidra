@@ -525,3 +525,29 @@ untracked and terminal streams, and refusal during publication grace after the
 execution budget expires. This is the publication primitive; automatic selection,
 checkpoint continuation and archived-completion finalization are not activated by
 this change. No model or tool is dispatched by takeover.
+
+## Completed archives under local ownership
+
+`PostgresRunPublicationStore.recoverCompleted` finalizes a registered previous
+owner's completed archive while the same actor/domain/file lock is held. Unlike
+execution takeover, it needs no remaining execution budget: the runtime must
+already be `COMPLETED` with a newer version than the immutable completion archive.
+It checks the original saved task, request, thread, intent and subjects through the
+same archive validator used by expired-lease recovery. No model, tool, runtime
+transition or lease renewal occurs.
+
+The stream row lock serializes concurrent finalizers; one appends the five terminal
+frames and subsequent attempts return false. The existing started frame remains.
+A missing completion or unfinished runtime returns false without publishing.
+A current registering owner, copied domain file or released handle is rejected.
+Retention expiry still forbids publication. The internal stopped-owner append
+permission is reached only after the local registration proof; normal owner
+publication still requires its live lease, and the existing model-free background
+recovery still requires lease expiry.
+
+T05-HTTP covers owned finalization before and after lease expiry, concurrent
+single publication, unchanged complete runtime snapshots, incomplete runtime
+refusal, copied/current/released ownership refusal, HTTP/SSE archive equality and
+replay across two server lifetimes. Automatic local startup continuation is still
+to be wired with a lifecycle that joins recovery and execution before releasing
+the ownership handle.

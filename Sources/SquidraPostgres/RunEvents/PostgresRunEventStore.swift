@@ -35,7 +35,7 @@ public struct PostgresRunEventStore: RunEventStore {
         }
     }
     internal enum PublicationAuthorization: Sendable {
-        case unmanaged, owner(UUID), expiredLease
+        case unmanaged, owner(UUID), stoppedOwner(UUID), expiredLease
         var requiresLiveLease: Bool { if case .owner = self { true } else { false } }
         var requiresExpiredLease: Bool { if case .expiredLease = self { true } else { false } }
     }
@@ -59,6 +59,8 @@ public struct PostgresRunEventStore: RunEventStore {
             guard publication.phase == .unmanaged,terminalPhase == nil else { throw RunEventStoreError.conflict }
         case .owner(let owner):
             guard publication.phase == .running,publication.owner == owner,publication.leaseValid == true else { throw RunEventStoreError.conflict }
+        case .stoppedOwner(let owner):
+            guard publication.phase == .running,publication.owner == owner else { throw RunEventStoreError.conflict }
         case .expiredLease:
             guard publication.phase == .running,publication.leaseValid == false else { throw RunEventStoreError.conflict }
         }
@@ -95,7 +97,7 @@ public struct PostgresRunEventStore: RunEventStore {
     }
     /// Reads an archive only from the database, checks terminal runtime and task
     /// identity, then publishes the existing grounded value without execution.
-    internal func recoverArchivedCompletion(_ c: PostgresConnection,binding: AGUIRunBinding,at: UTCInstant) async throws -> AGUIRunStreamInfo? {
+    internal func recoverArchivedCompletion(_ c: PostgresConnection,binding: AGUIRunBinding,at: UTCInstant,authorization: PublicationAuthorization = .expiredLease) async throws -> AGUIRunStreamInfo? {
         let rows = try await BoundedPostgresQuery.rows(c,"""
             SELECT a.answer,t.task::text FROM read_run_completions a
             JOIN agent_runs r ON r.actor_id=a.actor_id AND r.id=a.run_id
@@ -135,7 +137,7 @@ public struct PostgresRunEventStore: RunEventStore {
             guard bytes.count <= AGUIEvent.maximumBytes else { throw RunEventStoreError.limitExceeded }
             return (kind.rawValue,bytes)
         }
-        return try await appendDocumentsLocked(c,binding:binding,expectedNextSequence:2,documents:documents,authorization:.expiredLease,terminalPhase:.succeeded)
+        return try await appendDocumentsLocked(c,binding:binding,expectedNextSequence:2,documents:documents,authorization:authorization,terminalPhase:.succeeded)
     }
     public func page(actorID: UUID, runID: UUID, cursor: String?, limit: Int, deadline: ContinuousClock.Instant) async throws -> AGUIRunEventPage {
         guard actorID == self.actorID else { throw RunEventStoreError.notFound }

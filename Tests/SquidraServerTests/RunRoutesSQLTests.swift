@@ -35,7 +35,8 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
     }
     func testLiveServerRecoversCompletedArchiveWithoutModelOrDuplicatePublication() async throws {
         try await RunHTTPTestSupport.withClients { client,second in
-            for concurrent in [true,false] {
+            for mode in 0...3 {
+            let concurrent = mode == 0,owned = mode >= 2
             let actor = UUID(),entity = UUID(),clock = try RunHTTPTestSupport.clock
             let config = try RunHTTPTestSupport.configuration(actor:actor,token:String(repeating:"b",count:64))
             let at = try clock.now(),request = try ReadRunRequest(actorID:actor,question:"Where is the fixture?",
@@ -43,8 +44,14 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                 modelOptions:ReadPlanningOptions(deadline:UTCInstant(secondsSince1970:at.secondsSince1970+120)))
             let binding = AGUIRunBinding(actorID:actor,runID:request.runID,threadID:UUID(),requestID:request.requestID)
             let events = PostgresRunEventStore(client:client,actorID:actor),publication = PostgresRunPublicationStore(client:client,actorID:actor)
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("squidra-completion-owner-"+UUID().uuidString)
+            try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:false,attributes:[.posixPermissions:0o700])
+            defer { try? FileManager.default.removeItem(at:directory) }
+            let oldOwner = try LocalRunOwnership.acquire(directory:directory,actorID:actor)
+            defer { oldOwner.releaseAfterJoiningWorkers() }
             _ = try await events.create(binding,retentionSeconds:3600,deadline:.now.advanced(by:.seconds(4)))
             try await PostgresReadRunTaskStore(client:client,actorID:actor).save(StoredReadRunTask(request:request,threadID:binding.threadID),deadline:.now.advanced(by:.seconds(4)))
+            try await PostgresReadRunOwnershipStore(client:client,ownership:oldOwner).register(runID:request.runID,deadline:.now.advanced(by:.seconds(4)))
             let claim = try await publication.claim(binding,maximumExecutionSeconds:120,at:at,deadline:.now.advanced(by:.seconds(4)))
             let runtime = PostgresRunStore(client:client)
             let controller = try await RunController.create(actorID:actor,id:request.runID,traceID:request.traceID,store:runtime,clock:clock)
@@ -58,14 +65,44 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
             let text = String(decoding:try JSONSerialization.data(withJSONObject:["schemaVersion":"1","claims":[["kind":"unknown","subjectId":entity.uuidString,"citations":[]]]]),as:UTF8.self)
             let answer = try GroundedAnswerValidator().validate(ModelResponse(requestID:request.requestID,modelID:"authored-fixture",modelVersion:"1",text:text,outputTokens:1,costMicroUSD:0),expectedRequestID:request.requestID,context:context)
             try await PostgresReadRunCompletionStore(client:client,actorID:actor).save(snapshot:controller.snapshot(),answer:answer,deadline:.now.advanced(by:.seconds(4)))
+            do { _ = try await publication.recoverCompleted(runID:request.runID,ownership:oldOwner,at:at,deadline:.now.advanced(by:.seconds(4)));XCTFail("Current registering owner accepted") }
+            catch { XCTAssertEqual(error as? RunEventStoreError,.conflict) }
+            let copiedDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("squidra-completion-copy-"+UUID().uuidString)
+            try FileManager.default.createDirectory(at:copiedDirectory,withIntermediateDirectories:false,attributes:[.posixPermissions:0o700])
+            defer { try? FileManager.default.removeItem(at:copiedDirectory) }
+            let lockName = actor.uuidString.lowercased()+".lock"
+            try FileManager.default.copyItem(at:directory.appendingPathComponent(lockName),to:copiedDirectory.appendingPathComponent(lockName))
+            let copiedOwner = try LocalRunOwnership.acquire(directory:copiedDirectory,actorID:actor)
+            defer { copiedOwner.releaseAfterJoiningWorkers() }
+            do { _ = try await publication.recoverCompleted(runID:request.runID,ownership:copiedOwner,at:at,deadline:.now.advanced(by:.seconds(4)));XCTFail("Copied owner accepted") }
+            catch { XCTAssertEqual(error as? RunEventStoreError,.conflict) }
+            oldOwner.releaseAfterJoiningWorkers()
+            let nextOwner = try LocalRunOwnership.acquire(directory:directory,actorID:actor)
+            defer { nextOwner.releaseAfterJoiningWorkers() }
+            let incomplete = try await publication.recoverCompleted(runID:request.runID,ownership:nextOwner,at:at,deadline:.now.advanced(by:.seconds(4)))
+            XCTAssertFalse(incomplete)
             // Expiry alone cannot turn an unfinished runtime into a success.
+            if mode != 2 {
             _ = try await client.query("UPDATE run_event_streams SET created_at=clock_timestamp()-interval '2 hours',execution_lease_until=clock_timestamp()-interval '1 hour' WHERE run_id=\(request.runID)").collect()
+            }
             let unfinished = try await publication.recoverNextCompleted(at:clock.now(),deadline:.now.advanced(by:.seconds(4)))
             XCTAssertFalse(unfinished)
             _ = try await controller.finishIteration(progress:.validatedResponse)
             _ = try await controller.transition(to:.completed,terminalCode:.completed)
             let foreign = try await PostgresRunPublicationStore(client:second,actorID:UUID()).recoverNextCompleted(at:clock.now(),deadline:.now.advanced(by:.seconds(4)))
             XCTAssertFalse(foreign)
+            if owned {
+                let before = try await runtime.load(actorID:actor,runID:request.runID,deadline:.now.advanced(by:.seconds(4)))
+                async let one = publication.recoverCompleted(runID:request.runID,ownership:nextOwner,at:at,deadline:.now.advanced(by:.seconds(4)))
+                async let two = PostgresRunPublicationStore(client:second,actorID:actor).recoverCompleted(runID:request.runID,ownership:nextOwner,at:at,deadline:.now.advanced(by:.seconds(4)))
+                let results = try await [one,two]
+                XCTAssertEqual(results.filter { $0 }.count,1)
+                let after = try await runtime.load(actorID:actor,runID:request.runID,deadline:.now.advanced(by:.seconds(4)))
+                XCTAssertEqual(before,after)
+                nextOwner.releaseAfterJoiningWorkers()
+                do { _ = try await publication.recoverCompleted(runID:request.runID,ownership:nextOwner,at:at,deadline:.now.advanced(by:.seconds(4)));XCTFail("Released owner accepted") }
+                catch { XCTAssertEqual(error as? RunEventStoreError,.conflict) }
+            }
             if concurrent {
                 async let one = publication.recoverNextCompleted(at:clock.now(),deadline:.now.advanced(by:.seconds(4)))
                 async let two = PostgresRunPublicationStore(client:second,actorID:actor).recoverNextCompleted(at:clock.now(),deadline:.now.advanced(by:.seconds(4)))
