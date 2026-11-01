@@ -39,15 +39,50 @@ not enter reported predictions or metrics. Repetition of these cases is not an
 independent AI evaluation and cannot estimate model variance. The baseline is
 exported on every run, not a fabricated or manually copied reference score.
 
-Seven independent scorer regressions check denominators, known confusion counts,
+Nine independent scorer regressions check denominators, known confusion counts,
 threshold failure, baseline F1, missing/extra/duplicate cases and predictions,
 non-Boolean values and ordering. The pipeline exits nonzero on build failure,
 incomplete predictions, dataset mismatch or threshold failure; failed score
 results remain exported for diagnosis. The issue runner checks all three explicit
 completion markers and does not treat an empty suite as success.
 
-This first gate does not complete SQD-031's broader spatiotemporal qualification.
-Database-backed temporal/location queries and end-to-end question-answer quality
-are not measured here. Live AI runs require an explicitly configured, qualified
-model and a separately labelled dataset/run mode. Keep those results unexecuted
-rather than relabelling deterministic component scores as real model performance.
+## PostgreSQL query benchmark and complete gate
+
+`bash Scripts/test-issue.sh SQD-031` runs both component and database profiles.
+The database profile uses the same isolated PostgreSQL helper as the integration
+suites, applies real migrations, seeds the immutable journal, applies the real
+location projector and calls `PostgresLocationProjection.state`. It decodes input
+queries only, not their annotations. No fake query service or model supplies the
+predictions.
+
+`world-queries.v1.json` freezes five source events (three locations, a late
+correction and an inferred conflicting location) and twelve queries. Knowledge
+times refer to actual recorded source-event boundaries, including before the first
+event; valid times are fixed offsets. Thus a run does not depend on wall-clock
+constants while still exercising real bitemporal queries. Temporal cases test
+half-open boundaries, historical knowledge and late corrections. Spatial cases
+test exact locations, absence of evidence and explicit conflict/inference flags.
+
+A query is correct only when **all three** returned sets match: location labels,
+uncertainty flags and supporting source-event indices. IDs are normalized to
+fixture labels/indices without changing answer meaning. A correct place with the
+wrong source is incorrect. Accuracy has separate temporal and spatial denominators;
+these counts are not pooled with the component scores. The baseline always returns
+no evidence. Missing or duplicate predictions, duplicate answer members and invalid
+types fail. Additional scorer regressions exercise source/uncertainty mistakes.
+
+The database exports `.build/evals/world-queries-v1/{predictions,results,baseline,
+thresholds}.json`. Metadata includes the actual PostgreSQL version, migration,
+source, dataset and lockfile hashes, Git state and explicit zero model calls.
+No credential or temporary database port is exported. Both profiles must pass
+independently: temporal accuracy >=0.90, spatial accuracy >=0.85 and the component
+movement F1 >=0.85. Any failure preserves the available exported measurements and
+fails the combined gate.
+
+These are reproducible **deterministic** evaluations on authored cases. The
+benchmark infrastructure and thresholds do not establish real-world AI accuracy,
+end-to-end natural-language answer quality or statistical confidence on unseen
+scenes. No real provider is configured in these runs; model ID/version remain
+null, rather than naming an unexecuted model. Repeated AI trials belong to a
+separately labelled profile with verified access and model/version provenance.
+Do not count deterministic reruns as independent AI trials.

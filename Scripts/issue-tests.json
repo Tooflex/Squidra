@@ -698,5 +698,28 @@
       "complete_exports",
       "component_thresholds"
     ]
+  },
+  "SQD-031-DATABASE": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-eval"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "database_query_metrics"
+    ]
+  },
+  "SQD-031": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Evals/qualify.py"
+    ],
+    "tests": [
+      "component_benchmark",
+      "database_benchmark"
+    ]
   }
 }

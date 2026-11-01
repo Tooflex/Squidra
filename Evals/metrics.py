@@ -45,3 +45,38 @@ def score(cases, predictions):
                         and result['spatial']['accuracy'] >= THRESHOLDS['spatial_accuracy']
                         and result['movement']['f1'] >= THRESHOLDS['movement_f1'])
     return result
+
+
+def score_queries(cases, predictions):
+    def answer(value):
+        if not isinstance(value, dict) or set(value) != {'locations', 'uncertainty', 'sources'}:
+            raise ValueError('Invalid query answer')
+        for key, cls in [('locations', str), ('uncertainty', str), ('sources', int)]:
+            values = value[key]
+            if not isinstance(values, list) or any(type(v) is not cls for v in values) or len(set(values)) != len(values):
+                raise ValueError('Invalid answer values')
+        return {k: sorted(v) for k, v in value.items()}
+    if not isinstance(cases, list) or not cases or not isinstance(predictions, list):
+        raise ValueError('Nonempty query cases required')
+    truth = {}
+    for c in cases:
+        if not isinstance(c.get('id'), str) or not c['id'] or c['id'] in truth or c.get('kind') not in ('temporal', 'spatial'):
+            raise ValueError('Invalid query case')
+        truth[c['id']] = answer(c['expected'])
+    actual = {}
+    for p in predictions:
+        if set(p) != {'id', 'locations', 'uncertainty', 'sources'} or not isinstance(p['id'], str) or p['id'] in actual:
+            raise ValueError('Invalid query prediction')
+        actual[p['id']] = answer({k: v for k, v in p.items() if k != 'id'})
+    if set(actual) != set(truth):
+        raise ValueError('Incomplete query predictions')
+    result = {}
+    for kind in ('temporal', 'spatial'):
+        ids = [c['id'] for c in cases if c['kind'] == kind]
+        if not ids:
+            raise ValueError('Empty query denominator')
+        correct = sum(actual[i] == truth[i] for i in ids)
+        result[kind] = dict(correct=correct, total=len(ids), accuracy=correct / len(ids))
+    result['thresholds'] = {k: THRESHOLDS[k] for k in ('temporal_accuracy', 'spatial_accuracy')}
+    result['passed'] = all(result[k]['accuracy'] >= THRESHOLDS[k + '_accuracy'] for k in ('temporal', 'spatial'))
+    return result

@@ -190,6 +190,8 @@ jobs:
         run: bash Scripts/test-issue.sh T07-SQL
       - name: Verify movement recovery after process death
         run: bash Scripts/test-issue.sh T07-CRASH
+      - name: Measure frozen PostgreSQL query benchmark
+        run: bash Scripts/test-issue.sh SQD-031-DATABASE
       - name: Verify frame import to durable evidence and sourced answers
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-020-PUBLISH
