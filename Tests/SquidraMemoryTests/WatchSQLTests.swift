@@ -24,6 +24,53 @@ final class WatchSQLTests: XCTestCase, @unchecked Sendable {
         return try ConfirmedMovementDetector(actorID: actor,entityID: entity,epochID: UUID(),entityType: "cup",
             policy: MovementPolicy(id: UUID(),thresholdsByType: ["cup": MovementThreshold(minimumDisplacementMeters: 0.1)])).evaluate(samples)
     }
+    func testDispatcherCheckpointRollbackConcurrentReplayAndActorIsolation() async throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let port = env["SQUIDRA_TEST_DB_PORT"].flatMap(Int.init),let password = env["SQUIDRA_TEST_DB_PASSWORD"] else { XCTFail("Use SQD-026-SQL");return }
+        let config = try LocalDatabaseConfiguration(port: port,username: "squidra",password: password,database: "squidra")
+        let client = config.makeClient(),second = config.makeClient(),actor = UUID(),entity = UUID()
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { await client.run() };group.addTask { await second.run() };defer { group.cancelAll() }
+            _ = try await client.query("INSERT INTO world_entities(id,actor_id,kind) VALUES(\(entity),\(actor),'fixture')").collect()
+            let store = PostgresIntentionStore(actorID: actor,client: client)
+            let reload = PostgresIntentionStore(actorID: actor,client: second)
+            let journal = PostgresWorldRepository(client: client)
+            let watch = try await store.watch(entityID: entity,key: "dispatch",deadline: .now.advanced(by: .seconds(4)))
+            let input = try Self.report(actor: actor,entity: entity),movement = input.events[0]
+            let epoch = try MovementEpoch(detector: ConfirmedMovementDetector(actorID: actor,entityID: entity,epochID: movement.epochID,entityType: movement.entityType,policy: movement.policy),samples: input.samples,origin: .synthetic)
+            let ids = try await MovementEpochRecovery(store: PostgresMovementEpochStore(client: client,actorID: actor),publisher: MovementPublisher(actorID: actor,repository: journal)).submit(epoch,deadline: .now.advanced(by: .seconds(4)))
+            _ = try await client.query("CREATE FUNCTION reject_watch_checkpoint() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture rejected checkpoint'; END $$").collect()
+            _ = try await client.query("CREATE TRIGGER reject_watch_checkpoint BEFORE INSERT OR UPDATE ON watch_dispatch_cursors FOR EACH ROW EXECUTE FUNCTION reject_watch_checkpoint()").collect()
+            do { _ = try await store.processNext(deadline: .now.advanced(by: .seconds(4)));XCTFail("Checkpoint failure ignored") }
+            catch { XCTAssertEqual(error as? WatchError,.unavailable) }
+            _ = try await client.query("DROP TRIGGER reject_watch_checkpoint ON watch_dispatch_cursors").collect()
+            _ = try await client.query("DROP FUNCTION reject_watch_checkpoint()").collect()
+            let active = try await reload.load(id: watch.id,deadline: .now.advanced(by: .seconds(4)))
+            XCTAssertEqual(active?.status,.active)
+            let before = try await journal.page(actorID: actor,afterSequence: 0,cursor: nil,limit: 20,deadline: .now.advanced(by: .seconds(4)))
+            XCTAssertEqual(before.events.count,2,"Failed checkpoint must roll back the notification")
+            let receipts = try await client.query("SELECT count(*) FROM watch_notifications WHERE actor_id=\(actor)").collect()
+            XCTAssertEqual(try receipts[0].decode(Int.self),0)
+            let cursors = try await client.query("SELECT count(*) FROM watch_dispatch_cursors WHERE actor_id=\(actor)").collect()
+            XCTAssertEqual(try cursors[0].decode(Int.self),0)
+            async let a = store.processNext(deadline: .now.advanced(by: .seconds(4)))
+            async let b = reload.processNext(deadline: .now.advanced(by: .seconds(4)))
+            let progressed = try await [a,b]
+            XCTAssertEqual(progressed,[true,true])
+            let notificationConsumed = try await reload.processNext(deadline: .now.advanced(by: .seconds(4)))
+            XCTAssertTrue(notificationConsumed)
+            let drained = try await store.processNext(deadline: .now.advanced(by: .seconds(4)))
+            XCTAssertFalse(drained)
+            let page = try await journal.page(actorID: actor,afterSequence: 0,cursor: nil,limit: 20,deadline: .now.advanced(by: .seconds(4)))
+            let notifications = page.events.filter { $0.draft.type == "memory.watch_notified" }
+            XCTAssertEqual(notifications.count,1)
+            XCTAssertEqual(notifications.first?.draft.causationID,ids[0])
+            let terminal = try await reload.load(id: watch.id,deadline: .now.advanced(by: .seconds(4)))
+            XCTAssertEqual(terminal?.status,.fulfilled)
+            let foreign = try await PostgresIntentionStore(actorID: UUID(),client: second).processNext(deadline: .now.advanced(by: .seconds(4)))
+            XCTAssertFalse(foreign)
+        }
+    }
     func testDurableWatchAtomicNotificationReplayCancellationAndUntrustedEvents() async throws {
         let env = ProcessInfo.processInfo.environment
         guard let port = env["SQUIDRA_TEST_DB_PORT"].flatMap(Int.init),let password = env["SQUIDRA_TEST_DB_PASSWORD"] else { XCTFail("Use SQD-026-SQL");return }

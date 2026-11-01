@@ -45,8 +45,21 @@ transaction rollback, concurrent duplicate delivery, one-shot completion,
 historical events, cancellation, forged evidence and actor isolation. The world
 journal has exactly one notification and the external outbox remains empty.
 
-This change supplies the transactional store and explicit delivery operation.
-A bounded journal dispatcher, application lifecycle activation, gateway tool and
-process-restart qualification remain separate work. SQD-026 stays open until the
-watch is actually driven across replay/restart; calling the store directly is not
-claimed to be a running background monitor.
+`processNext` consumes one actor event in sequence order. Migration
+`world/005_watch_dispatch.sql` stores a monotonic actor-scoped cursor. Notification
+append, receipts, fulfilled states and cursor advance commit in one transaction;
+a checkpoint failure rolls back all of them. Concurrent workers share the actor
+lock. Internal notifications and unqualified events advance the cursor without
+creating another notification. Empty journals perform no writes.
+
+The live server owns a `WatchWorkerService` alongside its PostgreSQL client,
+including when no model is configured. It polls idle journals every 250 ms,
+advances the world projection after processing, and cancels and joins on shutdown.
+Unexpected processing failures stop the service/application instead of silently
+skipping an event. A fresh application resumes from the persisted cursor.
+
+SQL tests inject checkpoint failure and verify atomic rollback, concurrent
+processing, cursor draining and actor isolation. T05-HTTP exercises automatic
+notification creation and a fresh live application with no duplicate delivery.
+The gateway tool and actual SIGKILL qualification remain separate work; SQD-026
+stays open until abrupt process restart is qualified.

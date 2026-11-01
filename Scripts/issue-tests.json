@@ -527,7 +527,7 @@
   },
   "SQD-027": {
     "kind": "xctest",
-    "filter": "(^SquidraMemoryTests\\.|^SquidraAgentRuntimeTests\\.ReadRunEngineTests/testPrivateMemory)"
+    "filter": "(^SquidraMemoryTests\\.MemoryContextTests/|^SquidraAgentRuntimeTests\\.ReadRunEngineTests/testPrivateMemory)"
   },
   "SQD-021": {
     "kind": "command",

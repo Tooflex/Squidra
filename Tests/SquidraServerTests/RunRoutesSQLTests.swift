@@ -5,6 +5,10 @@ import PostgresNIO
 import SquidraAgentRuntime
 import SquidraDomain
 import SquidraCognition
+import SquidraMemory
+import SquidraPerception
+import SquidraSpatial
+import SquidraWorld
 import SquidraObservability
 import SquidraPostgres
 import SquidraProtocols
@@ -13,6 +17,49 @@ import XCTest
 
 // SAFETY: stateless suite; mutable fixtures are actors, SQL scopes are per scenario.
 final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
+    static func report(actor: UUID, entity: UUID, unknownFinalConfidence: Bool = false) throws -> MovementReport {
+        let frame = try SpatialCoordinateFrame(actorID: actor,id: UUID(),up: .positiveZ,calibration: SpatialCalibration(id: UUID(),version: "fixture-1",maximumErrorMeters: 0))
+        let camera = UUID()
+        let samples = try [0.0,0.2,0.2,0.2,0.5,0.5,0.5].enumerated().map { i,x in
+            let time = try UTCInstant(secondsSince1970: 1_700_000_000+Double(i))
+            let source = try SpatialSource(observationID: UUID(),cameraID: camera,imageFrameID: UUID(),modelID: "authored-scene",modelVersion: "1",
+                times: ObservationTimestamps(occurredAt: nil,observedAt: time,recordedAt: time,timeZone: IANATimeZone(identifier: "Europe/Paris")),
+                confidence: unknownFinalConfidence && i == 6 ? nil : Confidence(0.8))
+            return try MovementSample(observedAt: time,observation: SpatialObservation(actorID: actor,entityID: entity,coordinateFrameID: frame.id,
+                geometry: .calibrated3D(SpatialBox3D(lower: [x,0,0],upper: [x+0.1,0.1,0.1],maximumErrorMeters: 0)),association: .confirmed,
+                validity: SpatialValidity(from: time,to: nil),source: source),frame: frame)
+        }
+        return try ConfirmedMovementDetector(actorID: actor,entityID: entity,epochID: UUID(),entityType: "cup",
+            policy: MovementPolicy(id: UUID(),thresholdsByType: ["cup": MovementThreshold(minimumDisplacementMeters: 0.1)])).evaluate(samples)
+    }
+    func testLiveWatchDispatcherRunsWithoutModelAndResumesAfterShutdown() async throws {
+        try await RunHTTPTestSupport.withClients { client,_ in
+            let actor = UUID(),entity = UUID()
+            _ = try await client.query("INSERT INTO world_entities(id,actor_id,kind) VALUES(\(entity),\(actor),'fixture')").collect()
+            let config = try RunHTTPTestSupport.configuration(actor: actor,token: String(repeating: "a",count: 64))
+            let store = PostgresIntentionStore(actorID: actor,client: client)
+            let watch = try await store.watch(entityID: entity,key: "live",deadline: .now.advanced(by: .seconds(4)))
+            let journal = PostgresWorldRepository(client: client)
+            let input = try Self.report(actor: actor,entity: entity),movement = input.events[0]
+            let epoch = try MovementEpoch(detector: ConfirmedMovementDetector(actorID: actor,entityID: entity,epochID: movement.epochID,entityType: movement.entityType,policy: movement.policy),samples: input.samples,origin: .synthetic)
+            try await ServerComposition.live(configuration: config).test(.live) { _ in
+                _ = try await MovementEpochRecovery(store: PostgresMovementEpochStore(client: client,actorID: actor),publisher: MovementPublisher(actorID: actor,repository: journal)).submit(epoch,deadline: .now.advanced(by: .seconds(4)))
+                try await RunHTTPTestSupport.wait {
+                    (try? await store.load(id: watch.id,deadline: .now.advanced(by: .seconds(4))))?.status == .fulfilled
+                }
+            }
+            // A new application instance must drain any remaining source/notification
+            // events without redelivering the fulfilled intention.
+            try await ServerComposition.live(configuration: config).test(.live) { _ in
+                try await RunHTTPTestSupport.wait {
+                    let rows = try? await client.query("SELECT c.last_sequence=(SELECT max(sequence) FROM world_events WHERE actor_id=\(actor)) FROM watch_dispatch_cursors c WHERE actor_id=\(actor)").collect()
+                    return (try? rows?.first?.decode(Bool.self)) == true
+                }
+                let page = try await journal.page(actorID: actor,afterSequence: 0,cursor: nil,limit: 20,deadline: .now.advanced(by: .seconds(4)))
+                XCTAssertEqual(page.events.filter { $0.draft.type == "memory.watch_notified" }.count,1)
+            }
+        }
+    }
     func testLiveCompositionOwnsReadPipelineAndReportsModelFreeLimitation() async throws {
         try await RunHTTPTestSupport.withClients { client,_ in
             let (fixture,model,_,source) = try await RunHTTPTestSupport.realHarness(client:client)
