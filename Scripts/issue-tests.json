@@ -779,5 +779,19 @@
       "watch_contract",
       "gateway_database"
     ]
+  },
+  "SQD-028-PUBLICATION-CRASH": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-publication-crash"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "completed_worker_sigkill",
+      "model_free_server_recovery",
+      "second_server_replay"
+    ]
   }
 }

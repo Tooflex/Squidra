@@ -179,3 +179,28 @@ foreign actor isolation, concurrent recovery winners, exact archived/published
 JSON equality, stale-owner rejection and a second server instance without a
 duplicate. The fixture advances the publication lease in SQL; it does not claim
 to be the actual SIGKILL qualification.
+
+## Completed-answer recovery across actual process deaths
+
+`bash Scripts/test-issue.sh SQD-028-PUBLICATION-CRASH` now qualifies this completed
+publication path with owned OS processes. The opt-in fixture runs the real
+ReadRunEngine, ActionGateway, PostgreSQL read tool, task/result stores and runtime
+FSM with an authored two-response local model. It marks the boundary only after
+the runtime is completed, the answer archived and publication still running.
+The harness kills that exact fixture PID with SIGKILL and waits for its exit.
+
+A fresh normal `squidra serve` process, configured without a model host, waits for
+the original database lease to expire naturally and recovers the answer. The
+harness checks authenticated HTTP status and all six SSE frames, then a separate
+verifier checks archived/published equality, unchanged terminal runtime version,
+one step and one tool call. It SIGKILLs that server too, starts another normal
+server, and requires byte-identical replay with no additional frames or runtime
+changes. Markers contain only actor/run UUIDs and checkpoint version. Credentials
+remain in child environments; the harness cleans up only its owned processes.
+
+This is a real process-death test for the completed-before-publication boundary,
+not a claim that an arbitrary early planning/tool phase resumes. The initial
+fixture invokes the real engine directly; HTTP acceptance is covered by the live
+integration suite. Earlier-phase continuation and effect-reconciliation activation
+remain required before SQD-028 can close. No production hooks or migration are
+added by this test.

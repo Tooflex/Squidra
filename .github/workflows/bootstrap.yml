@@ -147,6 +147,8 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-028-DURABLE
       - name: Run process crash recovery
         run: bash Scripts/test-issue.sh SQD-028-CRASH
+      - name: Verify completed answer recovery across process crashes
+        run: bash Scripts/test-issue.sh SQD-028-PUBLICATION-CRASH
       - name: Verify durable approval decisions and expiry
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-009-PERSISTENCE
