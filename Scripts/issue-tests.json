@@ -560,5 +560,21 @@
   "SQD-028-UNIT": {
     "kind": "xctest",
     "filter": "^SquidraAgentRuntimeTests\\.RunRecoveryTests/"
+  },
+  "SQD-028-SQL": {
+    "kind": "xctest",
+    "filter": "^SquidraAgentRuntimeTests\\.RunRecoverySQLTests/"
+  },
+  "SQD-028-DURABLE": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-run-recovery"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "durable_run_recovery"
+    ]
   }
 }
