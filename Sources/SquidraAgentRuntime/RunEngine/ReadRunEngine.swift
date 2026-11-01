@@ -40,12 +40,13 @@ public struct ReadRunEngine: Sendable {
     private let decoder: WorldReadEvidenceDecoder, store: any RunStore
     private let clock: any SquidraDomain.Clock, freshness: AnswerFreshnessPolicy
     private let memory: MemoryContextProvider?
+    private let plans: (any ReadRunPlanStore)?
     private let completions: (any ReadRunCompletionStore)?
     public init(router: ModelRouter, gateway: ActionGateway, store: any RunStore,
                 clock: any SquidraDomain.Clock, freshness: AnswerFreshnessPolicy,
-                memory: MemoryContextProvider? = nil, completions: (any ReadRunCompletionStore)? = nil) throws {
+                memory: MemoryContextProvider? = nil, completions: (any ReadRunCompletionStore)? = nil, plans: (any ReadRunPlanStore)? = nil) throws {
         self.router = router; self.gateway = gateway; self.store = store; self.clock = clock; self.freshness = freshness
-        self.memory = memory; self.completions = completions
+        self.memory = memory; self.completions = completions; self.plans = plans
         planner = try ReadPlanner(router:router,clock:clock); decoder = try WorldReadEvidenceDecoder()
     }
     public func execute(_ request: ReadRunRequest) async throws -> ReadRunResult {
@@ -87,10 +88,30 @@ public struct ReadRunEngine: Sendable {
         let milliseconds = max(0,min(Double(snapshot.budget.activeMilliseconds-snapshot.activeMilliseconds),remaining*1000))
         return try await run(request,controller:controller,deadline:.now.advanced(by:.milliseconds(Int64(milliseconds.rounded(.down)))))
     }
-    private func run(_ request: ReadRunRequest,controller: RunController,deadline: ContinuousClock.Instant) async throws -> ReadRunResult {
+    /// Resume only a saved, validated plan before proposal reservation/dispatch.
+    /// As with early continuation, the host must prove the old worker stopped.
+    public func resumeSavedPlan(_ request: ReadRunRequest,expectedVersion: Int64) async throws -> ReadRunResult {
+        do {
+            guard request.effectiveToolScope == ["world:read"],let plans,
+                  let saved = try await plans.load(runID:request.runID,deadline:.now.advanced(by:.seconds(4))),
+                  saved.actorID == request.actorID,saved.runID == request.runID,saved.requestID == request.requestID,
+                  saved.planningVersion <= expectedVersion else { throw RunError.recoveryRequired }
+            let plan = try planner.restore(saved.archive,scope:request.planningScope,maximumCostMicroUSD:request.modelOptions.maximumCostMicroUSD,maximumOutputTokens:request.modelOptions.maximumOutputTokens)
+            let controller = try await RunController.restoreBeforePlanning(actorID:request.actorID,id:request.runID,traceID:request.traceID,
+                expectedVersion:expectedVersion,store:store,clock:clock,allowPlanning:true)
+            let snapshot = try await controller.snapshot()
+            guard !snapshot.state.isTerminal else { throw ReadRunFailure(runID:request.runID,traceID:request.traceID,code:.deadlineExceeded,state:snapshot.state) }
+            guard snapshot.state == .planning,let wallEnd = snapshot.deadlineSecondsSince1970 else { throw RunError.recoveryRequired }
+            let remaining = min(wallEnd,request.modelOptions.deadline.secondsSince1970)-(try clock.now()).secondsSince1970
+            let ms = max(0,min(Double(snapshot.budget.activeMilliseconds-snapshot.activeMilliseconds),remaining*1000))
+            return try await run(request,controller:controller,deadline:.now.advanced(by:.milliseconds(Int64(ms.rounded(.down)))),restoredPlan:plan)
+        } catch let failure as ReadRunFailure { throw failure }
+        catch { throw ReadRunFailure(runID:request.runID,traceID:request.traceID,code:.recoveryRequired,state:nil) }
+    }
+    private func run(_ request: ReadRunRequest,controller: RunController,deadline: ContinuousClock.Instant,restoredPlan: PlannedRead? = nil) async throws -> ReadRunResult {
         do {
             return try await withThrowingTaskGroup(of:ReadRunResult.self) { group in
-                group.addTask { try await perform(request,controller:controller,deadline:deadline) }
+                group.addTask { try await perform(request,controller:controller,deadline:deadline,restoredPlan:restoredPlan) }
                 group.addTask { try await Task.sleep(until:deadline); throw ReadRunFailureCode.deadlineExceeded }
                 defer { group.cancelAll() }
                 guard let result = try await group.next() else { throw ReadRunFailureCode.readFailed }; return result
@@ -130,23 +151,32 @@ public struct ReadRunEngine: Sendable {
             allowFallback:request.modelOptions.allowFallback,maximumCostMicroUSD:remainingCost,
             maximumOutputTokens:request.modelOptions.maximumOutputTokens,deadline:UTCInstant(secondsSince1970:bound))
     }
-    private func perform(_ request: ReadRunRequest, controller: RunController, deadline: ContinuousClock.Instant) async throws -> ReadRunResult {
+    private func perform(_ request: ReadRunRequest, controller: RunController, deadline: ContinuousClock.Instant,restoredPlan: PlannedRead?) async throws -> ReadRunResult {
         try Task.checkCancellation()
         guard ContinuousClock.now < deadline else { throw ReadRunFailureCode.deadlineExceeded }
-        let start = try await controller.snapshot()
-        if start.state == .created { try Self.active(await controller.transition(to:.validating)) }
-        if start.state == .created || start.state == .validating { try Self.active(await controller.transition(to:.contextLoading)) }
-        guard try await controller.snapshot().state == .contextLoading else { throw ReadRunFailureCode.recoveryRequired }
-        let memoryContext = try await memory?.context(actorID: request.actorID,
-            subjectIDs: Set(request.planningScope.entities.map(\.id)), question: request.question, deadline: deadline)
-        try Self.active(await controller.transition(to:.planning,substate:.reasoning))
         let planned: PlannedRead
-        do { planned = try await planner.plan(question:request.question,scope:request.planningScope,requestID:UUID(),
-            options:options(request,deadline:deadline,remainingCost:request.modelOptions.maximumCostMicroUSD), memory: memoryContext) }
-        catch is CancellationError { throw CancellationError() }
-        catch let error as ModelRoutingError where error == .deadlineExceeded { throw ReadRunFailureCode.deadlineExceeded }
-        catch let error as ModelRoutingError where error == .budgetExceeded { throw ReadRunFailureCode.budgetExceeded }
-        catch { throw ReadRunFailureCode.planningFailed }
+        if let restoredPlan {
+            guard try await controller.snapshot().state == .planning else { throw ReadRunFailureCode.recoveryRequired }
+            planned = restoredPlan
+        } else {
+            let start = try await controller.snapshot()
+            if start.state == .created { try Self.active(await controller.transition(to:.validating)) }
+            if start.state == .created || start.state == .validating { try Self.active(await controller.transition(to:.contextLoading)) }
+            guard try await controller.snapshot().state == .contextLoading else { throw ReadRunFailureCode.recoveryRequired }
+            let memoryContext = try await memory?.context(actorID: request.actorID,
+                subjectIDs: Set(request.planningScope.entities.map(\.id)), question: request.question, deadline: deadline)
+            try Self.active(await controller.transition(to:.planning,substate:.reasoning))
+            do { planned = try await planner.plan(question:request.question,scope:request.planningScope,requestID:UUID(),
+                options:options(request,deadline:deadline,remainingCost:request.modelOptions.maximumCostMicroUSD), memory: memoryContext) }
+            catch is CancellationError { throw CancellationError() }
+            catch let error as ModelRoutingError where error == .deadlineExceeded { throw ReadRunFailureCode.deadlineExceeded }
+            catch let error as ModelRoutingError where error == .budgetExceeded { throw ReadRunFailureCode.budgetExceeded }
+            catch { throw ReadRunFailureCode.planningFailed }
+            if let plans {
+                do { try await plans.save(snapshot:controller.snapshot(),requestID:request.requestID,plan:planned,deadline:min(deadline,.now.advanced(by:.seconds(4)))) }
+                catch { throw ReadRunFailureCode.recoveryRequired }
+            }
+        }
         let proposal = planned.proposal, key = "read:"+request.runID.uuidString.lowercased()
         let command = try ActionCommand(actorID:request.actorID,runID:request.runID,tool:proposal.tool,idempotencyKey:key,
             target:proposal.target,arguments:proposal.arguments,scope:Array(request.effectiveToolScope))

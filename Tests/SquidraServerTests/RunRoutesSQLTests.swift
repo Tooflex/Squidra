@@ -186,6 +186,15 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                 let runSnapshot = try await PostgresRunStore(client:client).load(actorID:fixture.actor,runID:acceptedID,deadline:.now.advanced(by:.seconds(4)))
                 XCTAssertEqual(runSnapshot.state,.completed)
                 XCTAssertLessThan(completion.respondingVersion,runSnapshot.version)
+                let savedPlan = try await PostgresReadRunPlanStore(client:client,actorID:fixture.actor).load(runID:acceptedID,deadline:.now.advanced(by:.seconds(4)))
+                let planArchive = try XCTUnwrap(savedPlan)
+                XCTAssertEqual(planArchive.requestID,completion.requestID)
+                XCTAssertLessThan(planArchive.planningVersion,completion.respondingVersion)
+                let restored = try ReadPlanner(router:ModelRouter(models:[model],clock:RunHTTPTestSupport.clock),clock:RunHTTPTestSupport.clock)
+                    .restore(planArchive.archive,scope:ReadPlanningScope(entities:[PlanningEntity(id:fixture.entity,label:"Allowed fixture entity")]),maximumCostMicroUSD:0,maximumOutputTokens:512)
+                XCTAssertEqual(restored.proposal.target,"entity:"+fixture.entity.uuidString.lowercased())
+                XCTAssertEqual(restored.routing.reservedCostUpperBoundMicroUSD,0)
+
                 let foreignCompletion = try await PostgresReadRunCompletionStore(client:client,actorID:UUID()).load(runID:acceptedID,deadline:.now.advanced(by:.seconds(4)))
                 XCTAssertNil(foreignCompletion)
 

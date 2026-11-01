@@ -26,17 +26,22 @@ public actor RunController {
     }
 
     /// Host-only continuation after the old worker has stopped. These states
-    /// precede the first model/tool dispatch; later checkpoints are ineligible.
+    /// precede tool reservation. PLANNING additionally requires a validated archive
+    /// supplied by the engine; ordinary early continuation excludes that state.
     static func restoreBeforePlanning(actorID: UUID,id: UUID,traceID: UUID,expectedVersion: Int64,
-        store: any RunStore,clock: any SquidraDomain.Clock) async throws -> RunController {
+        store: any RunStore,clock: any SquidraDomain.Clock,allowPlanning: Bool = false) async throws -> RunController {
         var record = try await store.load(actorID:actorID,runID:id,deadline:.now.advanced(by:.seconds(4)))
         try record.validate()
         guard record.actorID == actorID,record.id == id,record.traceID == traceID,record.version == expectedVersion,
-              [.created,.validating,.contextLoading].contains(record.state),record.steps == 0,record.calls == 0,
+              ([.created,.validating,.contextLoading].contains(record.state) || (allowPlanning && record.state == .planning)),record.steps == 0,record.calls == 0,
               record.iteration == nil,record.invocation == nil,let wallEnd = record.deadlineSecondsSince1970 else { throw RunError.recoveryRequired }
-        let tick = clock.monotonicElapsed(),remaining = (wallEnd - (try clock.now()).secondsSince1970)*1000
+        let tick = clock.monotonicElapsed(),now = try clock.now().secondsSince1970
+        let remaining = (wallEnd-now)*1000
         guard tick >= .zero,remaining.isFinite,remaining <= Double(record.budget.activeMilliseconds-record.activeMilliseconds)+0.001 else { throw RunError.clockRegression }
         record.activeMilliseconds = record.budget.activeMilliseconds-Int64(max(0,remaining.rounded(.down)))
+        // Persist the same rounded deadline as the charged integer budget. Otherwise
+        // a retry after a lost CAS acknowledgement looks like clock regression.
+        record.deadlineSecondsSince1970 = min(wallEnd,now+Double(record.budget.activeMilliseconds-record.activeMilliseconds)/1000)
         if record.activeMilliseconds >= record.budget.activeMilliseconds {
             record.state = .timedOut;record.terminalCode = .timedOut;record.substate = nil;record.deadlineSecondsSince1970 = nil
         }
