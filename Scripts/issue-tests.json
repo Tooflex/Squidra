@@ -1285,5 +1285,21 @@
     "tests": [
       "github_governance_contracts"
     ]
+  },
+  "SQD-002": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Tests/InstallTests/qualify.py"
+    ],
+    "tests": [
+      "verified_install",
+      "native_cli",
+      "installed_server_database",
+      "installed_web",
+      "safe_uninstall",
+      "unsafe_archives_rejected"
+    ],
+    "requires_database": true
   }
 }
