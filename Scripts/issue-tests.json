@@ -1091,5 +1091,9 @@
     "tests": [
       "typed_web_questions"
     ]
+  },
+  "T11-META-RESPONSES": {
+    "kind": "xctest",
+    "filter": "^SquidraMetaTests\\.MetaResponsesTests/"
   }
 }
