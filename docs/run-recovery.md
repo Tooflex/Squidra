@@ -427,3 +427,40 @@ These APIs now cover the persisted plan, read and answer boundaries. Automatic
 server execution recovery still needs durable worker ownership and activation;
 unknown outcomes without their required archives must not be retried implicitly.
 SQD-028 remains open for that integration and its qualification.
+
+## Local worker ownership primitive
+
+`LocalRunOwnership` provides a nonblocking exclusive kernel lock for one actor in
+an existing private local directory. The host must retain the handle until all
+workers stop and join, including cancellation, then call
+`releaseAfterJoiningWorkers`. Destruction closes the descriptor as a fallback;
+O_CLOEXEC prevents an executed child from retaining it. The lock file is never
+unlinked on release. A subsequent owner reads its stable random domain UUID and
+obtains a new owner UUID.
+
+Recovery registration must persist and compare **both** domainID and fileID
+(device/inode), as well as actor identity. Copying a file preserves its contents
+but does not prove that a process holding the original inode has stopped. A
+replacement/copy therefore cannot authorize recovery of the old owner's runs.
+Admission must also bind the actor to that local domain before dispatch; merely
+constructing a handle is not sufficient authorization to resume arbitrary runs.
+
+The primitive opens a private owner-only directory, then opens the lock relative
+to its descriptor with no-follow and close-on-exec. It rejects symlinks, shared
+permissions, nonregular files, hard links, malformed identities and unsupported
+filesystems. Identity initialization is synchronized and fsynced while locked.
+Darwin requires MNT_LOCAL; Linux permits an explicit set of local filesystem
+types. This is an offline same-host mechanism, not a distributed lease or a claim
+that a lost PostgreSQL connection proves process death. It must not be used for
+cross-host database deployments or copied runtime-directory failover.
+
+`SQD-028-OWNERSHIP` covers same-actor exclusion, independent actors, stable identity
+across release, copied-file distinction and unsafe-path rejection. It also starts
+an owned Python child holding the same kernel lock, verifies contention, SIGKILLs
+that exact child, waits for confirmed signal exit and reacquires the unchanged
+identity. Python is test-only. Local macOS qualification passes; Linux still needs
+its configured CI qualification when hosted CI is restored.
+
+The primitive is not yet wired into server admission or startup recovery. Durable
+run-owner registration, joined service lifetime, startup selection and refusal of
+foreign/untracked owners remain necessary before SQD-028 can close.

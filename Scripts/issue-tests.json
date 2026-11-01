@@ -868,5 +868,9 @@
       "model_free_server_recovery",
       "second_server_replay"
     ]
+  },
+  "SQD-028-OWNERSHIP": {
+    "kind": "xctest",
+    "filter": "^SquidraAgentRuntimeTests\\.LocalRunOwnershipTests/"
   }
 }
