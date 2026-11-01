@@ -36,7 +36,7 @@ public struct PostgresWorldRepository: WorldRepository {
             return results
         }
     }
-    private func append(_ event: WorldEventDraft, expectedVersion: Int64, idempotencyKey: String,
+    func append(_ event: WorldEventDraft, expectedVersion: Int64, idempotencyKey: String,
                         connection: PostgresConnection) async throws -> JournalAppend {
         let raw = String(decoding:event.payload.bytes,as:UTF8.self)
         let occurredSeconds = event.times.occurredMicroseconds.map { Double($0/1_000_000) }
@@ -134,7 +134,7 @@ public struct PostgresWorldRepository: WorldRepository {
         } catch WorldJournalError.unsupportedEvent { throw WorldJournalError.unsupportedEvent }
         catch { throw WorldJournalError.corruptRecord }
     }
-    private func transaction<Value: Sendable>(deadline: ContinuousClock.Instant,
+    func transaction<Value: Sendable>(deadline: ContinuousClock.Instant,
         _ body: @escaping @Sendable (PostgresConnection) async throws -> Value) async throws -> Value {
         try await withConnection(deadline: deadline) { connection in
             _ = try await BoundedPostgresQuery.rows(connection, "BEGIN")
