@@ -263,3 +263,28 @@ checks archive persistence and revalidation through the live PostgreSQL engine.
 This is an explicit host API; automatic execution recovery, post-proposal/tool
 continuation and actual process-kill coverage at this boundary remain outstanding.
 SQD-028 remains open.
+
+## Saved-plan recovery across process death
+
+`SQD-028-SAVED-PLAN-CRASH` runs the real read engine until its validated plan has
+committed in PostgreSQL, then the separate test-only plan-store wrapper signals
+the harness and waits. The harness SIGKILLs that owned process and verifies its
+exit before a new process reloads the original task and checkpoint. No production
+crash hooks are used. At this boundary there has been one planning model call and
+zero tool calls or steps.
+
+The fresh process calls `resumeSavedPlan` with a fixture model that can only emit
+one final answer, so repeating planning cannot pass. It requires the original
+checkpoint budget, nondecreasing consumed time, one read/step, the retained
+planning reservation of 5 microUSD and total reservation of 10 microUSD. The real
+engine can reduce the initial active budget by admission time before creating its
+checkpoint; the test compares the complete persisted budget rather than assuming
+an exact 15 seconds. Costs here are authored fixture values, not billed usage.
+
+The normal model-free server subsequently publishes the completed archive after
+natural lease expiry. A second server process must replay the identical six SSE
+frames; the database verifier checks terminal runtime version and counters plus
+archived/published answer equality. The suite is registered in local checks and
+the currently suspended Bootstrap workflow. This qualifies the explicit saved
+plan continuation; automatic execution recovery and later-phase continuation
+remain pending for SQD-028.
