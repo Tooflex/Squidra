@@ -978,5 +978,16 @@
       "browser_sql_decide",
       "browser_sql_reload"
     ]
+  },
+  "SQD-023": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/test-web-review.py",
+      "timeline"
+    ],
+    "tests": [
+      "typed_web_timeline"
+    ]
   }
 }

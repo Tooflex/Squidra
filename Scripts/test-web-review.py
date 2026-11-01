@@ -10,7 +10,9 @@ root = Path(__file__).resolve().parent.parent
 web = root / 'web'
 report = web / 'test-results/report.json'
 report.unlink(missing_ok=True)
-commands = [['npm', 'ci', '--ignore-scripts'], ['npx', '--no-install', 'playwright', 'install', 'chromium'], ['npm', 'test']]
+timeline = sys.argv[1:] == ['timeline']
+expected = 6
+commands = [['npm', 'ci', '--ignore-scripts'], ['npx', '--no-install', 'playwright', 'install', 'chromium'], ['npm', 'test', '--', 'tests/timeline/' if timeline else 'tests/review.spec.ts']]
 if sys.platform.startswith('linux') and os.environ.get('CI') == 'true':
     commands[1].append('--with-deps')
 for command in commands:
@@ -19,7 +21,7 @@ for command in commands:
         sys.exit(result.returncode)
 try:
     stats = json.loads(report.read_text())['stats']
-    assert stats['expected'] == 6 and all(stats[key] == 0 for key in ['unexpected', 'flaky', 'skipped'])
+    assert stats['expected'] == expected and all(stats[key] == 0 for key in ['unexpected', 'flaky', 'skipped'])
 except (OSError, ValueError, KeyError, AssertionError):
     sys.exit('Browser report missing, incomplete, skipped, flaky or failed')
-print('SQUIDRA_TEST_PASS:typed_web_review')
+print('SQUIDRA_TEST_PASS:' + ('typed_web_timeline' if timeline else 'typed_web_review'))
