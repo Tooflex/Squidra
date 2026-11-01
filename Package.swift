@@ -13,6 +13,7 @@ let package = Package(
     products: [
         .library(name: "SquidraDomain", targets: ["SquidraDomain"]),
         .executable(name: "squidra", targets: ["SquidraServer"]),
+        .executable(name: "squidra-eval", targets: ["EvalRunner"]),
         .executable(name: "squidra-run-crash-fixture", targets: ["RunCrashFixture"]),
         .executable(name: "squidra-movement-crash-fixture", targets: ["MovementCrashFixture"]),
     ],
@@ -38,6 +39,7 @@ let package = Package(
             (name == "SquidraSecurity" ? [.product(name: "Crypto", package: "swift-crypto")] : []) +
             (name == "SquidraTools" ? [.byName(name: "SquidraWorld"), .byName(name: "SquidraSecurity"), .product(name: "JSONSchema", package: "swift-json-schema"), .product(name: "Crypto", package: "swift-crypto")] : []))
     } + [
+        .executableTarget(name: "EvalRunner", dependencies: ["SquidraDomain", "SquidraTemporal", "SquidraSpatial", "SquidraPerception"], path: "Evals/Runner"),
         .executableTarget(name: "MovementCrashFixture", dependencies: ["SquidraPerception", "SquidraSpatial", "SquidraDomain", "SquidraWorld", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio")], path: "Tests/MovementCrashFixture"),
         .executableTarget(name: "RunCrashFixture", dependencies: ["SquidraAgentRuntime", "SquidraTools", "SquidraDomain", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio")], path: "Tests/RunCrashFixture"),
         .target(name: "SquidraPostgres", dependencies: ["SquidraSpatial", "SquidraProtocols", "SquidraDomain", "SquidraWorld", "SquidraAgentRuntime", "SquidraTools", "SquidraSecurity", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log"), "SquidraPerception"]),

@@ -1,0 +1,495 @@
+{
+  "version": "authored-components-1",
+  "annotationVersion": "1",
+  "mode": "deterministic_components",
+  "description": "Authored synthetic component conformance cases; not a real vision or language-model quality estimate.",
+  "cases": [
+    {
+      "id": "temporal-01",
+      "kind": "temporal",
+      "input": {
+        "relation": "before",
+        "a": [
+          0,
+          1
+        ],
+        "b": [
+          1,
+          2
+        ]
+      },
+      "expected": true
+    },
+    {
+      "id": "temporal-02",
+      "kind": "temporal",
+      "input": {
+        "relation": "before",
+        "a": [
+          0,
+          2
+        ],
+        "b": [
+          1,
+          3
+        ]
+      },
+      "expected": false
+    },
+    {
+      "id": "temporal-03",
+      "kind": "temporal",
+      "input": {
+        "relation": "before",
+        "a": [
+          1,
+          1
+        ],
+        "b": [
+          2,
+          3
+        ]
+      },
+      "expected": false
+    },
+    {
+      "id": "temporal-04",
+      "kind": "temporal",
+      "input": {
+        "relation": "overlaps",
+        "a": [
+          0,
+          2
+        ],
+        "b": [
+          1,
+          3
+        ]
+      },
+      "expected": true
+    },
+    {
+      "id": "temporal-05",
+      "kind": "temporal",
+      "input": {
+        "relation": "overlaps",
+        "a": [
+          0,
+          1
+        ],
+        "b": [
+          1,
+          2
+        ]
+      },
+      "expected": false
+    },
+    {
+      "id": "temporal-06",
+      "kind": "temporal",
+      "input": {
+        "relation": "overlaps",
+        "a": [
+          0,
+          0
+        ],
+        "b": [
+          0,
+          1
+        ]
+      },
+      "expected": false
+    },
+    {
+      "id": "temporal-07",
+      "kind": "temporal",
+      "input": {
+        "relation": "during",
+        "a": [
+          1,
+          2
+        ],
+        "b": [
+          0,
+          3
+        ]
+      },
+      "expected": true
+    },
+    {
+      "id": "temporal-08",
+      "kind": "temporal",
+      "input": {
+        "relation": "during",
+        "a": [
+          0,
+          3
+        ],
+        "b": [
+          1,
+          2
+        ]
+      },
+      "expected": false
+    },
+    {
+      "id": "temporal-09",
+      "kind": "temporal",
+      "input": {
+        "relation": "during",
+        "a": [
+          1,
+          1
+        ],
+        "b": [
+          2,
+          3
+        ]
+      },
+      "expected": true
+    },
+    {
+      "id": "temporal-10",
+      "kind": "temporal",
+      "input": {
+        "relation": "during",
+        "a": [
+          0,
+          1
+        ],
+        "b": [
+          0,
+          1
+        ]
+      },
+      "expected": true
+    },
+    {
+      "id": "spatial-01",
+      "kind": "spatial",
+      "input": {
+        "relation": "inside",
+        "lower": [
+          0.2,
+          0.2,
+          0.2
+        ],
+        "upper": [
+          0.8,
+          0.8,
+          0.8
+        ]
+      },
+      "expected": true
+    },
+    {
+      "id": "spatial-02",
+      "kind": "spatial",
+      "input": {
+        "relation": "inside",
+        "lower": [
+          0,
+          0.2,
+          0.2
+        ],
+        "upper": [
+          0.8,
+          0.8,
+          0.8
+        ]
+      },
+      "expected": false
+    },
+    {
+      "id": "spatial-03",
+      "kind": "spatial",
+      "input": {
+        "relation": "inside",
+        "lower": [
+          0.2,
+          0.2,
+          0.2
+        ],
+        "upper": [
+          0.8,
+          0.8,
+          0.8
+        ],
+        "error": 0.21
+      },
+      "expected": false
+    },
+    {
+      "id": "spatial-04",
+      "kind": "spatial",
+      "input": {
+        "relation": "on_top_of",
+        "lower": [
+          0.2,
+          0.2,
+          1
+        ],
+        "upper": [
+          0.8,
+          0.8,
+          2
+        ]
+      },
+      "expected": true
+    },
+    {
+      "id": "spatial-05",
+      "kind": "spatial",
+      "input": {
+        "relation": "on_top_of",
+        "lower": [
+          0.2,
+          0.2,
+          1.02
+        ],
+        "upper": [
+          0.8,
+          0.8,
+          2.02
+        ]
+      },
+      "expected": false
+    },
+    {
+      "id": "spatial-06",
+      "kind": "spatial",
+      "input": {
+        "relation": "on_top_of",
+        "lower": [
+          0.99,
+          0,
+          1
+        ],
+        "upper": [
+          1.99,
+          1,
+          2
+        ]
+      },
+      "expected": false
+    },
+    {
+      "id": "spatial-07",
+      "kind": "spatial",
+      "input": {
+        "relation": "next_to",
+        "lower": [
+          1.1,
+          0,
+          0
+        ],
+        "upper": [
+          2.1,
+          1,
+          1
+        ]
+      },
+      "expected": true
+    },
+    {
+      "id": "spatial-08",
+      "kind": "spatial",
+      "input": {
+        "relation": "next_to",
+        "lower": [
+          1.3,
+          0,
+          0
+        ],
+        "upper": [
+          2.3,
+          1,
+          1
+        ]
+      },
+      "expected": false
+    },
+    {
+      "id": "spatial-09",
+      "kind": "spatial",
+      "input": {
+        "relation": "next_to",
+        "lower": [
+          1.1,
+          0,
+          0
+        ],
+        "upper": [
+          2.1,
+          1,
+          1
+        ],
+        "calibrated": false
+      },
+      "expected": false
+    },
+    {
+      "id": "spatial-10",
+      "kind": "spatial",
+      "input": {
+        "relation": "inside",
+        "lower": [
+          0.2,
+          0.2,
+          0.2
+        ],
+        "upper": [
+          0.8,
+          0.8,
+          0.8
+        ],
+        "confirmed": false
+      },
+      "expected": false
+    },
+    {
+      "id": "movement-01",
+      "kind": "movement",
+      "input": {
+        "positions": [
+          0,
+          0.2,
+          0.2,
+          0.2
+        ]
+      },
+      "expected": true
+    },
+    {
+      "id": "movement-02",
+      "kind": "movement",
+      "input": {
+        "positions": [
+          0,
+          -0.2,
+          -0.2,
+          -0.2
+        ]
+      },
+      "expected": true
+    },
+    {
+      "id": "movement-03",
+      "kind": "movement",
+      "input": {
+        "positions": [
+          0,
+          0.3,
+          0.301,
+          0.299
+        ]
+      },
+      "expected": true
+    },
+    {
+      "id": "movement-04",
+      "kind": "movement",
+      "input": {
+        "positions": [
+          0,
+          0.01,
+          -0.01,
+          0.005
+        ]
+      },
+      "expected": false
+    },
+    {
+      "id": "movement-05",
+      "kind": "movement",
+      "input": {
+        "positions": [
+          0,
+          0.2,
+          0.2
+        ]
+      },
+      "expected": false
+    },
+    {
+      "id": "movement-06",
+      "kind": "movement",
+      "input": {
+        "positions": [
+          0,
+          0.2,
+          null,
+          0.2,
+          0.2,
+          0.2
+        ]
+      },
+      "expected": false
+    },
+    {
+      "id": "movement-07",
+      "kind": "movement",
+      "input": {
+        "positions": [
+          0,
+          0.2,
+          0.2,
+          0.2,
+          0.2
+        ],
+        "ambiguous": [
+          2
+        ]
+      },
+      "expected": false
+    },
+    {
+      "id": "movement-08",
+      "kind": "movement",
+      "input": {
+        "positions": [
+          0,
+          0.2,
+          0.2,
+          0.2,
+          0.2
+        ],
+        "frameChangeAt": 2
+      },
+      "expected": false
+    },
+    {
+      "id": "movement-09",
+      "kind": "movement",
+      "input": {
+        "positions": [
+          0,
+          0.2,
+          0.2,
+          0.2
+        ],
+        "error": 0.1
+      },
+      "expected": false
+    },
+    {
+      "id": "movement-10",
+      "kind": "movement",
+      "input": {
+        "positions": [
+          0,
+          0.2,
+          0.2,
+          0.2
+        ],
+        "times": [
+          0,
+          0.01,
+          0.02,
+          0.03
+        ]
+      },
+      "expected": false
+    }
+  ]
+}
