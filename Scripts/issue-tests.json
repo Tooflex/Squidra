@@ -1459,5 +1459,34 @@
       "fake_model_rejects_denial_and_fabrication"
     ],
     "requires_database": true
+  },
+  "T09-REPORT-CONTRACTS": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Tests/SquidraAcceptanceTests/test_release_report.py"
+    ],
+    "tests": [
+      "release_report_contracts"
+    ],
+    "requires_database": false
+  },
+  "T09-INVARIANTS": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/release-check.sh"
+    ],
+    "tests": [
+      "report_contracts",
+      "approval_invariants",
+      "idempotency_invariants",
+      "runtime_contracts",
+      "crash_recovery",
+      "annotated_evaluations",
+      "historical_demo",
+      "security_gates"
+    ],
+    "requires_database": true
   }
 }
