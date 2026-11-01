@@ -5,7 +5,7 @@ import SquidraCognition
 import SquidraDomain
 import SquidraPostgres
 import SquidraProtocols
-import SquidraServer
+@testable import SquidraServer
 import SquidraWorld
 import XCTest
 
@@ -279,6 +279,33 @@ final class RunWorkerSQLTests: XCTestCase, @unchecked Sendable {
             let activeAfterShutdown = await coordinator.activeCount
             let executionsAfterShutdown = await executor.calls
             XCTAssertTrue(shutdownFinishedAfterRelease);XCTAssertEqual(activeAfterShutdown,0);XCTAssertEqual(executionsAfterShutdown,0)
+            let status = try await PostgresRunPublicationStore(client:other,actorID:actor).status(actorID:actor,runID:request.runID,deadline:.now.advanced(by:.seconds(4)))
+            XCTAssertEqual(status.phase,.cancelled)
+        }
+    }
+    func testRecoveryClaimSharesCapacityAndShutdownJoinsWithoutDispatch() async throws {
+        try await Self.withDatabase { client,other,actor in
+            let events = PostgresRunEventStore(client:client,actorID:actor),base = PostgresRunPublicationStore(client:client,actorID:actor)
+            let publication = PublicationFixture(base,.pausedClaim),executor = ExecutionFixture(.gated),request = try Self.request(actor)
+            let coordinator = try PublishedReadRunCoordinator(actorID:actor,executor:executor,events:events,publication:publication,clock:Self.clock,maximumConcurrentRuns:1)
+            let binding = AGUIRunBinding(actorID:actor,runID:request.runID,threadID:UUID(),requestID:request.requestID)
+            _ = try await events.create(binding,retentionSeconds:3600,deadline:.now.advanced(by:.seconds(4)))
+            let recovery = Task {
+                try await coordinator.recover(StoredReadRunTask(request:request,threadID:binding.threadID),claim:{
+                    try await publication.claim(binding,maximumExecutionSeconds:5,at:Self.clock.now(),deadline:.now.advanced(by:.seconds(4)))
+                },execute:{ request in _ = try await executor.executeAnswer(request) },complete:{ XCTFail("Unexecuted recovery finalized") })
+            }
+            try await Self.wait { await publication.claimsCommitted == 1 }
+            do { _ = try await coordinator.submit(Self.request(actor),threadID:UUID());XCTFail("Recovery reservation exceeded capacity") }
+            catch { XCTAssertEqual(error as? ReadRunSubmissionError,.busy) }
+            let probe = CompletionProbe(),shutdown = Task { await coordinator.shutdown();await probe.finish() }
+            try await Self.wait { !(await coordinator.isAccepting) }
+            let early = await probe.finished;XCTAssertFalse(early)
+            await publication.release()
+            let admitted = try await recovery.value;XCTAssertFalse(admitted)
+            await shutdown.value
+            let calls = await executor.calls,active = await coordinator.activeCount
+            XCTAssertEqual(calls,0);XCTAssertEqual(active,0)
             let status = try await PostgresRunPublicationStore(client:other,actorID:actor).status(actorID:actor,runID:request.runID,deadline:.now.advanced(by:.seconds(4)))
             XCTAssertEqual(status.phase,.cancelled)
         }

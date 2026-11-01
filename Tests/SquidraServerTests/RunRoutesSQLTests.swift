@@ -13,6 +13,7 @@ import SquidraObservability
 import SquidraPostgres
 import SquidraProtocols
 import SquidraTools
+import SquidraTemporal
 import XCTest
 @testable import SquidraServer
 
@@ -132,6 +133,73 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                 let status = try await publication.status(actorID:actor,runID:request.runID,deadline:.now.advanced(by:.seconds(4)))
                 XCTAssertEqual(status.stream.nextSequence,7);XCTAssertEqual(status.phase,.succeeded)
             }
+            }
+        }
+    }
+    func testLiveOwnedCheckpointContinuationAndFailClosedBoundaries() async throws {
+        try await RunHTTPTestSupport.withClients { client,_ in
+            for mode in ["early","missing-plan","revoked-scope","cancel"] {
+                let (fixture,model,_,_) = try await RunHTTPTestSupport.realHarness(client:client,pauseOnModelCall:mode == "cancel" ? 1 : nil)
+                let clock = try SystemClock(timeZone:IANATimeZone(identifier:"Etc/UTC")),at = try clock.now()
+                let request = try ReadRunRequest(actorID:fixture.actor,question:"Resume the historical fixture",
+                    planningScope:ReadPlanningScope(entities:[PlanningEntity(id:fixture.entity,label:"Fixture")]),effectiveToolScope:["world:read"],intent:.historical,
+                    modelOptions:ReadPlanningOptions(deadline:UTCInstant(secondsSince1970:at.secondsSince1970+60)),budget:RunBudget(activeMilliseconds:60000))
+                let binding = AGUIRunBinding(actorID:fixture.actor,runID:request.runID,threadID:UUID(),requestID:request.requestID)
+                let directory = FileManager.default.temporaryDirectory.appendingPathComponent("squidra-continuation-"+UUID().uuidString)
+                try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:false,attributes:[.posixPermissions:0o700])
+                defer { try? FileManager.default.removeItem(at:directory) }
+                let old = try LocalRunOwnership.acquire(directory:directory,actorID:fixture.actor)
+                defer { old.releaseAfterJoiningWorkers() }
+                let events = PostgresRunEventStore(client:client,actorID:fixture.actor),publication = PostgresRunPublicationStore(client:client,actorID:fixture.actor)
+                _ = try await events.create(binding,retentionSeconds:3600,deadline:.now.advanced(by:.seconds(4)))
+                try await PostgresReadRunTaskStore(client:client,actorID:fixture.actor).save(StoredReadRunTask(request:request,threadID:binding.threadID),deadline:.now.advanced(by:.seconds(4)))
+                try await PostgresReadRunOwnershipStore(client:client,ownership:old).register(runID:request.runID,deadline:.now.advanced(by:.seconds(4)))
+                _ = try await publication.claim(binding,maximumExecutionSeconds:60,at:at,deadline:.now.advanced(by:.seconds(4)))
+                let runtime = PostgresRunStore(client:client)
+                let controller = try await RunController.create(actorID:fixture.actor,id:request.runID,traceID:request.traceID,budget:request.budget,store:runtime,clock:clock)
+                _ = try await controller.transition(to:.validating)
+                _ = try await controller.transition(to:.contextLoading)
+                if mode == "missing-plan" { _ = try await controller.transition(to:.planning) }
+                let original = try await controller.snapshot()
+                old.releaseAfterJoiningWorkers()
+                let owner = try LocalRunOwnership.acquire(directory:directory,actorID:fixture.actor)
+                defer { owner.releaseAfterJoiningWorkers() }
+                let host = try ReadHostConfiguration(models:[model],entities:[PlanningEntity(id:mode == "revoked-scope" ? UUID() : fixture.entity,label:"Current scope")])
+                try await ServerComposition.live(configuration:fixture.configuration,readHost:host,localOwnership:owner).test(.live) { http in
+                    if mode == "cancel" {
+                        try await RunHTTPTestSupport.wait { await model.calls == 1 }
+                        let cancelled = try await http.executeRequest(uri:"/api/v1/runs/"+request.runID.uuidString+"/cancel",method:.post,
+                            headers:[.authorization:"Bearer "+fixture.token],body:nil)
+                        XCTAssertEqual(cancelled.status,.accepted)
+                    }
+                    let expected:RunPublicationPhase = mode == "early" ? .succeeded : (mode == "cancel" ? .cancelled : .recoveryRequired)
+                    try await RunHTTPTestSupport.wait {
+                        (try? await publication.status(actorID:fixture.actor,runID:request.runID,deadline:.now.advanced(by:.seconds(4))))?.phase == expected
+                    }
+                    let final = try await runtime.load(actorID:fixture.actor,runID:request.runID,deadline:.now.advanced(by:.seconds(4)))
+                    XCTAssertEqual(final.id,original.id);XCTAssertEqual(final.traceID,original.traceID);XCTAssertEqual(final.budget,original.budget)
+                    if let deadline = final.deadlineSecondsSince1970 {
+                        XCTAssertLessThanOrEqual(deadline,try XCTUnwrap(original.deadlineSecondsSince1970))
+                    } else { XCTAssertTrue(final.state.isTerminal) }
+                    XCTAssertGreaterThanOrEqual(final.activeMilliseconds,original.activeMilliseconds)
+                    if mode == "early" { XCTAssertEqual(final.state,.completed);XCTAssertEqual(final.calls,1);XCTAssertEqual(final.steps,1) }
+                    if mode == "cancel" { XCTAssertEqual(final.state,.cancelled) }
+                    let calls = await model.calls
+                    XCTAssertEqual(calls,mode == "early" ? 2 : (mode == "cancel" ? 1 : 0))
+                    let trace = try await http.executeRequest(uri:"/api/v1/runs/"+request.runID.uuidString+"/trace",method:.get,
+                        headers:[.authorization:"Bearer "+fixture.token],body:nil)
+                    XCTAssertEqual(trace.status,.ok)
+                    let traceValue = try RunHTTPTestSupport.object(trace.body)
+                    let spans = try XCTUnwrap(traceValue["spans"] as? [[String:Any]])
+                    XCTAssertEqual(spans.filter { $0["stage"] as? String == "run" }.count,1)
+                    XCTAssertEqual(spans.filter { $0["stage"] as? String == "model" }.count,calls)
+                    for span in spans {
+                        let attributes = try XCTUnwrap(span["attributes"] as? [String:String])
+                        XCTAssertEqual(attributes["squidra.trace_id"],request.traceID.uuidString.lowercased())
+                    }
+                    XCTAssertFalse(String(buffer:trace.body).contains(request.question))
+                }
+                XCTAssertFalse(owner.isHeld)
             }
         }
     }

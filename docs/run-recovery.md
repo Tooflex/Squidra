@@ -608,3 +608,40 @@ The harness also checks configuration-only operation and unsafe paths. Other
 crash suites retain their original expired-lease behavior; this suite explicitly
 proves recovery through the local ownership path. It does not yet resume
 nonterminal runs or configure a CLI model host.
+
+## Automatic nonterminal read continuation with an explicit model host
+
+A live composition with both `readHost` and local ownership polls registered
+previous-owner runs after completed-archive recovery. It loads the immutable task
+and current runtime version, then reserves capacity in `PublishedReadRunCoordinator`
+before acquiring publication takeover. Recovery shares the coordinator's admission
+limit, cancellation endpoint and joined shutdown. A failed or ambiguous claim
+never dispatches; a repeated candidate already reserved by this host does nothing.
+
+The host chooses the existing checked engine continuation by checkpoint:
+CREATED/VALIDATING/CONTEXT_LOADING resumes before planning; PLANNING requires its
+saved plan; EXECUTING_TOOL requires its saved read result; RESPONDING requires its
+saved answer. The engine retains the runtime version fence, original budgets,
+idempotency key and downtime accounting. Unsupported states, missing archives or
+a saved scope outside the current host's allowed entities fail closed with public
+recovery-required status. Global scope is not admitted by this host path.
+
+The coordinator additionally caps the worker by the earlier of the saved request
+and original publication deadlines. Successful execution publishes through the
+checked completed archive, never reconstructing a new proof from untrusted bytes.
+Completion cleanup is joined; an uncertain publication leaves durable recovery
+state for the archive poller. No HTTP status/replay request dispatches execution.
+
+T05-HTTP exercises real early checkpoint continuation through live composition
+(two model calls, one read, preserved run/trace/budget), missing-plan and revoked-
+scope refusal with zero model calls, and cancellation during the resumed model
+call. T05-WORKERS checks that a pending recovery claim consumes shared capacity and
+that shutdown joins its cancellation without execution. Saved-plan/result/answer
+engine crash suites remain separate qualification; full automatic process-crash
+coverage of these host routes and CLI model-host configuration remain outstanding.
+
+Resumed execution creates a private trace with the original trace/run/request
+correlation. Actual model and tool calls inherit it; archived work is not reported
+as new calls. The live continuation test checks one run span, the expected model
+span count and original trace ID in all four scenarios, with no saved question
+text in the HTTP trace response.

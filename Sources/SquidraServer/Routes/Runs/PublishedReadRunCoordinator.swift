@@ -79,6 +79,64 @@ public actor PublishedReadRunCoordinator {
         registered = true
         return binding
     }
+    /// Internal host path: the claim provider must prove the previous worker
+    /// stopped. Reservations, cancellation and shutdown are shared with admission.
+    func recover(_ task: StoredReadRunTask,
+        claim acquire: @escaping @Sendable () async throws -> any RunPublicationClaim,
+        execute: @escaping @Sendable (ReadRunRequest) async throws -> Void,
+        complete: @escaping @Sendable () async throws -> Void) async throws -> Bool {
+        let request = task.request
+        guard accepting,!Task.isCancelled else { return false }
+        guard request.actorID == actorID,request.effectiveToolScope == ["world:read"] else { throw ReadRunSubmissionError.invalidRequest }
+        guard !reservations.contains(request.runID),reservations.count < maximumConcurrentRuns else { return false }
+        reservations.insert(request.runID)
+        var registered = false
+        defer { if !registered { release(request.runID) } }
+        let claim = try await acquire()
+        let binding = AGUIRunBinding(actorID:actorID,runID:request.runID,threadID:task.threadID,requestID:request.requestID)
+        guard claim.binding == binding else { throw ReadRunSubmissionError.recoveryRequired }
+        guard accepting,!Task.isCancelled,!cancellationRequests.contains(request.runID) else {
+            await Self.publish(publication,claim:claim,outcome:.cancelled,clock:clock)
+            return false
+        }
+        let wallDeadline = min(request.modelOptions.deadline,claim.executionExpiresAt)
+        let remaining = wallDeadline.secondsSince1970-(try clock.now()).secondsSince1970
+        let milliseconds = Int64(min(180_000,Double(request.budget.activeMilliseconds),max(0,remaining*1000)).rounded(.down))
+        guard milliseconds > 0 else {
+            await Self.publish(publication,claim:claim,outcome:.failed(.deadlineExceeded),clock:clock)
+            return true
+        }
+        let options = ReadPlanningOptions(preferredModelID:request.modelOptions.preferredModelID,cloudConsent:request.modelOptions.cloudConsent,
+            allowFallback:request.modelOptions.allowFallback,maximumCostMicroUSD:request.modelOptions.maximumCostMicroUSD,
+            maximumOutputTokens:request.modelOptions.maximumOutputTokens,deadline:wallDeadline)
+        let bounded = ReadRunRequest(actorID:request.actorID,runID:request.runID,traceID:request.traceID,requestID:request.requestID,
+            question:request.question,planningScope:request.planningScope,effectiveToolScope:request.effectiveToolScope,intent:request.intent,
+            modelOptions:options,budget:request.budget)
+        let deadline = ContinuousClock.now.advanced(by:.milliseconds(milliseconds))
+        workers[request.runID] = Task {
+            do {
+                try await withThrowingTaskGroup(of:Void.self) { group in
+                    group.addTask { try await execute(bounded) }
+                    group.addTask { try await ContinuousClock().sleep(until:deadline);throw ReadRunFailureCode.deadlineExceeded }
+                    defer { group.cancelAll() }
+                    try await group.next()
+                }
+                // Completion publication is joined even if cancellation arrives now.
+                let cleanup = Task { try? await complete() }
+                await cleanup.value
+            } catch {
+                let code = (error as? ReadRunFailure)?.code ?? (error as? ReadRunFailureCode)
+                let outcome: RunPublicationOutcome
+                if error is CancellationError || code == .cancelled { outcome = .cancelled }
+                else if code == .deadlineExceeded { outcome = .failed(.deadlineExceeded) }
+                else { outcome = .failed(.recoveryRequired) }
+                await Self.publish(self.publication,claim:claim,outcome:outcome,clock:self.clock)
+            }
+            self.release(request.runID)
+        }
+        registered = true
+        return true
+    }
     /// Signals only a locally owned execution. True acknowledges the request,
     /// not a terminal state: callers must read durable publication status.
     /// A completion already being published wins; no external rollback is implied.
