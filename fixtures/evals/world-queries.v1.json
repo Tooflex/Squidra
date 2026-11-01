@@ -1,0 +1,223 @@
+{
+  "version": "authored-world-queries-1",
+  "annotationVersion": "1",
+  "mode": "deterministic_postgres_queries",
+  "events": [
+    {
+      "location": "a",
+      "from": 0,
+      "to": 100,
+      "corrects": null,
+      "inferred": false
+    },
+    {
+      "location": "b",
+      "from": 100,
+      "to": 200,
+      "corrects": null,
+      "inferred": false
+    },
+    {
+      "location": "c",
+      "from": 200,
+      "to": null,
+      "corrects": null,
+      "inferred": false
+    },
+    {
+      "location": "d",
+      "from": 100,
+      "to": 200,
+      "corrects": 1,
+      "inferred": false
+    },
+    {
+      "location": "d",
+      "from": 200,
+      "to": null,
+      "corrects": null,
+      "inferred": true
+    }
+  ],
+  "cases": [
+    {
+      "id": "query-01",
+      "kind": "temporal",
+      "valid": -1,
+      "known": 2,
+      "expected": {
+        "locations": [],
+        "sources": [],
+        "uncertainty": [
+          "noEvidence"
+        ]
+      }
+    },
+    {
+      "id": "query-02",
+      "kind": "temporal",
+      "valid": 0,
+      "known": 2,
+      "expected": {
+        "locations": [
+          "a"
+        ],
+        "sources": [
+          0
+        ],
+        "uncertainty": []
+      }
+    },
+    {
+      "id": "query-03",
+      "kind": "temporal",
+      "valid": 100,
+      "known": 2,
+      "expected": {
+        "locations": [
+          "b"
+        ],
+        "sources": [
+          1
+        ],
+        "uncertainty": []
+      }
+    },
+    {
+      "id": "query-04",
+      "kind": "temporal",
+      "valid": 200,
+      "known": 2,
+      "expected": {
+        "locations": [
+          "c"
+        ],
+        "sources": [
+          2
+        ],
+        "uncertainty": []
+      }
+    },
+    {
+      "id": "query-05",
+      "kind": "temporal",
+      "valid": 100,
+      "known": 3,
+      "expected": {
+        "locations": [
+          "d"
+        ],
+        "sources": [
+          3
+        ],
+        "uncertainty": []
+      }
+    },
+    {
+      "id": "query-06",
+      "kind": "temporal",
+      "valid": 100,
+      "known": 2,
+      "expected": {
+        "locations": [
+          "b"
+        ],
+        "sources": [
+          1
+        ],
+        "uncertainty": []
+      }
+    },
+    {
+      "id": "query-07",
+      "kind": "temporal",
+      "valid": 0,
+      "known": -1,
+      "expected": {
+        "locations": [],
+        "sources": [],
+        "uncertainty": [
+          "noEvidence"
+        ]
+      }
+    },
+    {
+      "id": "query-08",
+      "kind": "spatial",
+      "valid": 50,
+      "known": 4,
+      "expected": {
+        "locations": [
+          "a"
+        ],
+        "sources": [
+          0
+        ],
+        "uncertainty": []
+      }
+    },
+    {
+      "id": "query-09",
+      "kind": "spatial",
+      "valid": 150,
+      "known": 4,
+      "expected": {
+        "locations": [
+          "d"
+        ],
+        "sources": [
+          3
+        ],
+        "uncertainty": []
+      }
+    },
+    {
+      "id": "query-10",
+      "kind": "spatial",
+      "valid": 250,
+      "known": 4,
+      "expected": {
+        "locations": [
+          "c",
+          "d"
+        ],
+        "sources": [
+          2,
+          4
+        ],
+        "uncertainty": [
+          "conflictingLocations",
+          "inferredEvidence"
+        ]
+      }
+    },
+    {
+      "id": "query-11",
+      "kind": "spatial",
+      "valid": 250,
+      "known": 3,
+      "expected": {
+        "locations": [
+          "c"
+        ],
+        "sources": [
+          2
+        ],
+        "uncertainty": []
+      }
+    },
+    {
+      "id": "query-12",
+      "kind": "spatial",
+      "valid": 100,
+      "known": 0,
+      "expected": {
+        "locations": [],
+        "sources": [],
+        "uncertainty": [
+          "noEvidence"
+        ]
+      }
+    }
+  ]
+}

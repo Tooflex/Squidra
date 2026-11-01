@@ -53,3 +53,27 @@ class MetricTests(unittest.TestCase):
 
     def test_input_order_does_not_change_metrics(self):
         self.assertEqual(score(self.cases, self.predictions), score(list(reversed(self.cases)), list(reversed(self.predictions))))
+
+
+class QueryMetricTests(unittest.TestCase):
+    def test_sources_and_uncertainty_are_part_of_exact_accuracy(self):
+        from Evals.metrics import score_queries
+        cases = [dict(id=k, kind=k, expected=dict(locations=['a'], uncertainty=[], sources=[0])) for k in ['temporal', 'spatial']]
+        predictions = [dict(id=c['id'], **c['expected']) for c in cases]
+        self.assertTrue(score_queries(cases, predictions)['passed'])
+        predictions[0]['sources'] = [1]
+        result = score_queries(cases, predictions)
+        self.assertFalse(result['passed'])
+        self.assertEqual(result['temporal']['correct'], 0)
+        predictions[0]['sources'] = [0]
+        predictions[1]['uncertainty'] = ['conflictingLocations']
+        self.assertFalse(score_queries(cases, predictions)['passed'])
+
+    def test_query_coverage_duplicates_and_types_are_strict(self):
+        from Evals.metrics import score_queries
+        cases = [dict(id=k, kind=k, expected=dict(locations=[], uncertainty=['noEvidence'], sources=[])) for k in ['temporal', 'spatial']]
+        predictions = [dict(id=c['id'], **c['expected']) for c in cases]
+        for invalid in [predictions[:1], predictions + [predictions[0]]]:
+            with self.assertRaises(ValueError): score_queries(cases, invalid)
+        predictions[0]['sources'] = [True]
+        with self.assertRaises(ValueError): score_queries(cases, predictions)
