@@ -59,6 +59,9 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                     XCTAssertEqual(absent.status,.notFound)
                     let denied = try await http.executeRequest(uri:path,method:.get,headers:[.authorization:"Bearer "+fixture.token,.init("X-Actor-ID")!:UUID().uuidString],body:nil)
                     XCTAssertEqual(denied.status,.forbidden);XCTAssertFalse(String(buffer:denied.body).contains("private-canary"))
+                    let lateCancellation = try await http.executeRequest(uri:path+"/cancel",method:.post,headers:[.authorization:"Bearer "+fixture.token],body:nil)
+                    XCTAssertEqual(lateCancellation.status,.ok)
+                    XCTAssertEqual(try RunHTTPTestSupport.object(lateCancellation.body)["publicationPhase"] as? String,"succeeded")
                     let modelCalls = await model.calls,readCalls = await reads.calls
                     XCTAssertEqual(modelCalls,2);XCTAssertEqual(readCalls,1)
                     _ = try await client.query("UPDATE run_event_streams SET created_at=clock_timestamp()-interval '3 hours',execution_lease_until=clock_timestamp()-interval '2 hours',expires_at=clock_timestamp()-interval '1 hour' WHERE run_id=\(run)").collect()
@@ -112,6 +115,52 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                     let rows = try await client.query("SELECT count(*) FROM run_event_streams WHERE actor_id=\(fixture.actor)").collect()
                     XCTAssertEqual(try XCTUnwrap(rows.first).decode(Int64.self),0)
                     let calls = await executor.calls;XCTAssertEqual(calls,0)
+                }
+            } catch { await fixture.coordinator.shutdown();throw error }
+            await fixture.coordinator.shutdown()
+        }
+    }
+    func testAuthenticatedCancellationIsDurableAndTerminalRepeatsAreIdempotent() async throws {
+        try await RunHTTPTestSupport.withClients { client,_ in
+            let executor = HTTPGatedAnswerFixture(),fixture = try RunHTTPTestSupport.harness(client:client,executor:executor)
+            do {
+                try await fixture.app().test(.router) { http in
+                    let accepted = try await http.executeRequest(uri:"/api/v1/runs",method:.post,
+                        headers:[.authorization:"Bearer "+fixture.token,.contentType:"application/json"],body:RunHTTPTestSupport.body(fixture.entity))
+                    let run = try XCTUnwrap(RunHTTPTestSupport.object(accepted.body)["runId"] as? String),path = "/api/v1/runs/"+run
+                    try await RunHTTPTestSupport.wait { await executor.calls == 1 }
+                    let anonymous = try await http.executeRequest(uri:path+"/cancel",method:.post,headers:[:],body:nil)
+                    XCTAssertEqual(anonymous.status,.unauthorized)
+                    let foreign = try await http.executeRequest(uri:path+"/cancel",method:.post,
+                        headers:[.authorization:"Bearer "+fixture.token,.init("X-Actor-ID")!:UUID().uuidString],body:nil)
+                    XCTAssertEqual(foreign.status,.forbidden)
+                    for suffix in ["/cancel?force=true","/cancel"] {
+                        let invalid = try await http.executeRequest(uri:path+suffix,method:.post,
+                            headers:[.authorization:"Bearer "+fixture.token],body:suffix.contains("?") ? nil : .init(string:"{}"))
+                        XCTAssertEqual(invalid.status,.badRequest)
+                    }
+                    let untouched = await executor.cancellations;XCTAssertEqual(untouched,0)
+                    let cancellation = try await http.executeRequest(uri:path+"/cancel",method:.post,headers:[.authorization:"Bearer "+fixture.token],body:nil)
+                    XCTAssertEqual(cancellation.status,.accepted)
+                    try await RunHTTPTestSupport.wait { await fixture.coordinator.activeCount == 0 }
+                    let status = try await http.executeRequest(uri:path,method:.get,headers:[.authorization:"Bearer "+fixture.token],body:nil)
+                    XCTAssertEqual(try RunHTTPTestSupport.object(status.body)["publicationPhase"] as? String,"cancelled")
+                    for _ in 0..<2 {
+                        let repeated = try await http.executeRequest(uri:path+"/cancel",method:.post,headers:[.authorization:"Bearer "+fixture.token],body:nil)
+                        XCTAssertEqual(repeated.status,.ok)
+                        XCTAssertEqual(try RunHTTPTestSupport.object(repeated.body)["publicationPhase"] as? String,"cancelled")
+                    }
+                    let absent = try await http.executeRequest(uri:"/api/v1/runs/"+UUID().uuidString+"/cancel",method:.post,headers:[.authorization:"Bearer "+fixture.token],body:nil)
+                    XCTAssertEqual(absent.status,.notFound)
+                    let orphan = AGUIRunBinding(actorID:fixture.actor,runID:UUID(),threadID:UUID(),requestID:UUID())
+                    _ = try await fixture.events.create(orphan,retentionSeconds:3600,deadline:.now.advanced(by:.seconds(4)))
+                    _ = try await fixture.publication.claim(orphan,maximumExecutionSeconds:60,at:RunHTTPTestSupport.clock.now(),deadline:.now.advanced(by:.seconds(4)))
+                    let orphanCancellation = try await http.executeRequest(uri:"/api/v1/runs/"+orphan.runID.uuidString+"/cancel",method:.post,headers:[.authorization:"Bearer "+fixture.token],body:nil)
+                    XCTAssertEqual(orphanCancellation.status,.conflict)
+                    let orphanStatus = try await fixture.publication.status(actorID:fixture.actor,runID:orphan.runID,deadline:.now.advanced(by:.seconds(4)))
+                    XCTAssertEqual(orphanStatus.phase,.running)
+                    let calls = await executor.calls,cancellations = await executor.cancellations
+                    XCTAssertEqual(calls,1);XCTAssertEqual(cancellations,1)
                 }
             } catch { await fixture.coordinator.shutdown();throw error }
             await fixture.coordinator.shutdown()

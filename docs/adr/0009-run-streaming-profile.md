@@ -277,3 +277,36 @@ worker. These fixtures do not measure live model quality, tokens or cloud cost.
 There is no new migration, raw prompt persistence or automatic restart/recovery.
 Parent T05 still needs host/provider activation, worker-owned tracing and wider
 process-restart qualification.
+
+## Explicit cancellation
+
+`POST /api/v1/runs/:run/cancel` requires the same bearer/origin/actor boundary,
+no query parameters and an empty body. It performs an actor-owned durable lookup
+before signalling the local coordinator. A 202 acknowledges a cancellation
+request, not completed cancellation; its body is a fresh `RunHTTPStatus`. Poll
+status or replay events to observe durable completion. A terminal run returns
+200 with its existing outcome, including a success that won the completion race.
+An active run without a local owner returns 409 and requires recovery. The route
+cannot manufacture a cancellation or restart a worker. Unknown/expired IDs retain
+404/410. A missing configured coordinator returns 503 for active runs.
+
+A withdrawn durable approval is observed by `ApprovalWait.resume` as terminal
+CANCELLED, without approving or dispatching its action. Denial and expiry remain
+policy failures. This is a separate continuation path from the read-only HTTP
+coordinator; the cancel endpoint does not claim to execute arbitrary mutations or
+withdraw approvals. Mutations require independent effect-ledger reconciliation.
+
+Local T05-HTTP covers explicit cancellation, authentication and actor rejection,
+closed inputs, terminal repeats, late cancellation preserving success and orphan
+ownership conflicts. SQD-009 covers persisted withdrawal cancellation and refusal
+to resume a terminal waiter. Hosted cross-platform qualification remains pending
+until the authorized CI suspension ends.
+
+Interrupted mutating gateway calls join a separate, bounded four-second ledger
+cleanup. If dispatch began, the effect becomes `unknown`; otherwise it is confirmed
+`notApplied`. The cleanup survives caller cancellation and attempt expiry. Failed
+cleanup reports `outcomeUnconfirmed`; neither case claims success or rollback.
+A subsequent identical command returns reconciliation-required instead of
+re-executing an unknown effect. Only independent provider/target confirmation may
+resolve it through the existing ledger reconciliation port. SQD-008 tests both
+cancellation and deadline expiry with a cancellation-aware ledger fixture.

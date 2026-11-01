@@ -36,6 +36,9 @@ public struct ApprovalWait: Sendable {
                 return .ready(controller)
             } catch ApprovalError.expired {} catch ApprovalError.denied {} catch ApprovalError.notApproved {}
         }
+        if approval.decision == .withdrawn {
+            return .refused(try await controller.transition(to:.cancelled,terminalCode:.cancelled))
+        }
         return .refused(try await controller.transition(to:.failed,terminalCode:.policyDenied))
     }
     private func match(_ snapshot: RunSnapshot, approval: ApprovalRecord) throws {
