@@ -12,13 +12,16 @@ enum RunRoutes {
     struct Submission: Sendable {
         let coordinator: PublishedReadRunCoordinator, clock: any SquidraDomain.Clock
         let entities: [PlanningEntity], budget: RunBudget
+        let resolveEntity: (@Sendable (UUID, ContinuousClock.Instant) async throws -> PlanningEntity?)?
         let preferredModelID: String?, cloudConsent: Bool, allowFallback: Bool
         let maximumCostMicroUSD: Int64, maximumOutputTokens: Int
         init(coordinator: PublishedReadRunCoordinator, clock: any SquidraDomain.Clock, entities: [PlanningEntity],
              budget: RunBudget = try! RunBudget(), preferredModelID: String? = nil, cloudConsent: Bool = false, allowFallback: Bool = false,
-             maximumCostMicroUSD: Int64 = 0, maximumOutputTokens: Int = 512) throws {
-            guard !entities.isEmpty,entities.count <= 32,Set(entities.map(\.id)).count == entities.count,
+             maximumCostMicroUSD: Int64 = 0, maximumOutputTokens: Int = 512,
+             resolveEntity: (@Sendable (UUID, ContinuousClock.Instant) async throws -> PlanningEntity?)? = nil) throws {
+            guard (!entities.isEmpty || resolveEntity != nil),entities.count <= 32,Set(entities.map(\.id)).count == entities.count,
                   maximumCostMicroUSD >= 0,(1...4096).contains(maximumOutputTokens) else { throw ReadRunSubmissionError.invalidRequest }
+            self.resolveEntity = resolveEntity
             self.coordinator = coordinator;self.clock = clock;self.entities = entities;self.budget = budget
             self.preferredModelID = preferredModelID;self.cloudConsent = cloudConsent;self.allowFallback = allowFallback
             self.maximumCostMicroUSD = maximumCostMicroUSD;self.maximumOutputTokens = maximumOutputTokens
@@ -64,7 +67,10 @@ enum RunRoutes {
                 guard request.uri.query == nil,request.headers[values:.contentType].count == 1,
                       request.headers[.contentType]?.split(separator:";",maxSplits:1).first?.trimmingCharacters(in:.whitespaces).lowercased() == "application/json" else { throw HTTPError(.badRequest) }
                 let input = try await parse(request)
-                guard let entity = submission.entities.first(where:{ $0.id == input.entityId }) else { throw HTTPError(.forbidden) }
+                let selected: PlanningEntity?
+                if let resolve = submission.resolveEntity { selected = try await resolve(input.entityId,.now.advanced(by:.seconds(4))) }
+                else { selected = submission.entities.first(where:{ $0.id == input.entityId }) }
+                guard let entity = selected,entity.id == input.entityId else { throw HTTPError(.forbidden) }
                 guard let intent = AnswerIntent(rawValue:input.intent) else { throw HTTPError(.badRequest) }
                 let now = try submission.clock.now(),trace = UUID()
                 let request = try ReadRunRequest(actorID:dependencies.actorID,traceID:trace,requestID:context.requestID,question:input.question,

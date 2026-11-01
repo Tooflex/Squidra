@@ -4,21 +4,24 @@ import SquidraCognition
 import SquidraDomain
 import SquidraSecurity
 import SquidraTools
+import SquidraPostgres
 
 /// Explicit host injection. Offline mode never registers a cloud model or
 /// silently substitutes fixture responses. Provider qualification is separate.
 struct ReadHostConfiguration: Sendable {
     let models: [any LanguageModel], entities: [PlanningEntity]
+    let allowSyntheticImportedEntities: Bool
     let budget: RunBudget, freshness: AnswerFreshnessPolicy
     init(models: [any LanguageModel], entities: [PlanningEntity], budget: RunBudget = try! RunBudget(),
-         maximumObservationAgeSeconds: Double = 300, minimumConfidence: Double = 0.5) throws {
-        guard (1...4).contains(models.count),!entities.isEmpty else { throw ReadRunSubmissionError.invalidRequest }
-        _ = try ReadPlanningScope(entities:entities)
+         maximumObservationAgeSeconds: Double = 300, minimumConfidence: Double = 0.5, allowSyntheticImportedEntities: Bool = false) throws {
+        guard (1...4).contains(models.count),!entities.isEmpty || allowSyntheticImportedEntities else { throw ReadRunSubmissionError.invalidRequest }
+        if !entities.isEmpty { _ = try ReadPlanningScope(entities:entities) }
         for model in models {
             guard case .local = model.descriptor.location,
                   model.descriptor.capabilities.isSuperset(of:[.text,.structuredOutput]),
                   model.descriptor.maximumCostMicroUSD == 0 else { throw ModelRoutingError.invalidConfiguration }
         }
+        self.allowSyntheticImportedEntities = allowSyntheticImportedEntities
         self.models = models;self.entities = entities;self.budget = budget
         self.freshness = try AnswerFreshnessPolicy(maximumObservationAgeSeconds:maximumObservationAgeSeconds,minimumCurrentConfidence:Confidence(minimumConfidence))
     }
@@ -35,5 +38,28 @@ struct ServerWorldReadPolicy: PolicyEngine {
                 targets:targets,scope:["world:read"],expiresAt:context.deadline)
         }
         return try HostActionPolicy(permissions:permissions).evaluate(context)
+    }
+}
+
+
+/// Shared admission, execution and recovery lookup. Imported IDs are never
+/// added to a process-wide wildcard grant or copied from a model response.
+struct ReadHostEntityScope: Sendable {
+    let entities: [PlanningEntity]
+    let imported: PostgresImportedEntityReadScope?
+    func resolve(_ id: UUID, deadline: ContinuousClock.Instant) async throws -> PlanningEntity? {
+        if let entity = entities.first(where: { $0.id == id }) { return entity }
+        guard let imported,try await imported.contains(id,deadline:deadline) else { return nil }
+        return try PlanningEntity(id:id,label:"Imported synthetic entity")
+    }
+}
+struct ScopedServerWorldReadPolicy: PolicyEngine {
+    let actorID: UUID, scope: ReadHostEntityScope
+    func evaluate(_ context: ActionPolicyContext) async throws -> ActionPolicyDecision {
+        guard context.actorID == actorID,context.target.hasPrefix("entity:"),
+              let id = UUID(uuidString:String(context.target.dropFirst(7))),
+              context.target == "entity:"+id.uuidString.lowercased(),
+              let entity = try await scope.resolve(id,deadline:min(context.deadline,.now.advanced(by:.seconds(4)))) else { return .deny }
+        return try ServerWorldReadPolicy(actorID:actorID,entities:[entity]).evaluate(context)
     }
 }

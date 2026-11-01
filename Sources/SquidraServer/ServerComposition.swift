@@ -36,19 +36,24 @@ enum ServerComposition {
         let submission:RunRoutes.Submission?
         let continuationStep: (@Sendable () async throws -> Bool)?
         if let readHost {
+            let imported: PostgresImportedEntityReadScope?
+            if readHost.allowSyntheticImportedEntities {
+                guard let profile = configuration.syntheticImport else { throw ReadRunSubmissionError.invalidRequest }
+                imported = PostgresImportedEntityReadScope(client:client,policy:profile.policy)
+            } else { imported = nil }
+            let entityScope = ReadHostEntityScope(entities:readHost.entities,imported:imported)
             let clock = try SystemClock(timeZone:IANATimeZone(identifier:"Etc/UTC"))
             let router = try ModelRouter(models:readHost.models.map { TracedLanguageModel($0) },clock:clock)
             let queries = TracedWorldQueries(state:world,changes:world)
             let registrations = try [WorldLocationTool(world:queries).registration(),WorldChangesTool(world:queries).registration()]
             let gateway = try ActionGateway(tools:registrations.map { $0.decoratingExecutor { TracedToolExecutor($0) } },
-                policy:ServerWorldReadPolicy(actorID:configuration.boundary.actorID,entities:readHost.entities))
+                policy:ScopedServerWorldReadPolicy(actorID:configuration.boundary.actorID,scope:entityScope))
             let engine = try ReadRunEngine(router:router,gateway:gateway,store:runtime,clock:clock,freshness:readHost.freshness,completions:PostgresReadRunCompletionStore(client:client,actorID:configuration.boundary.actorID),plans:PostgresReadRunPlanStore(client:client,actorID:configuration.boundary.actorID),toolResults:PostgresReadRunToolResultStore(client:client,actorID:configuration.boundary.actorID),answers:PostgresReadRunAnswerStore(client:client,actorID:configuration.boundary.actorID))
             let coordinator = try PublishedReadRunCoordinator(actorID:configuration.boundary.actorID,executor:TracedReadExecutor(base:engine,recorder:recorder),
                 events:events,publication:publication,clock:clock,tasks:PostgresReadRunTaskStore(client:client,actorID:configuration.boundary.actorID),ownership:ownershipStore)
-            submission = try RunRoutes.Submission(coordinator:coordinator,clock:clock,entities:readHost.entities,budget:readHost.budget)
+            submission = try RunRoutes.Submission(coordinator:coordinator,clock:clock,entities:readHost.entities,budget:readHost.budget,resolveEntity:{ try await entityScope.resolve($0,deadline:$1) })
             if let ownershipStore,let localOwnership {
                 let tasks = PostgresReadRunTaskStore(client:client,actorID:configuration.boundary.actorID)
-                let allowed = Set(readHost.entities.map(\.id))
                 continuationStep = {
                     for candidate in try await ownershipStore.previousRuns(continuableOnly:true,deadline:.now.advanced(by:.seconds(4))) {
                         guard let task = try await tasks.load(runID:candidate.runID,deadline:.now.advanced(by:.seconds(4))) else { continue }
@@ -63,7 +68,10 @@ enum ServerComposition {
                                 let correlation = try TraceCorrelation(traceID:request.traceID,runID:request.runID,taskID:request.requestID)
                                 try await recorder.withTrace(correlation) { session in
                                     if let usage = try? TraceUsage(requestID:request.requestID) { await session.recordUsage(usage) }
-                                    guard !request.planningScope.allowGlobalChanges,request.planningScope.entities.allSatisfy({ allowed.contains($0.id) }) else { throw ReadRunFailureCode.recoveryRequired }
+                                    guard !request.planningScope.allowGlobalChanges else { throw ReadRunFailureCode.recoveryRequired }
+                                    for entity in request.planningScope.entities {
+                                        guard try await entityScope.resolve(entity.id,deadline:.now.advanced(by:.seconds(4))) != nil else { throw ReadRunFailureCode.recoveryRequired }
+                                    }
                                     // The engine persists its initial runtime before any model/read call.
                                     // Missing runtime after a proved stopped admission is first execution.
                                     guard let snapshot else { _ = try await engine.executeAnswer(request);return }
