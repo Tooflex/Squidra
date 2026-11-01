@@ -124,3 +124,30 @@ T05-HTTP verifies persistence in the live submission path plus exact reload on a
 second database client, idempotent save, conflicting replacement, actor isolation
 and SQL update rejection. Existing recovery unit tests retain their seven budget,
 approval and effect-reconciliation scenarios.
+
+## Answer archive before runtime completion
+
+The live read engine now writes its host-grounded answer through
+`ReadRunCompletionStore` while the runtime is still `RESPONDING`, before clearing
+the iteration and committing `COMPLETED`. PostgreSQL inserts only when the exact
+actor/run/version is still responding and its persisted task has the same request
+ID. The answer is bounded to 64 KiB and its exact encoded bytes are retained with
+the responding checkpoint version. An identical retry is safe; a replacement
+conflicts. The archive is private run data and follows the task's purge lifecycle.
+
+An archive failure or lost acknowledgement returns `recoveryRequired` and leaves
+the checkpoint for recovery instead of reporting a false completion or repeating
+the model. An archive alone is not evidence that the run completed: later budget
+expiry or cancellation can still prevent `COMPLETED`. A publisher must inspect
+runtime terminal state, original binding, current authority and worker ownership
+before using it. `StoredReadRunCompletion` exposes read-only bytes, not a new
+GroundedAnswer proof or a tool/publication permit.
+
+`runtime/005_read_run_completions.sql` adds the archive, scoped foreign keys and
+an update guard. The live HTTP test checks that the archived JSON equals the
+published grounded answer and its checkpoint precedes the completed runtime.
+The engine test injects a lost write acknowledgement after capture and verifies
+that no new model call occurs and the responding state survives.
+
+Automatic archive publication and phase continuation remain unimplemented at
+this step; no startup scan or read route initiates execution. SQD-028 remains open.

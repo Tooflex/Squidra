@@ -40,11 +40,12 @@ public struct ReadRunEngine: Sendable {
     private let decoder: WorldReadEvidenceDecoder, store: any RunStore
     private let clock: any SquidraDomain.Clock, freshness: AnswerFreshnessPolicy
     private let memory: MemoryContextProvider?
+    private let completions: (any ReadRunCompletionStore)?
     public init(router: ModelRouter, gateway: ActionGateway, store: any RunStore,
                 clock: any SquidraDomain.Clock, freshness: AnswerFreshnessPolicy,
-                memory: MemoryContextProvider? = nil) throws {
+                memory: MemoryContextProvider? = nil, completions: (any ReadRunCompletionStore)? = nil) throws {
         self.router = router; self.gateway = gateway; self.store = store; self.clock = clock; self.freshness = freshness
-        self.memory = memory
+        self.memory = memory; self.completions = completions
         planner = try ReadPlanner(router:router,clock:clock); decoder = try WorldReadEvidenceDecoder()
     }
     public func execute(_ request: ReadRunRequest) async throws -> ReadRunResult {
@@ -172,6 +173,10 @@ public struct ReadRunEngine: Sendable {
         do { answer = try GroundedAnswerValidator().validate(response.response,expectedRequestID:request.requestID,context:evidence.context) }
         catch { throw ReadRunFailureCode.invalidAnswer }
         try Task.checkCancellation()
+        if let completions {
+            do { try await completions.save(snapshot:controller.snapshot(),answer:answer,deadline:min(deadline,.now.advanced(by:.seconds(4)))) }
+            catch { throw ReadRunFailureCode.recoveryRequired }
+        }
         try Self.active(await controller.finishIteration(progress:.validatedResponse))
         let completed = try await controller.transition(to:.completed,terminalCode:.completed)
         guard completed.state == .completed else { try Self.active(completed); throw ReadRunFailureCode.readFailed }
