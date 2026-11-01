@@ -25,6 +25,15 @@ final class ReadHostConfigurationTests: XCTestCase {
         XCTAssertThrowsError(try ReadHostConfiguration(models:[model],entities:[]))
         XCTAssertNoThrow(try ReadHostConfiguration(models:[model],entities:[entity]))
     }
+    func testCloudHostRequiresExplicitConsentAndTwoAttemptBudget() throws {
+        let entity = try PlanningEntity(id:UUID(),label:"entity")
+        let model = HostModelFixture(descriptor:ModelDescriptor(id:"cloud",modelVersion:"alias:1",location:.cloud,capabilities:[.text,.structuredOutput],maximumCostMicroUSD:10_000_000))
+        XCTAssertThrowsError(try ReadHostConfiguration(models:[model],entities:[entity],maximumCostMicroUSD:20_000_000))
+        XCTAssertThrowsError(try ReadHostConfiguration(models:[model],entities:[entity],cloudConsent:true,maximumCostMicroUSD:10_000_000))
+        XCTAssertThrowsError(try ReadHostConfiguration(models:[model],entities:[entity],cloudConsent:true,maximumCostMicroUSD:20_000_000,maximumOutputTokens:4097))
+        let host = try ReadHostConfiguration(models:[model],entities:[entity],cloudConsent:true,maximumCostMicroUSD:20_000_000)
+        XCTAssertTrue(host.cloudConsent);XCTAssertEqual(host.maximumCostMicroUSD,20_000_000)
+    }
     func testWorldPolicyCannotGrantForeignActorEntityGlobalReadOrWriteScope() throws {
         let actor = UUID(),entity = try PlanningEntity(id:UUID(),label:"allowed")
         let policy = ServerWorldReadPolicy(actorID:actor,entities:[entity]),definition = try WorldLocationTool.definition()

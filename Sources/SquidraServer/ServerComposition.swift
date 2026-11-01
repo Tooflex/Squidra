@@ -16,6 +16,8 @@ import PostgresNIO
 /// Composition owns dependencies per application. No global runtime or store.
 enum ServerComposition {
     static func live(configuration: ServerConfiguration, readHost: ReadHostConfiguration? = nil, traceRecorder: PrivateTraceRecorder? = nil, localOwnership: LocalRunOwnership? = nil) throws -> some ApplicationProtocol {
+        guard readHost == nil || configuration.configuredReadHost == nil else { throw ModelRoutingError.invalidConfiguration }
+        let readHost = readHost ?? configuration.configuredReadHost
         if let localOwnership {
             guard localOwnership.isHeld,localOwnership.actorID == configuration.boundary.actorID else { throw ReadRunTaskError.invalidState }
         }
@@ -51,7 +53,7 @@ enum ServerComposition {
             let engine = try ReadRunEngine(router:router,gateway:gateway,store:runtime,clock:clock,freshness:readHost.freshness,completions:PostgresReadRunCompletionStore(client:client,actorID:configuration.boundary.actorID),plans:PostgresReadRunPlanStore(client:client,actorID:configuration.boundary.actorID),toolResults:PostgresReadRunToolResultStore(client:client,actorID:configuration.boundary.actorID),answers:PostgresReadRunAnswerStore(client:client,actorID:configuration.boundary.actorID))
             let coordinator = try PublishedReadRunCoordinator(actorID:configuration.boundary.actorID,executor:TracedReadExecutor(base:engine,recorder:recorder),
                 events:events,publication:publication,clock:clock,tasks:PostgresReadRunTaskStore(client:client,actorID:configuration.boundary.actorID),ownership:ownershipStore)
-            submission = try RunRoutes.Submission(coordinator:coordinator,clock:clock,entities:readHost.entities,budget:readHost.budget,resolveEntity:{ try await entityScope.resolve($0,deadline:$1) })
+            submission = try RunRoutes.Submission(coordinator:coordinator,clock:clock,entities:readHost.entities,budget:readHost.budget,cloudConsent:readHost.cloudConsent,maximumCostMicroUSD:readHost.maximumCostMicroUSD,maximumOutputTokens:readHost.maximumOutputTokens,resolveEntity:{ try await entityScope.resolve($0,deadline:$1) })
             if let ownershipStore,let localOwnership {
                 let tasks = PostgresReadRunTaskStore(client:client,actorID:configuration.boundary.actorID)
                 continuationStep = {

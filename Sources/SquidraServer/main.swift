@@ -15,10 +15,13 @@ enum ServerMain {
             print("serve requires SQUIDRA_AUTH_TOKEN, SQUIDRA_ACTOR_ID, SQUIDRA_UI_ORIGIN,")
             print("SQUIDRA_DB_PORT, SQUIDRA_DB_USER, SQUIDRA_DB_PASSWORD and SQUIDRA_DB_NAME.")
             print("consolidate imports a bounded local JSON batch using the same actor/database configuration.")
-            print("Optional: SQUIDRA_PORT (default 8080), SQUIDRA_PROFILE (offline only).")
+            print("Optional: SQUIDRA_PORT (default 8080), SQUIDRA_PROFILE (offline default; meta-qualification opt-in).")
             print("Optional: SQUIDRA_RUN_DIRECTORY (existing private local directory for run recovery).")
             print("Optional synthetic import: SQUIDRA_SYNTHETIC_IMPORT=1 with SQUIDRA_SYNTHETIC_FIXTURE,")
             print("SQUIDRA_SYNTHETIC_CAMERA_ID, SQUIDRA_SYNTHETIC_SCENE_ID and SQUIDRA_SYNTHETIC_COORDINATE_FRAME_ID.")
+            print("Meta qualification: SQUIDRA_META_CLOUD_CONSENT=1, SQUIDRA_META_MODEL=spark|wonder,")
+            print("SQUIDRA_META_BUDGET_DIRECTORY, MODEL_API_KEY or MODEL_API_KEY_FILE, and")
+            print("SQUIDRA_META_ENTITY_IDS (comma-separated UUIDs) or the synthetic import profile.")
             return 0
         }
         if arguments == ["--version"] { print("Squidra development (SwiftPM)"); return 0 }

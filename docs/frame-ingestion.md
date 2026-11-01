@@ -142,8 +142,11 @@ It is an HTTP/PostgreSQL check, not a browser, SAM, live-model or Linux qualific
 
 An explicitly injected `ReadHostConfiguration` can opt into
 `allowSyntheticImportedEntities`. This requires the synthetic import profile;
-without it composition fails. The default is false, and the normal CLI still
-has no configured language model. This option does not enable cloud inference.
+without it composition fails. The default is false. The offline CLI has no
+configured language model; the explicit Meta qualification profile can use this
+imported-entity scope for questions, with separate cloud-data consent and budget
+settings in [providers.md](providers.md). This scope flag alone does not enable
+cloud inference.
 
 When opted in, a selected entity is resolved from immutable actor-linked
 `perception.frame_imported` events in the configured camera, scene and coordinate

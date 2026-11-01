@@ -49,11 +49,12 @@ world read tools are registered; subject-free global changes are not authorized.
 Offline composition rejects cloud descriptors, missing structured/text capability,
 empty entity scope and models advertising nonzero external spending bounds.
 
-The stock CLI currently supplies no adapter. It does not silently install a model,
-call a cloud API or substitute test responses. A host integrating an installed,
-qualified local adapter must pass that adapter explicitly; a provider-specific CLI
-configuration is still part of provider activation work. Tests inject controlled
-models through exactly this composition root and use real HTTP and PostgreSQL.
+The default offline CLI supplies no adapter. The explicit
+`SQUIDRA_PROFILE=meta-qualification` profile connects the Meta Standard adapter
+and shared test budget; it requires cloud-data consent, scoped entities, a
+credential and the dated qualification settings in [providers.md](providers.md).
+A qualified local adapter can still be injected explicitly. Tests inject
+controlled models through this composition root with real HTTP and PostgreSQL.
 
 Authenticated `GET /api/v1/run-capabilities` returns schemaVersion `1`, `textRuns`
 and, when unavailable, limitation `no_configured_read_host`. This means a read host
