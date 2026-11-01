@@ -20,7 +20,7 @@ def target(): return platform.system().lower()+'-'+platform.machine().lower()
 def manifest(raw):
     if len(raw)>1048576: raise ValueError('Manifest too large')
     value=json.loads(raw)
-    if set(value)!={'format','target','source_commit','source_dirty','files'} or type(value['source_dirty']) is not bool or value['format']!=1 or value['target']!='darwin-arm64' or value['target']!=target() or not re.fullmatch('[0-9a-f]{40}',value['source_commit']): raise ValueError('Unsupported manifest')
+    if set(value)!={'format','target','source_commit','source_dirty','files'} or type(value['source_dirty']) is not bool or value['format']!=1 or value['target'] not in ['darwin-arm64','linux-aarch64'] or value['target']!=target() or not re.fullmatch('[0-9a-f]{40}',value['source_commit']): raise ValueError('Unsupported manifest')
     files=value['files']
     if not isinstance(files,dict) or not 1<=len(files)<=2048 or 'bin/squidra' not in files: raise ValueError('Invalid file inventory')
     total=0
