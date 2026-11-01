@@ -890,7 +890,7 @@ truncation. Results must also fit 128 KiB and shared JSON structural limits.
 Its schemas are embedded and checked against `Schemas/tools/world` by
 `bash Scripts/test-issue.sh T13-LOCATION`. This suite exercises the real gateway
 with controlled read-port fixtures; PostgreSQL qualification is the independent
-SQD-014 integration suite. Change and watch tools remain tracked by T13.
+SQD-014 integration suite. Change and watch tools are qualified by the complete `T13` gate.
 
 `WorldChangesTool` adds `world.get_changes@1.0.0` over `WorldChangesQuerying`.
 An entity filter resolves to its exact `entity:<uuid>` policy target; an actor-wide
@@ -914,7 +914,8 @@ cursor is tamper-proof. `T13-CHANGES` qualifies the real gateway with controlled
 query fixtures; SQD-015 separately qualifies PostgreSQL pagination. No HTTP
 route, production registration or durable watch tool is introduced here.
 
-`bash Scripts/test-issue.sh T13-READS` qualifies both world read tools through
+`bash Scripts/test-issue.sh T13-READS` qualifies both world read tools and the
+[durable watch tool](world-watch-tool.md) through
 ActionGateway and a real isolated PostgreSQL journal/projection. Its scenario
 uses a late correction to compare frozen continuation, fresh corrected reads
 and historical knowledge, while asserting retained source references,

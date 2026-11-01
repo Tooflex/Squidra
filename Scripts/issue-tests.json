@@ -762,5 +762,22 @@
       "watch_live",
       "watch_restart"
     ]
+  },
+  "T13-WATCH-CONTRACT": {
+    "kind": "xctest",
+    "filter": "^SquidraToolsTests\\.WorldWatchSchemaTests/"
+  },
+  "T13": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/test-world-tools.py"
+    ],
+    "tests": [
+      "location_contract",
+      "changes_contract",
+      "watch_contract",
+      "gateway_database"
+    ]
   }
 }
