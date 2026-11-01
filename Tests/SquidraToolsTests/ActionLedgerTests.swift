@@ -2,6 +2,7 @@ import Foundation
 import Logging
 import PostgresNIO
 import SquidraPostgres
+import SquidraSecurity
 import XCTest
 @testable import SquidraTools
 
@@ -135,6 +136,63 @@ final class ActionLedgerSQLTests: XCTestCase, @unchecked Sendable {
             outputSchema:Data(contentsOf:root.appendingPathComponent("Schemas/tools/fixture.echo.1.0.0.output.json")))
         let result = try ToolCatalog(definitions:[definition]).validateOutput(Data(#"{"schemaVersion":"1","entityId":"00000000-0000-0000-0000-000000000001","message":"fixture committed"}"#.utf8),for:tool)
         return try .succeeded(result,for:tool)
+    }
+    private actor InterruptedEffect: ToolExecutor {
+        let client: PostgresClient, receipt: UUID
+        var committed = false, calls = 0
+        init(client: PostgresClient, receipt: UUID) { self.client = client;self.receipt = receipt }
+        func execute(_ call: ToolCall) async throws -> Data {
+            calls += 1
+            _ = try await client.query("INSERT INTO cancellation_effects(receipt) VALUES(\(receipt))").collect()
+            committed = true
+            try await Task.sleep(for:.seconds(30))
+            throw CancellationError()
+        }
+    }
+    func testCancelledAndExpiredGatewayEffectsSurviveRestartAsUnknownUntilConfirmed() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let port = try XCTUnwrap(env["SQUIDRA_TEST_DB_PORT"].flatMap(Int.init)),password = try XCTUnwrap(env["SQUIDRA_TEST_DB_PASSWORD"])
+        let config = try LocalDatabaseConfiguration(port:port,username:"squidra",password:password,database:"squidra")
+        let client = config.makeClient(),readback = config.makeClient()
+        let root = URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let tool = try ToolID(namespace:"fixture",name:"echo",version:"1.0.0")
+        let definition = try ToolDefinition(id:tool,capability:"fixture.read",risk:.r1,idempotency:.durableLedger,timeoutMilliseconds:2000,
+            inputSchema:Data(contentsOf:root.appendingPathComponent("Schemas/tools/fixture.echo.1.0.0.input.json")),
+            outputSchema:Data(contentsOf:root.appendingPathComponent("Schemas/tools/fixture.echo.1.0.0.output.json")))
+        try await withThrowingTaskGroup(of:Void.self) { group in
+            group.addTask { await client.run() };group.addTask { await readback.run() };defer { group.cancelAll() }
+            _ = try await client.query("CREATE TABLE cancellation_effects(receipt uuid PRIMARY KEY)").collect()
+            for cancel in [true,false] {
+                let actor = UUID(),run = UUID(),receipt = UUID(),target = "entity:00000000-0000-0000-0000-000000000001"
+                _ = try await client.query("INSERT INTO agent_runs(id,actor_id,trace_id) VALUES(\(run),\(actor),\(UUID()))").collect()
+                let executor = InterruptedEffect(client:client,receipt:receipt)
+                let permission = HostActionPermission(actorID:actor,tool:tool,capability:"fixture.read",targets:[target],scope:["fixture:read"],expiresAt:.now.advanced(by:.seconds(20)))
+                let registration = GatewayToolRegistration(definition:definition,surface:.bounded,executor:executor,resolveTarget:{ _ in target })
+                let gateway = try ActionGateway(tools:[registration],policy:HostActionPolicy(permissions:[permission]),ledger:ActionLedger(store:PostgresActionLedger(client:client)))
+                let input = Data(#"{"schemaVersion":"1","entityId":"00000000-0000-0000-0000-000000000001","at":"2026-10-31T12:00:00Z","message":"fixture","limit":1}"#.utf8)
+                let action = GatewayAction(actorID:actor,runID:run,tool:tool,target:target,arguments:input,scope:["fixture:read"],idempotencyKey:"cancel-effect",deadline:.now.advanced(by:cancel ? .seconds(5) : .seconds(1)))
+                let worker = Task { try await gateway.invoke(action) }
+                let end = ContinuousClock.now.advanced(by:.seconds(3))
+                while !(await executor.committed) {
+                    guard ContinuousClock.now < end else { worker.cancel();_ = try? await worker.value;return XCTFail("Effect never committed") }
+                    try await Task.sleep(for:.milliseconds(2))
+                }
+                if cancel { worker.cancel() }
+                do { _ = try await worker.value;XCTFail("Interrupted mutation reported success") } catch {}
+                let restarted = ActionLedger(store:PostgresActionLedger(client:readback))
+                let command = try ActionCommand(actorID:actor,runID:run,tool:tool,idempotencyKey:"cancel-effect",target:target,arguments:input,scope:["fixture:read"])
+                guard case .reconciliationRequired(let unknown) = try await restarted.prepare(command,deadline:.now.advanced(by:.seconds(4))) else { return XCTFail("Durable unknown lost on restart") }
+                XCTAssertEqual(unknown.status,.unknown);XCTAssertNil(unknown.result)
+                let rows = try await readback.query("SELECT count(*)::bigint FROM cancellation_effects WHERE receipt=\(receipt)").collect()
+                XCTAssertEqual(try rows[0].decode(Int64.self),1)
+                // Independent provider receipt confirms the effect actually happened.
+                let outcome = try Self.outcome(tool:tool)
+                _ = try await restarted.reconcile(unknown,confirmed:outcome,providerReference:receipt.uuidString,deadline:.now.advanced(by:.seconds(4)))
+                guard case .replay(let final) = try await restarted.prepare(command,deadline:.now.advanced(by:.seconds(4))) else { return XCTFail("Confirmed effect not replayed") }
+                XCTAssertEqual(final.status,.succeeded);XCTAssertEqual(final.providerReference,receipt.uuidString)
+                let calls = await executor.calls;XCTAssertEqual(calls,1)
+            }
+        }
     }
     func testRealConcurrentSingleEffectReplayConflictsUnknownAndAtomicOutbox() async throws {
         let env = ProcessInfo.processInfo.environment

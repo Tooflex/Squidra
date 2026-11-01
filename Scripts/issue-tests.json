@@ -542,5 +542,19 @@
       "association_contracts",
       "durable_association_cas"
     ]
+  },
+  "SQD-011": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/test-cancellation.py"
+    ],
+    "tests": [
+      "runtime_cancellation",
+      "approval_withdrawal",
+      "gateway_cancellation",
+      "durable_unknown_effects",
+      "http_durable_cancellation"
+    ]
   }
 }

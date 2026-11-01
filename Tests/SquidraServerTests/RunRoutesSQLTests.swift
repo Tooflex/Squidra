@@ -120,6 +120,39 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
             await fixture.coordinator.shutdown()
         }
     }
+    func testHTTPCancellationPersistsRuntimeAndPublicationDuringModelAndToolCalls() async throws {
+        try await RunHTTPTestSupport.withClients { client,readback in
+            for stage in 0..<3 {
+                let (fixture,model,reads,_) = try await RunHTTPTestSupport.realHarness(client:client,pauseOnModelCall:stage == 1 ? nil : (stage == 0 ? 1 : 2),pauseOnRead:stage == 1)
+                do {
+                    try await fixture.app().test(.router) { http in
+                        let accepted = try await http.executeRequest(uri:"/api/v1/runs",method:.post,
+                            headers:[.authorization:"Bearer "+fixture.token,.contentType:"application/json"],body:RunHTTPTestSupport.body(fixture.entity))
+                        XCTAssertEqual(accepted.status,.accepted)
+                        let runText = try XCTUnwrap(RunHTTPTestSupport.object(accepted.body)["runId"] as? String),run = try XCTUnwrap(UUID(uuidString:runText))
+                        let path = "/api/v1/runs/"+runText
+                        if stage == 1 { try await RunHTTPTestSupport.wait { await reads.calls == 1 } }
+                        else { try await RunHTTPTestSupport.wait { await model.calls == (stage == 0 ? 1 : 2) } }
+                        let response = try await http.executeRequest(uri:path+"/cancel",method:.post,headers:[.authorization:"Bearer "+fixture.token],body:nil)
+                        XCTAssertEqual(response.status,.accepted)
+                        try await RunHTTPTestSupport.wait { await fixture.coordinator.activeCount == 0 }
+                        let durable = try await PostgresRunStore(client:readback).load(actorID:fixture.actor,runID:run,deadline:.now.advanced(by:.seconds(4)))
+                        XCTAssertEqual(durable.state,.cancelled);XCTAssertEqual(durable.terminalCode,.cancelled)
+                        let status = try await http.executeRequest(uri:path,method:.get,headers:[.authorization:"Bearer "+fixture.token],body:nil)
+                        let value = try RunHTTPTestSupport.object(status.body)
+                        XCTAssertEqual(value["publicationPhase"] as? String,"cancelled");XCTAssertEqual(value["outputReady"] as? Bool,false)
+                        XCTAssertEqual((value["runtime"] as? [String:Any])?["state"] as? String,RunState.cancelled.rawValue)
+                        let stream = try await http.executeRequest(uri:path+"/events",method:.get,headers:[.authorization:"Bearer "+fixture.token],body:nil)
+                        let frames = try RunHTTPTestSupport.frames(stream.body)
+                        XCTAssertEqual(frames.count,2);XCTAssertEqual(frames.last?.1["type"] as? String,"RUN_FINISHED")
+                        let modelCalls = await model.calls,readCalls = await reads.calls
+                        XCTAssertEqual(modelCalls,stage == 2 ? 2 : 1);XCTAssertEqual(readCalls,stage == 0 ? 0 : 1)
+                    }
+                } catch { await fixture.coordinator.shutdown();throw error }
+                await fixture.coordinator.shutdown()
+            }
+        }
+    }
     func testAuthenticatedCancellationIsDurableAndTerminalRepeatsAreIdempotent() async throws {
         try await RunHTTPTestSupport.withClients { client,_ in
             let executor = HTTPGatedAnswerFixture(),fixture = try RunHTTPTestSupport.harness(client:client,executor:executor)
