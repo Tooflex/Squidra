@@ -139,11 +139,15 @@ final class RunWorkerSQLTests: XCTestCase, @unchecked Sendable {
             _ = try await events.create(binding,retentionSeconds:3600,deadline:.now.advanced(by:.seconds(4)))
             try await tasks.save(StoredReadRunTask(request:interrupted,threadID:binding.threadID),deadline:.now.advanced(by:.seconds(4)))
             try await ownership.register(runID:interrupted.runID,deadline:.now.advanced(by:.seconds(4)))
-            _ = try await publication.claim(binding,maximumExecutionSeconds:5,at:Self.clock.now(),deadline:.now.advanced(by:.seconds(4)))
+            let originalClaim = try await publication.claim(binding,maximumExecutionSeconds:180,at:Self.clock.now(),deadline:.now.advanced(by:.seconds(4)))
             let legacy = try Self.request(actor),legacyBinding = AGUIRunBinding(actorID:actor,runID:legacy.runID,threadID:UUID(),requestID:legacy.requestID)
             _ = try await events.create(legacyBinding,retentionSeconds:3600,deadline:.now.advanced(by:.seconds(4)))
             try await tasks.save(StoredReadRunTask(request:legacy,threadID:legacyBinding.threadID),deadline:.now.advanced(by:.seconds(4)))
             _ = try await publication.claim(legacyBinding,maximumExecutionSeconds:5,at:Self.clock.now(),deadline:.now.advanced(by:.seconds(4)))
+            for invalidOwner in [owner,copy] {
+                do { _ = try await publication.takeOver(runID:interrupted.runID,ownership:invalidOwner,deadline:.now.advanced(by:.seconds(4)));XCTFail("Live or copied owner took over") }
+                catch { XCTAssertEqual(error as? RunEventStoreError,.conflict) }
+            }
             // An untracked legacy run is not eligible even for the same actor.
             let before = try await ownership.previousRuns(deadline:.now.advanced(by:.seconds(4)))
             XCTAssertTrue(before.isEmpty)
@@ -156,7 +160,37 @@ final class RunWorkerSQLTests: XCTestCase, @unchecked Sendable {
             let resumedStore = PostgresReadRunOwnershipStore(client:other,ownership:next)
             let candidates = try await resumedStore.previousRuns(limit:1,deadline:.now.advanced(by:.seconds(4)))
             XCTAssertEqual(candidates.map(\.runID),[interrupted.runID]);XCTAssertEqual(candidates.first?.ownerID,owner.ownerID)
-            do { try await resumedStore.register(runID:interrupted.runID,deadline:.now.advanced(by:.seconds(4)));XCTFail("Old registration overwritten") }
+            do { _ = try await publication.takeOver(runID:legacy.runID,ownership:next,deadline:.now.advanced(by:.seconds(4)));XCTFail("Unregistered run taken over") }
+            catch { XCTAssertEqual(error as? RunEventStoreError,.conflict) }
+            let transferred = try await publication.takeOver(runID:interrupted.runID,ownership:next,deadline:.now.advanced(by:.seconds(4)))
+            XCTAssertEqual(transferred.binding,originalClaim.binding)
+            XCTAssertEqual(transferred.executionExpiresAt,originalClaim.executionExpiresAt)
+            do { _ = try await publication.takeOver(runID:interrupted.runID,ownership:next,deadline:.now.advanced(by:.seconds(4)));XCTFail("Second dispatch claim issued") }
+            catch { XCTAssertEqual(error as? RunEventStoreError,.conflict) }
+            do { _ = try await publication.finish(originalClaim,outcome:.cancelled,at:Self.clock.now(),deadline:.now.advanced(by:.seconds(4)));XCTFail("Old claim published") }
+            catch { XCTAssertEqual(error as? RunEventStoreError,.conflict) }
+            let exhausted = try Self.request(actor),exhaustedBinding = AGUIRunBinding(actorID:actor,runID:exhausted.runID,threadID:UUID(),requestID:exhausted.requestID)
+            _ = try await events.create(exhaustedBinding,retentionSeconds:3600,deadline:.now.advanced(by:.seconds(4)))
+            try await tasks.save(StoredReadRunTask(request:exhausted,threadID:exhaustedBinding.threadID),deadline:.now.advanced(by:.seconds(4)))
+            try await resumedStore.register(runID:exhausted.runID,deadline:.now.advanced(by:.seconds(4)))
+            _ = try await publication.claim(exhaustedBinding,maximumExecutionSeconds:180,at:Self.clock.now(),deadline:.now.advanced(by:.seconds(4)))
+            // Publication grace remains live, but the execution budget has expired.
+            _ = try await other.query("UPDATE run_event_streams SET execution_lease_until=clock_timestamp()+interval '4 seconds' WHERE actor_id=\(actor) AND run_id=\(exhausted.runID)").collect()
+            // Releasing ownership revokes this capability even while its DB lease is live.
+            next.releaseAfterJoiningWorkers()
+            do { _ = try await publication.finish(transferred,outcome:.cancelled,at:Self.clock.now(),deadline:.now.advanced(by:.seconds(4)));XCTFail("Released claim published") }
+            catch { XCTAssertEqual(error as? RunEventStoreError,.conflict) }
+            let third = try LocalRunOwnership.acquire(directory:directory,actorID:actor)
+            defer { third.releaseAfterJoiningWorkers() }
+            do { _ = try await publication.takeOver(runID:exhausted.runID,ownership:third,deadline:.now.advanced(by:.seconds(4)));XCTFail("Expired execution budget renewed") }
+            catch { XCTAssertEqual(error as? RunEventStoreError,.conflict) }
+            let finalClaim = try await publication.takeOver(runID:interrupted.runID,ownership:third,deadline:.now.advanced(by:.seconds(4)))
+            XCTAssertEqual(finalClaim.executionExpiresAt,originalClaim.executionExpiresAt)
+            let finished = try await publication.finish(finalClaim,outcome:.cancelled,at:Self.clock.now(),deadline:.now.advanced(by:.seconds(4)))
+            XCTAssertEqual(finished.phase,.cancelled);XCTAssertEqual(finished.stream.nextSequence,3)
+            do { _ = try await publication.takeOver(runID:interrupted.runID,ownership:third,deadline:.now.advanced(by:.seconds(4)));XCTFail("Terminal publication taken over") }
+            catch { XCTAssertEqual(error as? RunEventStoreError,.conflict) }
+            do { try await PostgresReadRunOwnershipStore(client:other,ownership:third).register(runID:interrupted.runID,deadline:.now.advanced(by:.seconds(4)));XCTFail("Old registration overwritten") }
             catch { XCTAssertEqual(error as? ReadRunTaskError,.conflict) }
             do { _ = try await other.query("DELETE FROM read_run_local_domains WHERE actor_id=\(actor)").collect();XCTFail("Local domain deleted") }
             catch { XCTAssertEqual((error as? PSQLError)?.serverInfo?[.sqlState],"55000") }
