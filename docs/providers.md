@@ -410,8 +410,8 @@ explicit `MetaTextQualification` from the host, an injected clock and a mandator
 and a conservative per-attempt upper bound including failures. The constructor
 checks that the bound covers the published full input context and 4096 output
 tokens; that minimum check does not verify account terms or qualify a deployment.
-No default qualification, live budget implementation or environment activation
-is supplied by this adapter.
+No default qualification or environment activation is supplied by this adapter.
+The explicit shared test-budget implementation is described below.
 
 Consent, capabilities, request size/output limits, deadline and qualification
 expiry are checked before reservation. The budget implementation must atomically
@@ -419,8 +419,9 @@ persist each attempt against a cumulative cap before returning, honor the
 monotonic deadline and retain reservations on failures, cancellation or uncertain
 outcomes. Attempt IDs are unique even when planning and answering share a request
 ID. Authorization latency consumes the same deadline as transport. Usage estimates
-do not refund reservations. The existing private 100 EUR test ledger still needs
-a host integration before real server questions can make paid calls.
+do not refund reservations. The existing private 100 EUR test ledger has an explicit Swift implementation
+below; server configuration still needs integration before real questions can
+make paid calls.
 
 The domain model port lacks function call IDs. Its tool messages are therefore
 encoded as JSON objects with `kind=untrusted_tool_data` and the original content,
@@ -437,3 +438,37 @@ failures map to the router's retryable provider errors; other failures remain
 terminal. The adapter itself never retries. Any router fallback requires a new
 budget reservation. `T11-META-MODEL` tests these boundaries offline, including both
 models, cumulative refusal, quoted hostile tool data and joined cancellation.
+
+
+## Shared persistent test budget
+
+`MetaFileAttemptBudget` implements the dated test envelope, using the existing
+`live-budget.json` and `live-budget.lock` in an explicitly supplied private local
+directory. It never initializes missing state, resets attempts or refunds a
+reservation. Each accepted attempt adds 1000 EUR cents; ten attempts exhaust the
+10000 EUR-cent cap. All prior text and SAM attempts count, including failed,
+interrupted and uncertain calls. Existing reports are preserved. New Swift
+attempts remain `reserved` with a null report; this status is not a charge or a
+claim of inference success.
+
+The snapshot expires at 2026-11-02 00:00 UTC. Its recorded conversion permits a
+per-attempt USD bound no larger than 11,172,000 micro-USD for the ten-EUR reserve.
+Clock, qualification and input checks still apply separately in MetaLanguageModel.
+Updating the dated snapshot requires reviewing pricing/FX and preserving the
+ledger; removing state cannot restore spending authority.
+
+The implementation anchors file operations to an open directory descriptor,
+requires owner-only directory/file permissions and rejects symlinks and linked
+regular files. A nonblocking exclusive flock uses the same lock as the Python
+probe driver. Contention refuses an attempt. Strict JSON validation rejects
+changed cap/FX metadata, duplicate keys and duplicate attempt IDs. The replacement
+file is fully written and fsynced, atomically renamed, then the directory is
+fsynced before authorization returns. An error after commit retains the uncertain
+reservation and prevents dispatch. Use a local filesystem with reliable flock,
+rename and fsync semantics; distributed storage is not qualified.
+
+`T11-META-BUDGET` uses only temporary authored ledgers to test exhaustion across
+new instances, Python/Swift interoperability and cross-process lock contention,
+private-file checks, expiry, malformed state and cancellation. It does not touch
+the real ledger, access credentials or make paid API calls. The default server
+remains offline until explicit host configuration is connected to this budget.
