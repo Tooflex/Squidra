@@ -464,3 +464,41 @@ its configured CI qualification when hosted CI is restored.
 The primitive is not yet wired into server admission or startup recovery. Durable
 run-owner registration, joined service lifetime, startup selection and refusal of
 foreign/untracked owners remain necessary before SQD-028 can close.
+
+## Durable actor and run owner registration
+
+Migration `runtime/010_read_run_ownership.sql` adds the actor's immutable local
+(domain UUID, device/inode) binding and an immutable owner UUID for each admitted
+run. The actor binding outlives run retention and rejects updates, deletion and
+truncation: losing or copying the runtime directory must not silently reset it.
+Run-owner rows follow task retention and reference both the saved task and exact
+actor domain/file identity. An explicit separately designed migration is required
+to move that domain; the runtime never infers takeover authority from a mismatch.
+
+`PostgresReadRunOwnershipStore` retains the live local lock handle and refuses
+operations after release. Registration binds the actor, then inserts only against
+an unexpired unmanaged stream, holding a shared row lock so a publication claim
+cannot overtake it. An exact retry remains valid after publication has started;
+replacing an existing owner fails. `previousRuns` returns at most eight retained
+running streams registered to a different owner in the same actor/domain/file.
+It excludes the current owner, terminal streams and untracked legacy runs.
+Selection alone is not an execution or publication claim.
+
+`PublishedReadRunCoordinator` accepts this registration port between task save
+and publication claim, before worker dispatch. Any failure dispatches nothing.
+An explicitly supplied `localOwnership` in `ServerComposition.live` is checked
+against the actor, bound before serving, passed to admission and retained by
+`ReadWorkerService`. Graceful shutdown joins the coordinator's pending admissions,
+workers and publication cleanup before releasing the handle. The existing
+model-free/status-only composition requires no ownership lock.
+
+T05-WORKERS checks real registration before execution, exact retry after claim,
+rejection of a copied identity without dispatch, released-handle rejection,
+previous-owner selection after joined shutdown, untracked-run exclusion and SQL
+immutability. T05-HTTP verifies the live admission row and lock release after
+service shutdown. T03 verifies the migration with runtime constraints.
+
+Production CLI directory provisioning and automatic startup selection/continuation
+are not yet activated. The explicit ownership injection is now integrated and
+qualified; SQD-028 remains open until that host activation and process-crash flow
+are complete.

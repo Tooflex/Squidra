@@ -160,9 +160,13 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
     func testLiveCompositionOwnsReadPipelineAndReportsModelFreeLimitation() async throws {
         try await RunHTTPTestSupport.withClients { client,_ in
             let (fixture,model,_,source) = try await RunHTTPTestSupport.realHarness(client:client)
+            let ownershipDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("squidra-live-owner-"+UUID().uuidString)
+            try FileManager.default.createDirectory(at:ownershipDirectory,withIntermediateDirectories:false,attributes:[.posixPermissions:0o700])
+            let localOwner = try LocalRunOwnership.acquire(directory:ownershipDirectory,actorID:fixture.actor)
+            defer { localOwner.releaseAfterJoiningWorkers();try? FileManager.default.removeItem(at:ownershipDirectory) }
             let recorder = PrivateTraceRecorder(limits:try TraceLimits())
             let host = try ReadHostConfiguration(models:[model],entities:[PlanningEntity(id:fixture.entity,label:"Allowed fixture entity")])
-            try await ServerComposition.live(configuration:fixture.configuration,readHost:host,traceRecorder:recorder).test(.live) { http in
+            try await ServerComposition.live(configuration:fixture.configuration,readHost:host,traceRecorder:recorder,localOwnership:localOwner).test(.live) { http in
                 let capabilities = try await http.executeRequest(uri:"/api/v1/run-capabilities",method:.get,headers:[.authorization:"Bearer "+fixture.token],body:nil)
                 XCTAssertEqual(capabilities.status,.ok)
                 XCTAssertEqual(try RunHTTPTestSupport.object(capabilities.body)["textRuns"] as? Bool,true)
@@ -171,6 +175,8 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                 let path = try XCTUnwrap(accepted.headers[.location])
                 let acceptedFields = try RunHTTPTestSupport.object(accepted.body)
                 let acceptedID = try XCTUnwrap((acceptedFields["runId"] as? String).flatMap(UUID.init(uuidString:)))
+                let ownedRows = try await client.query("SELECT owner_id FROM read_run_owners WHERE actor_id=\(fixture.actor) AND run_id=\(acceptedID)").collect()
+                XCTAssertEqual(try ownedRows.first?.decode(UUID.self),localOwner.ownerID)
                 let savedTask = try await PostgresReadRunTaskStore(client:client,actorID:fixture.actor).load(runID:acceptedID,deadline:.now.advanced(by:.seconds(4)))
                 XCTAssertEqual(savedTask?.request.question,"Read the fixture entity's historical evidence")
                 XCTAssertEqual(savedTask?.request.planningScope.entities.map(\.id),[fixture.entity])
@@ -269,6 +275,7 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                 let denied = try await http.executeRequest(uri:"/api/v1/runs",method:.post,headers:[.authorization:"Bearer "+fixture.token,.contentType:"application/json"],body:RunHTTPTestSupport.body(UUID()))
                 XCTAssertEqual(denied.status,.forbidden)
             }
+            XCTAssertFalse(localOwner.isHeld)
             try await ServerComposition.live(configuration:fixture.configuration).test(.live) { http in
                 let anonymous = try await http.executeRequest(uri:"/api/v1/run-capabilities",method:.get,headers:[:],body:nil)
                 XCTAssertEqual(anonymous.status,.unauthorized)

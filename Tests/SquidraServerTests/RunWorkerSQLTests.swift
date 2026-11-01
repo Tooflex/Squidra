@@ -101,6 +101,69 @@ final class RunWorkerSQLTests: XCTestCase, @unchecked Sendable {
             try await body(client,other,actor)
         }
     }
+    func testDurableLocalOwnershipPrecedesDispatchAndRejectsCopiedDomain() async throws {
+        try await Self.withDatabase { client,other,actor in
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("squidra-owner-sql-"+UUID().uuidString)
+            let copyDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("squidra-owner-copy-"+UUID().uuidString)
+            for path in [directory,copyDirectory] { try FileManager.default.createDirectory(at:path,withIntermediateDirectories:false,attributes:[.posixPermissions:0o700]) }
+            defer { try? FileManager.default.removeItem(at:directory);try? FileManager.default.removeItem(at:copyDirectory) }
+            let owner = try LocalRunOwnership.acquire(directory:directory,actorID:actor)
+            defer { owner.releaseAfterJoiningWorkers() }
+            let ownership = PostgresReadRunOwnershipStore(client:client,ownership:owner)
+            try await ownership.bind(deadline:.now.advanced(by:.seconds(4)))
+            let events = PostgresRunEventStore(client:client,actorID:actor),publication = PostgresRunPublicationStore(client:client,actorID:actor)
+            let tasks = PostgresReadRunTaskStore(client:client,actorID:actor),executor = ExecutionFixture(.blocked)
+            let coordinator = try PublishedReadRunCoordinator(actorID:actor,executor:executor,events:events,publication:publication,
+                clock:Self.clock,tasks:tasks,ownership:ownership)
+            let request = try Self.request(actor)
+            _ = try await coordinator.submit(request,threadID:UUID())
+            try await Self.wait { await executor.calls == 1 }
+            let rows = try await other.query("SELECT owner_id,domain_id,file_id FROM read_run_owners WHERE actor_id=\(actor) AND run_id=\(request.runID)").collect()
+            let row = try XCTUnwrap(rows.first),(id,domain,file) = try row.decode((UUID,UUID,String).self)
+            XCTAssertEqual(id,owner.ownerID);XCTAssertEqual(domain,owner.domainID);XCTAssertEqual(file,owner.fileID)
+            // An acknowledgement retry remains exact even after publication starts.
+            try await ownership.register(runID:request.runID,deadline:.now.advanced(by:.seconds(4)))
+            let name = actor.uuidString.lowercased()+".lock"
+            try FileManager.default.copyItem(at:directory.appendingPathComponent(name),to:copyDirectory.appendingPathComponent(name))
+            let copy = try LocalRunOwnership.acquire(directory:copyDirectory,actorID:actor)
+            defer { copy.releaseAfterJoiningWorkers() }
+            XCTAssertEqual(copy.domainID,owner.domainID);XCTAssertNotEqual(copy.fileID,owner.fileID)
+            let wrongStore = PostgresReadRunOwnershipStore(client:other,ownership:copy),never = ExecutionFixture(.blocked)
+            let rejected = try PublishedReadRunCoordinator(actorID:actor,executor:never,events:events,publication:publication,clock:Self.clock,tasks:tasks,ownership:wrongStore)
+            do { _ = try await rejected.submit(Self.request(actor),threadID:UUID());XCTFail("Copied domain dispatched") }
+            catch { XCTAssertEqual(error as? ReadRunSubmissionError,.recoveryRequired) }
+            let deniedCalls = await never.calls;XCTAssertEqual(deniedCalls,0)
+            await rejected.shutdown()
+            // A run claimed before worker start belongs to the original owner too.
+            let interrupted = try Self.request(actor),binding = AGUIRunBinding(actorID:actor,runID:interrupted.runID,threadID:UUID(),requestID:interrupted.requestID)
+            _ = try await events.create(binding,retentionSeconds:3600,deadline:.now.advanced(by:.seconds(4)))
+            try await tasks.save(StoredReadRunTask(request:interrupted,threadID:binding.threadID),deadline:.now.advanced(by:.seconds(4)))
+            try await ownership.register(runID:interrupted.runID,deadline:.now.advanced(by:.seconds(4)))
+            _ = try await publication.claim(binding,maximumExecutionSeconds:5,at:Self.clock.now(),deadline:.now.advanced(by:.seconds(4)))
+            let legacy = try Self.request(actor),legacyBinding = AGUIRunBinding(actorID:actor,runID:legacy.runID,threadID:UUID(),requestID:legacy.requestID)
+            _ = try await events.create(legacyBinding,retentionSeconds:3600,deadline:.now.advanced(by:.seconds(4)))
+            try await tasks.save(StoredReadRunTask(request:legacy,threadID:legacyBinding.threadID),deadline:.now.advanced(by:.seconds(4)))
+            _ = try await publication.claim(legacyBinding,maximumExecutionSeconds:5,at:Self.clock.now(),deadline:.now.advanced(by:.seconds(4)))
+            // An untracked legacy run is not eligible even for the same actor.
+            let before = try await ownership.previousRuns(deadline:.now.advanced(by:.seconds(4)))
+            XCTAssertTrue(before.isEmpty)
+            await coordinator.shutdown()
+            owner.releaseAfterJoiningWorkers()
+            do { try await ownership.register(runID:interrupted.runID,deadline:.now.advanced(by:.seconds(4)));XCTFail("Released handle accepted") }
+            catch { XCTAssertEqual(error as? ReadRunTaskError,.invalidState) }
+            let next = try LocalRunOwnership.acquire(directory:directory,actorID:actor)
+            defer { next.releaseAfterJoiningWorkers() }
+            let resumedStore = PostgresReadRunOwnershipStore(client:other,ownership:next)
+            let candidates = try await resumedStore.previousRuns(limit:1,deadline:.now.advanced(by:.seconds(4)))
+            XCTAssertEqual(candidates.map(\.runID),[interrupted.runID]);XCTAssertEqual(candidates.first?.ownerID,owner.ownerID)
+            do { try await resumedStore.register(runID:interrupted.runID,deadline:.now.advanced(by:.seconds(4)));XCTFail("Old registration overwritten") }
+            catch { XCTAssertEqual(error as? ReadRunTaskError,.conflict) }
+            do { _ = try await other.query("DELETE FROM read_run_local_domains WHERE actor_id=\(actor)").collect();XCTFail("Local domain deleted") }
+            catch { XCTAssertEqual((error as? PSQLError)?.serverInfo?[.sqlState],"55000") }
+            do { _ = try await other.query("UPDATE read_run_owners SET owner_id=\(next.ownerID) WHERE actor_id=\(actor) AND run_id=\(interrupted.runID)").collect();XCTFail("Run owner replaced") }
+            catch { XCTAssertEqual((error as? PSQLError)?.serverInfo?[.sqlState],"55000") }
+        }
+    }
     func testCallerCancellationCapacityReplayAndUncertainCompletionNeverRepeatExecution() async throws {
         try await Self.withDatabase { client,other,actor in
             let events = PostgresRunEventStore(client:client,actorID:actor),readback = PostgresRunPublicationStore(client:other,actorID:actor)
