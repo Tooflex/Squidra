@@ -20,3 +20,23 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-035-DEPENDENCY-CONTRACTS
       - name: Analyze exact Swift and npm lockfiles
         run: bash Scripts/test-issue.sh SQD-035-DEPENDENCIES
+
+  swift-sast:
+    name: Swift static analysis
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned Swift syntax parser
+        run: bash Scripts/install-ci-swift.sh
+      - name: Install pinned local analyzer
+        run: |
+          python3 -m venv .build/semgrep
+          .build/semgrep/bin/pip install semgrep==1.180.0
+          echo "$PWD/.build/semgrep/bin" >> "$GITHUB_PATH"
+      - name: Verify Swift analyzer negative fixtures
+        run: bash Scripts/test-issue.sh SQD-035-SWIFT-SAST-CONTRACTS
+      - name: Analyze every tracked production Swift file
+        run: bash Scripts/test-issue.sh SQD-035-SWIFT-SAST

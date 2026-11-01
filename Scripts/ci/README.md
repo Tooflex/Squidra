@@ -46,6 +46,36 @@ No hosted run has been claimed. At final restoration, add pull-request and push
 triggers and require the `Dependency analysis` status in the actual repository
 ruleset after a real runner execution. A workflow file does not change a ruleset.
 Existing Bootstrap contracts, database integration and offline evaluations remain
-in place, also paused. Swift-compatible SAST, lint, secret scanning and their
-negative fixtures still need integration before #35 is complete. Do not treat
-this dependency gate alone as completing #35 or reactivate CI early.
+in place, also paused. The targeted Swift SAST gate below is integrated locally;
+lint and secret scanning still need integration before #35 is complete. Do not
+treat either component as completing #35 or reactivate CI early.
+
+## Swift static analysis
+
+Install Swift 6.4.2 and Semgrep CE 1.180.0 and run `SQD-035-SWIFT-SAST-CONTRACTS` followed by
+`SQD-035-SWIFT-SAST` through `Scripts/test-issue.sh`. The native analyzer runs
+locally on snapshots of every tracked `Sources/**/*.swift` file; exact coverage
+is required. Before scanning, Swift 6.4.2 parses those same snapshots without
+typechecking or linking. This is necessary because Semgrep can recover some
+malformed Swift without reporting errors. Missing files, parser errors, unknown findings, ignored findings,
+wrong analyzer versions and inconsistent exit statuses fail. Neither Git ignore
+rules nor inline `nosemgrep` comments can suppress this gate. Telemetry, version
+checks and remote rule retrieval are disabled. No account login is used.
+
+Three checked-in Swift AST rules reject calls to `Insecure.MD5.hash`,
+`Insecure.SHA1.hash` and `SecTrustSetExceptions`. This is targeted detection of
+weak hash APIs and certificate-trust exceptions, not a full security audit,
+interprocedural analysis or a claim to detect all equivalent wrappers/aliases.
+Framework-specific Pro rules are not silently assumed to work in CE; see the
+[upstream Swift coverage documentation](https://docs.semgrep.dev/languages/swift).
+The actual analyzer must detect all three negative fixtures (including an inline
+suppression attempt), while a SHA256 fixture and an MD5 call inside a comment
+must pass. The report records analyzer version, source hashes and UTC time;
+findings contain only rule, path and line, never source snippets. Failure replaces
+any prior success report at `.build/security/swift-sast.json`.
+
+The manual-only Security workflow includes `Swift static analysis`. This job
+must receive an actual hosted execution and required-status configuration when
+CI is finally restored. Local qualification does not establish hosted success.
+Lint and secret scanning remain outstanding; these rules do not substitute for
+either gate or close #35 on their own.
