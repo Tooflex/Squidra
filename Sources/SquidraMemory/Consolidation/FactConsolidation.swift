@@ -152,6 +152,7 @@ public actor FactConsolidation {
     }
 
     public func proposal(id: UUID) -> FactProposal? { proposals[id] }
+    public func allProposals() -> [FactProposal] { proposals.values.sorted { Self.ordered($0.id, $1.id) } }
     public func original(id: UUID) -> MemoryRecord? { originals[id] }
 
     /// A reviewed fact is a private memory, never world evidence. Rechecks the
