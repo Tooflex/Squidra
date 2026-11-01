@@ -1329,5 +1329,25 @@
       "owned_cleanup"
     ],
     "requires_database": true
+  },
+  "SQD-035-DEPENDENCIES": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/ci/dependencies.py"
+    ],
+    "tests": [
+      "resolved_dependency_scan"
+    ]
+  },
+  "SQD-035-DEPENDENCY-CONTRACTS": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/ci/test_dependencies.py"
+    ],
+    "tests": [
+      "dependency_gate_contracts"
+    ]
   }
 }
