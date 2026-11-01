@@ -589,7 +589,13 @@
       "crash_reserved",
       "crash_pending",
       "crash_effect",
-      "crash_result"
+      "crash_result",
+      "crash_approval_pending",
+      "crash_approval_approved",
+      "crash_approval_denied",
+      "crash_approval_withdrawn",
+      "crash_approval_expired",
+      "crash_approval_approved_expired"
     ]
   },
   "T14-HOST": {
