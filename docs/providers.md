@@ -394,8 +394,9 @@ optional.
 `MetaSAMVisionModel` preserves host context and image digest and identifies the
 provider version as `alias:sam-3.1`, not immutable weights. Detection confidence
 is the minimum only when both scores exist; otherwise it remains absent.
-Appearance embeddings are absent. FrameImporter still rejects cloud models,
-even with transfer consent: this adapter does not activate paid world ingestion.
+Appearance embeddings are absent. FrameImporter rejects cloud models unless the
+host supplies explicit admission in addition to transfer consent (see below).
+The default HTTP/world import remains synthetic-only.
 
 Offline `T11-SAM-NATIVE` compares 40 reference-encoded rasters and 18 rejected
 streams, exercises geometry, quotas, cancellation and adapter provenance, and
@@ -557,3 +558,32 @@ and never automatically resubmits a question. The normal server, not a wrapper
 holding the ledger lock, reserves each actual call. Logs and temporary processes
 are bounded and owned; the persistent report excludes bearer keys, database
 credentials, provider response IDs and hidden reasoning.
+
+
+## SAM cloud admission boundary
+
+`FrameImporter` now accepts an optional trusted `VisionCloudAdmission`. Cloud
+models remain unavailable without it, even when a frame has transfer consent.
+Actor/camera consent and PNG validation precede admission. The admission task
+shares the provider's monotonic timeout and cancellation scope, and consent and
+identity are checked again before dispatch. Local/synthetic processing keeps the
+five-second maximum; explicitly admitted cloud processing is bounded to thirty
+seconds and never exceeds the caller deadline or consent expiry. Output identity,
+image digest, frame context and full-frame mask validation remain unchanged.
+
+`MetaSAMCloudAdmission` accepts only `meta.sam` / `alias:sam-3.1` cloud identity and
+the bounded SAM PNG profile (64 KiB, dimensions at most 1024). It requires a
+`MetaSAMAttemptBudget` before dispatch. `MetaFileAttemptBudget.reserveSAM` uses
+the same atomic ledger/lock path as text attempts, writes model `sam-3.1`, and
+consumes the same ten-EUR reservation. Mixing text and image attempts cannot
+create separate allowances. Cancellation or provider failure does not refund a
+reservation. This is host-controlled test qualification, not a statement of
+account-wide zero retention or a new server route.
+
+`T11-SAM-ADMISSION` replays the existing public captured SAM response through the
+actual native decoder and importer with an injected transport. It covers absent
+admission, denied budget, actor/camera/transfer consent, malformed/oversized media,
+unknown identity, deadline and joined caller cancellation. Shared file-budget
+tests now mix text and SAM reservations through exhaustion. All use temporary
+state or fake budgets; no additional paid inference or real ledger mutation is
+performed. PostgreSQL/HTTP cloud publication remains a separate integration step.

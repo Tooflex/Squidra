@@ -1127,5 +1127,9 @@
   "T11-META-HOST": {
     "kind": "xctest",
     "filter": "^SquidraServerTests\\.MetaReadHostConfigurationTests/"
+  },
+  "T11-SAM-ADMISSION": {
+    "kind": "xctest",
+    "filter": "^SquidraMetaTests\\.SAMCloudAdmissionTests/"
   }
 }

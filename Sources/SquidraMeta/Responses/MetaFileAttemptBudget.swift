@@ -11,10 +11,14 @@ import Glibc
 public enum MetaBudgetError: Error, Equatable, Sendable {
     case unsafePath, unavailable, busy, invalidLedger, expired, invalidReservation
 }
+public protocol MetaSAMAttemptBudget: Sendable {
+    /// Reserve one image attempt durably against the same global Meta/SAM cap.
+    func reserveSAM(attemptID: UUID, frameID: UUID, deadline: ContinuousClock.Instant) async throws
+}
 /// Dated, opt-in qualification envelope shared with Scripts/test-meta-live.py.
 /// Requires existing state; never initializes, resets or refunds the test budget.
 /// Use a local filesystem with reliable flock, atomic rename and fsync semantics.
-public struct MetaFileAttemptBudget: MetaAttemptBudget {
+public struct MetaFileAttemptBudget: MetaAttemptBudget, MetaSAMAttemptBudget {
     public static let validUntilSeconds: Double = 1_793_577_600
     public static let maximumReservationMicroUSD: Int64 = 11_172_000 // 10 EUR × 1.1172
     private let directory: URL
@@ -26,6 +30,13 @@ public struct MetaFileAttemptBudget: MetaAttemptBudget {
     @concurrent
     public func reserve(attemptID: UUID, requestID: UUID, model: MetaTextModel,
                         maximumCostMicroUSD: Int64, deadline: ContinuousClock.Instant) async throws {
+        try reserveRecord(attemptID:attemptID,model:model.rawValue,maximumCostMicroUSD:maximumCostMicroUSD,deadline:deadline)
+    }
+    @concurrent
+    public func reserveSAM(attemptID: UUID, frameID: UUID, deadline: ContinuousClock.Instant) async throws {
+        try reserveRecord(attemptID:attemptID,model:"sam-3.1",maximumCostMicroUSD:10_000_000,deadline:deadline)
+    }
+    private func reserveRecord(attemptID: UUID, model: String, maximumCostMicroUSD: Int64, deadline: ContinuousClock.Instant) throws {
         try check(deadline)
         guard maximumCostMicroUSD > 0,maximumCostMicroUSD <= Self.maximumReservationMicroUSD else { throw MetaBudgetError.invalidReservation }
         let parent = open(directory.path,O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
@@ -62,7 +73,7 @@ public struct MetaFileAttemptBudget: MetaAttemptBudget {
         guard !attempts.contains(where:{ $0["id"] as? String == id }) else { throw MetaBudgetError.invalidReservation }
         // Keep the Python schema unchanged. Correlation is intentionally omitted;
         // no question, provider ID, credential or private world data is persisted.
-        attempts.append(["id":id,"model":model.rawValue,"reservedEURCents":1000,"status":"reserved","report":NSNull()])
+        attempts.append(["id":id,"model":model,"reservedEURCents":1000,"status":"reserved","report":NSNull()])
         ledger["attempts"] = attempts
         let output = try JSONSerialization.data(withJSONObject:ledger,options:[.sortedKeys,.prettyPrinted,.withoutEscapingSlashes])
         guard output.count <= 262_144 else { throw MetaBudgetError.invalidLedger }

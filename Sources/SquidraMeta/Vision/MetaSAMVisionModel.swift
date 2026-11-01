@@ -2,8 +2,8 @@ import Foundation
 import SquidraDomain
 import SquidraPerception
 
-/// Prepared cloud adapter, not host activation. FrameImporter still refuses
-/// unqualified cloud deployment; only its host-bound VisionRequest may reach us.
+/// Cloud adapter requiring explicit FrameImporter admission at the host boundary.
+/// Only its host-bound VisionRequest may reach this provider.
 public struct MetaSAMVisionModel: VisionModel {
     public let identity: VisionIdentity
     private let client: MetaSAMImageClient, concept: String
