@@ -100,3 +100,39 @@ isolated database credentials. This harness does not add a production fixture mo
 This proves end-to-end consolidation review with authored data and graceful restart.
 It does not claim live extraction accuracy, abrupt process-crash coverage, frame
 import/questions, external-action approval, or manual screen-reader qualification.
+
+## Exact command authorization
+
+Open `/approvals` from the review footer and enter a local server origin, owner
+session token and approval UUID. This uses the existing `/api/v1/approvals/:id`
+preview and decision routes. The full tool, target, original arguments JSON,
+scope, command fingerprint, decision digest, run/ledger IDs and expiry are shown
+as text. The page does not interpret command arguments or invoke an executor.
+
+Authorize, refuse and withdraw each require a confirmation dialog with initial
+focus on Cancel. The POST contains only schema version, chosen decision and the
+preview's exact digest. A successful response must preserve the entire displayed
+command binding and advance its version once, with a decision time. A changed
+command, 409 conflict, malformed response or transport failure clears controls
+and requires an explicit refresh; the client never retries a decision silently.
+An approved state is labelled as authorization with execution unconfirmed.
+
+A local expiry timer closes an open confirmation and removes pending actions.
+The notice explicitly refers to the browser clock; the server remains the expiry
+authority, and a lagging browser cannot override a server refusal. Refresh shows
+server-reported approved, denied, withdrawn or expired states. Browser suspension
+is also covered by rechecking the deadline immediately before submitting.
+
+Tokens stay in memory and are cleared on disconnect/pagehide. Only localhost or
+127.0.0.1 HTTP origins are allowed, redirects and browser credentials are disabled,
+and responses are capped at 128 KiB with a ten-second timeout. Native labels,
+buttons, dialog focus, skip navigation and status/alert regions support keyboard
+and assistive navigation. No manual screen-reader qualification is claimed.
+
+`bash Scripts/test-issue.sh T06-APPROVALS` requires six Chromium scenarios:
+exact digest and keyboard confirmation, refusal/withdrawal, local/server expiry,
+changed command/conflict, unavailable/malformed/401, and local-origin/session
+isolation. These fixtures intercept HTTP and do not execute commands. Real
+browser-to-PostgreSQL authorization, frame import and historical questions remain
+part of #42; the existing real consolidation review tests do not prove this
+new authorization flow. No command execution or live-provider claim is made.

@@ -10,9 +10,12 @@ root = Path(__file__).resolve().parent.parent
 web = root / 'web'
 report = web / 'test-results/report.json'
 report.unlink(missing_ok=True)
-timeline = sys.argv[1:] == ['timeline']
+mode = sys.argv[1] if len(sys.argv) == 2 else 'review'
+if len(sys.argv) > 2 or mode not in ['review', 'timeline', 'approvals']:
+    sys.exit('Unknown browser suite')
+selection = {'review': 'tests/review.spec.ts', 'timeline': 'tests/timeline/', 'approvals': 'tests/approvals/'}[mode]
 expected = 6
-commands = [['npm', 'ci', '--ignore-scripts'], ['npx', '--no-install', 'playwright', 'install', 'chromium'], ['npm', 'test', '--', 'tests/timeline/' if timeline else 'tests/review.spec.ts']]
+commands = [['npm', 'ci', '--ignore-scripts'], ['npx', '--no-install', 'playwright', 'install', 'chromium'], ['npm', 'test', '--', selection]]
 if sys.platform.startswith('linux') and os.environ.get('CI') == 'true':
     commands[1].append('--with-deps')
 for command in commands:
@@ -24,4 +27,4 @@ try:
     assert stats['expected'] == expected and all(stats[key] == 0 for key in ['unexpected', 'flaky', 'skipped'])
 except (OSError, ValueError, KeyError, AssertionError):
     sys.exit('Browser report missing, incomplete, skipped, flaky or failed')
-print('SQUIDRA_TEST_PASS:' + ('typed_web_timeline' if timeline else 'typed_web_review'))
+print('SQUIDRA_TEST_PASS:' + 'typed_web_' + mode)

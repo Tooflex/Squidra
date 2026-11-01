@@ -59,6 +59,8 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-029-UNIT
       - name: Verify typed local review interface in Chromium
         run: bash Scripts/test-issue.sh T06-REVIEW
+      - name: Exact command approval browser
+        run: bash Scripts/test-issue.sh T06-APPROVALS
       - name: Temporal browser checks
         run: bash Scripts/test-issue.sh SQD-023
       - name: Temporal browser against normal server and PostgreSQL
