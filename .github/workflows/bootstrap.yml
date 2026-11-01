@@ -194,6 +194,8 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-031-DATABASE
       - name: Verify durable internal watches
         run: bash Scripts/test-issue.sh SQD-026-SQL
+      - name: Verify watch restart after SIGKILL
+        run: bash Scripts/test-issue.sh SQD-026-CRASH
       - name: Verify frame import to durable evidence and sourced answers
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-020-PUBLISH

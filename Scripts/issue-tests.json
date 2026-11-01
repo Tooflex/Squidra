@@ -737,5 +737,30 @@
       "client_loopback_boundary",
       "durable_watch_notification"
     ]
+  },
+  "SQD-026-CRASH": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-watch-crash"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "crash_pending",
+      "crash_committed"
+    ]
+  },
+  "SQD-026": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/test-watches.py"
+    ],
+    "tests": [
+      "watch_transactions",
+      "watch_live",
+      "watch_restart"
+    ]
   }
 }

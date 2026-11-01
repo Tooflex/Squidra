@@ -61,5 +61,21 @@ skipping an event. A fresh application resumes from the persisted cursor.
 SQL tests inject checkpoint failure and verify atomic rollback, concurrent
 processing, cursor draining and actor isolation. T05-HTTP exercises automatic
 notification creation and a fresh live application with no duplicate delivery.
-The gateway tool and actual SIGKILL qualification remain separate work; SQD-026
-stays open until abrupt process restart is qualified.
+`bash Scripts/test-issue.sh SQD-026` is the complete acceptance gate: real
+PostgreSQL transactions, live server lifecycle, and process restart. The opt-in
+`squidra-watch-crash-fixture` runs only with isolated test database credentials.
+Its parent script owns and kills its child PID with SIGKILL after either source
+publication (pending notification) or committed notification/checkpoint. A fresh
+process reads the actor/watch identity from an atomic marker and all remaining
+state from PostgreSQL, drains the journal, verifies one stable notification,
+replays the source without duplication, and checks the external outbox is empty.
+A jitter epoch produces no movement and leaves the watch active before either
+crash scenario. The marker contains no credentials or observation payloads.
+
+The process fixture qualifies the durable dispatcher port; T05-HTTP separately
+qualifies live application ownership and graceful shutdown/restart. It does not
+claim a hardware power-loss test or an external sensor benchmark. The model-facing
+Action Gateway tool remains T13 (#49); no direct model access to this store is
+introduced. No new migration or production behavior is required by the crash
+qualification itself. Rollback can remove the fixture and gates without touching
+persisted intentions, notifications or cursors.
