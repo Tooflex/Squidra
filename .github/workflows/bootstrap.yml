@@ -59,6 +59,8 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-029-UNIT
       - name: Verify typed local review interface in Chromium
         run: bash Scripts/test-issue.sh T06-REVIEW
+      - name: Synthetic frame import browser
+        run: bash Scripts/test-issue.sh T06-IMPORT
       - name: Exact command approval browser
         run: bash Scripts/test-issue.sh T06-APPROVALS
       - name: Approval browser against normal server and PostgreSQL

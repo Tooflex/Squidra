@@ -1056,5 +1056,16 @@
       "client_loopback_boundary",
       "synthetic_frame_http"
     ]
+  },
+  "T06-IMPORT": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/test-web-review.py",
+      "import"
+    ],
+    "tests": [
+      "typed_web_import"
+    ]
   }
 }

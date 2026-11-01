@@ -5,6 +5,8 @@ files.set('/timeline', ['timeline/index.html', 'text/html; charset=utf-8']);
 files.set('/timeline/app.js', ['timeline/app.js', 'text/javascript; charset=utf-8']);
 files.set('/approvals', ['approvals/index.html', 'text/html; charset=utf-8']);
 files.set('/approvals/app.js', ['approvals/app.js', 'text/javascript; charset=utf-8']);
+files.set('/import', ['import/index.html', 'text/html; charset=utf-8']);
+files.set('/import/app.js', ['import/app.js', 'text/javascript; charset=utf-8']);
 const server = http.createServer(async (request, response) => {
   const entry = files.get(request.url);
   const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
