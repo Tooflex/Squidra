@@ -1275,5 +1275,15 @@
       "structural_export"
     ],
     "requires_database": true
+  },
+  "SQD-033": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/check-github-rules/test_check.py"
+    ],
+    "tests": [
+      "github_governance_contracts"
+    ]
   }
 }
