@@ -15,13 +15,13 @@ import time
 ROOT = Path(__file__).resolve().parent.parent
 credential_path, port = sys.argv[1:3]
 mode = sys.argv[3] if len(sys.argv) == 4 else "completed"
-if mode not in {"completed", "preplanning", "saved-plan", "saved-result"}:
+if mode not in {"completed", "preplanning", "saved-plan", "saved-result", "saved-answer", "saved-completion"}:
     raise SystemExit("Unknown crash boundary")
 early = mode != "completed"
-seed_mode = {"completed": "seed", "preplanning": "seed-early", "saved-plan": "seed-plan", "saved-result": "seed-result"}[mode]
-resume_mode = {"preplanning": "resume-early", "saved-plan": "resume-plan", "saved-result": "resume-result"}.get(mode)
-verified = {"preplanning": "PREPLANNING_RECOVERY_VERIFIED", "saved-plan": "SAVED_PLAN_RECOVERY_VERIFIED", "saved-result": "SAVED_RESULT_RECOVERY_VERIFIED"}.get(mode)
-prefix = {"completed": "completed", "preplanning": "preplanning", "saved-plan": "saved_plan", "saved-result": "saved_result"}[mode]
+seed_mode = {"completed": "seed", "preplanning": "seed-early", "saved-plan": "seed-plan", "saved-result": "seed-result", "saved-answer": "seed-answer", "saved-completion": "seed-completion"}[mode]
+resume_mode = {"preplanning": "resume-early", "saved-plan": "resume-plan", "saved-result": "resume-result", "saved-answer": "resume-answer", "saved-completion": "resume-completion"}.get(mode)
+verified = {"preplanning": "PREPLANNING_RECOVERY_VERIFIED", "saved-plan": "SAVED_PLAN_RECOVERY_VERIFIED", "saved-result": "SAVED_RESULT_RECOVERY_VERIFIED", "saved-answer": "SAVED_ANSWER_RECOVERY_VERIFIED", "saved-completion": "SAVED_ANSWER_RECOVERY_VERIFIED"}.get(mode)
+prefix = {"completed": "completed", "preplanning": "preplanning", "saved-plan": "saved_plan", "saved-result": "saved_result", "saved-answer": "saved_answer", "saved-completion": "saved_completion"}[mode]
 credentials = dict(line.split('=', 1) for line in Path(credential_path).read_text().splitlines())
 env = dict(os.environ, SQUIDRA_PUBLICATION_CRASH_FIXTURE='1', SQUIDRA_TEST_DB_PORT=port,
            SQUIDRA_TEST_DB_PASSWORD=credentials['POSTGRES_PASSWORD'])

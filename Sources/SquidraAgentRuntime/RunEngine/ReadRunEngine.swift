@@ -33,6 +33,15 @@ public struct ReadRunResult: Sendable {
         planningRouting.reservedCostUpperBoundMicroUSD + answerRouting.reservedCostUpperBoundMicroUSD
     }
 }
+/// A completed runtime with its durable answer; publication reads the original
+/// completion archive. No raw bytes are promoted to a new GroundedAnswer proof.
+public struct RecoveredReadRunCompletion: Sendable {
+    public let snapshot: RunSnapshot
+    public let planningRouting: RoutedModelResponse,answerRouting: RoutedModelResponse
+    public var reservedModelCostUpperBoundMicroUSD: Int64 {
+        planningRouting.reservedCostUpperBoundMicroUSD+answerRouting.reservedCostUpperBoundMicroUSD
+    }
+}
 /// Exactly one read iteration; no executor port, effectful tool, retry loop or
 /// implicit crash retry is available here. Pre-planning continuation is explicit.
 public struct ReadRunEngine: Sendable {
@@ -138,6 +147,64 @@ public struct ReadRunEngine: Sendable {
             let ms = max(0,min(Double(snapshot.budget.activeMilliseconds-snapshot.activeMilliseconds),remaining*1000))
             return try await run(request,controller:controller,deadline:.now.advanced(by:.milliseconds(Int64(ms.rounded(.down)))),restoredPlan:plan,restoredResult:result)
         } catch let failure as ReadRunFailure { throw failure }
+        catch { throw ReadRunFailure(runID:request.runID,traceID:request.traceID,code:.recoveryRequired,state:nil) }
+    }
+    /// Complete a saved answer without any model/tool call. The host must prove
+    /// the old worker stopped. Existing grounded bytes retain their original ages.
+    public func resumeSavedAnswer(_ request: ReadRunRequest,expectedVersion: Int64) async throws -> RecoveredReadRunCompletion {
+        do {
+            try Task.checkCancellation()
+            guard request.effectiveToolScope == ["world:read"],let plans,let toolResults,let answers,let completions,
+                  let planArchive = try await plans.load(runID:request.runID,deadline:.now.advanced(by:.seconds(4))),
+                  let toolArchive = try await toolResults.load(runID:request.runID,deadline:.now.advanced(by:.seconds(4))),
+                  let answerArchive = try await answers.load(runID:request.runID,deadline:.now.advanced(by:.seconds(4))),
+                  planArchive.actorID == request.actorID,planArchive.runID == request.runID,planArchive.requestID == request.requestID,
+                  toolArchive.actorID == request.actorID,toolArchive.runID == request.runID,toolArchive.requestID == request.requestID,
+                  answerArchive.actorID == request.actorID,answerArchive.runID == request.runID,answerArchive.requestID == request.requestID,
+                  planArchive.planningVersion > 0,planArchive.planningVersion < toolArchive.executionVersion,
+                  toolArchive.executionVersion < answerArchive.respondingVersion,answerArchive.respondingVersion <= expectedVersion else { throw RunError.recoveryRequired }
+            let plan = try planner.restore(planArchive.archive,scope:request.planningScope,maximumCostMicroUSD:request.modelOptions.maximumCostMicroUSD,maximumOutputTokens:request.modelOptions.maximumOutputTokens)
+            let response = try ReadAnswerArchive.decode(answerArchive.archive)
+            guard response.response.requestID == request.requestID,response.response.outputTokens <= request.modelOptions.maximumOutputTokens,
+                  response.reservedCostUpperBoundMicroUSD <= request.modelOptions.maximumCostMicroUSD-plan.routing.reservedCostUpperBoundMicroUSD else { throw RunError.recoveryRequired }
+            let proposal = plan.proposal,key = "read:"+request.runID.uuidString.lowercased()
+            let command = try ActionCommand(actorID:request.actorID,runID:request.runID,tool:proposal.tool,idempotencyKey:key,
+                target:proposal.target,arguments:proposal.arguments,scope:Array(request.effectiveToolScope))
+            guard toolArchive.commandFingerprint == command.fingerprintHex,toolArchive.toolIdentifier == proposal.tool.identifier else { throw RunError.recoveryRequired }
+            let catalog = try ToolCatalog(definitions:[WorldLocationTool.definition(),WorldChangesTool.definition()])
+            let result = try catalog.validateOutput(toolArchive.payload,for:proposal.tool)
+            let evidence = try decoder.decode(result,proposal:proposal,actorID:request.actorID,intent:request.intent,clock:clock,policy:freshness)
+            let answer = try GroundedAnswerValidator().validate(response.response,expectedRequestID:request.requestID,context:evidence.context)
+            let existing = try await completions.load(runID:request.runID,deadline:.now.advanced(by:.seconds(4)))
+            if let existing {
+                guard existing.actorID == request.actorID,existing.runID == request.runID,existing.requestID == request.requestID,
+                      existing.respondingVersion >= answerArchive.respondingVersion,existing.respondingVersion <= expectedVersion else { throw RunError.recoveryRequired }
+                let document = try JSONDocument(existing.answerJSON,maximumBytes:65_536)
+                guard !document.containsNUL,let value = try JSONSerialization.jsonObject(with:existing.answerJSON) as? [String:Any],
+                      value["schemaVersion"] as? String == "1",
+                      (value["actorId"] as? String).flatMap(UUID.init(uuidString:)) == request.actorID,
+                      (value["requestId"] as? String).flatMap(UUID.init(uuidString:)) == request.requestID else { throw RunError.recoveryRequired }
+                // The trusted completion store only accepts GroundedAnswer on save.
+                // Do not replace its immutable original observation-age metadata.
+            }
+            let controller = try await RunController.restoreSavedAnswer(actorID:request.actorID,id:request.runID,traceID:request.traceID,
+                expectedVersion:expectedVersion,archiveVersion:answerArchive.respondingVersion,fingerprint:command.fingerprintHex,key:key,
+                hasCompletion:existing != nil,store:store,clock:clock)
+            let snapshot = try await controller.snapshot()
+            try Self.active(snapshot)
+            guard let wallEnd = snapshot.deadlineSecondsSince1970 else { throw RunError.recoveryRequired }
+            let seconds = min(wallEnd,request.modelOptions.deadline.secondsSince1970)-(try clock.now()).secondsSince1970
+            guard seconds > 0 else { throw ReadRunFailureCode.deadlineExceeded }
+            if existing == nil {
+                try await completions.save(snapshot:snapshot,answer:answer,deadline:.now.advanced(by:.seconds(min(4,seconds))))
+            }
+            try Task.checkCancellation()
+            if try await controller.snapshot().iteration != nil { try Self.active(await controller.finishIteration(progress:.validatedResponse)) }
+            let completed = try await controller.transition(to:.completed,terminalCode:.completed)
+            guard completed.state == .completed else { try Self.active(completed);throw ReadRunFailureCode.readFailed }
+            return RecoveredReadRunCompletion(snapshot:completed,planningRouting:plan.routing,answerRouting:response)
+        } catch let failure as ReadRunFailure { throw failure }
+        catch let code as ReadRunFailureCode { throw ReadRunFailure(runID:request.runID,traceID:request.traceID,code:code,state:nil) }
         catch { throw ReadRunFailure(runID:request.runID,traceID:request.traceID,code:.recoveryRequired,state:nil) }
     }
     private func run(_ request: ReadRunRequest,controller: RunController,deadline: ContinuousClock.Instant,restoredPlan: PlannedRead? = nil,restoredResult: UntrustedToolResult? = nil) async throws -> ReadRunResult {

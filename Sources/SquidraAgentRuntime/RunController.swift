@@ -54,6 +54,22 @@ public actor RunController {
         record.invocation?.outcome = .confirmed
         return try await claimStopped(record,expectedVersion:expectedVersion,store:store,clock:clock,wallEnd:wallEnd)
     }
+    static func restoreSavedAnswer(actorID: UUID,id: UUID,traceID: UUID,expectedVersion: Int64,
+        archiveVersion: Int64,fingerprint: String,key: String,hasCompletion: Bool,store: any RunStore,clock: any SquidraDomain.Clock) async throws -> RunController {
+        let record = try await store.load(actorID:actorID,runID:id,deadline:.now.advanced(by:.seconds(4)))
+        try record.validate()
+        guard record.actorID == actorID,record.id == id,record.traceID == traceID,record.version == expectedVersion,
+              archiveVersion > 0,archiveVersion <= expectedVersion,record.state == .responding,record.steps == 1,record.calls == 1,
+              let wallEnd = record.deadlineSecondsSince1970 else { throw RunError.recoveryRequired }
+        if record.iteration == nil {
+            // A completed iteration is recoverable only with its durable grounded answer.
+            guard hasCompletion,record.invocation == nil,expectedVersion > archiveVersion else { throw RunError.recoveryRequired }
+        } else {
+            guard record.iteration?.semanticDigest == fingerprint,record.invocation?.key == key,
+                  record.invocation?.attempts == 1,record.invocation?.inFlight == false,record.invocation?.outcome == .confirmed else { throw RunError.recoveryRequired }
+        }
+        return try await claimStopped(record,expectedVersion:expectedVersion,store:store,clock:clock,wallEnd:wallEnd)
+    }
     private static func claimStopped(_ loaded: RunSnapshot,expectedVersion: Int64,store: any RunStore,
         clock: any SquidraDomain.Clock,wallEnd: Double) async throws -> RunController {
         var record = loaded

@@ -387,3 +387,43 @@ Continuation must preserve both planning and answer reservations, validate saved
 scope/evidence, and handle an already-existing grounded completion without
 silently replacing its original observation-age metadata. Automatic host recovery
 and qualification of this later boundary remain pending for SQD-028.
+
+## Finish a saved answer without model or tool calls
+
+`ReadRunEngine.resumeSavedAnswer` now reloads planning, read-result and answer
+archives for the original task after the host proves the old worker stopped.
+It validates actor/run/request identity, archive version ordering, scope, command
+fingerprint, tool schema, scoped evidence and answer grounding. Both model
+reservations must fit the original total budget, including token limits. No
+planning, tool dispatch or answer-model call occurs during this operation.
+
+The exact inspected checkpoint must be RESPONDING with one step/call and a
+confirmed matching invocation. If finishIteration already committed but lost its
+acknowledgement, its cleared iteration is eligible only when a grounded completion
+archive exists. The durable claim charges downtime, preserves budgets and fences
+older versions. Lost claims can be retried only after reloading the newer version.
+Expired work becomes TIMED_OUT without a new completion or model/tool call.
+
+If no completion exists, the revalidated answer is saved once. If it already
+exists, the trusted completion store's actor/run/request/version binding and JSON
+envelope are checked and its exact bytes are retained. That store only accepts a
+host-grounded value on save; the recovery path does not decode raw bytes into a new
+GroundedAnswer. Revalidating the saved response still checks current evidence
+policy, but does not overwrite original observation ages or text in an existing
+completion. The operation returns `RecoveredReadRunCompletion` (runtime snapshot
+and both model reservations); publication uses the original durable archive.
+
+T14-RUN covers ambiguous answer/completion writes, iteration completion and
+recovery claims, retained budget/cost, zero additional calls, byte-identical
+existing completion, terminal refusal, corrupt/missing/mismatched answer data,
+stale versions and expiry. `SQD-028-SAVED-ANSWER-CRASH` and
+`SQD-028-SAVED-COMPLETION-CRASH` SIGKILL the owned worker immediately after the
+respective real PostgreSQL commit. A fresh process completes with zero model
+calls, then normal model-free servers publish and replay the same six events.
+The completion case additionally compares exact bytes and original archive
+version across recovery. These fixture hooks remain outside production code.
+
+These APIs now cover the persisted plan, read and answer boundaries. Automatic
+server execution recovery still needs durable worker ownership and activation;
+unknown outcomes without their required archives must not be retried implicitly.
+SQD-028 remains open for that integration and its qualification.
