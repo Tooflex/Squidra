@@ -955,5 +955,15 @@
       "client_loopback_boundary",
       "consolidation_http"
     ]
+  },
+  "T06-REVIEW": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/test-web-review.py"
+    ],
+    "tests": [
+      "typed_web_review"
+    ]
   }
 }
