@@ -1199,5 +1199,25 @@
       "workspace_quota_and_isolation",
       "owned_cleanup"
     ]
+  },
+  "SQD-012-UNIT": {
+    "kind": "xctest",
+    "filter": "^SquidraSandboxTests\\.SandboxTests/"
+  },
+  "SQD-012-LIVE-SWIFT": {
+    "kind": "xctest",
+    "filter": "^SquidraSandboxTests\\.SandboxLiveTests/"
+  },
+  "SQD-012": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/test-sandbox.py"
+    ],
+    "tests": [
+      "sandbox_contracts",
+      "linux_engine",
+      "swift_browser_adapter"
+    ]
   }
 }
