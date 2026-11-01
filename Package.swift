@@ -21,6 +21,7 @@ let package = Package(
         .executable(name: "squidra-publication-crash-fixture", targets: ["PublicationCrashFixture"]),
         .executable(name: "squidra-approval-browser-fixture", targets: ["ApprovalBrowserFixture"]),
         .executable(name: "squidra-frame-browser-fixture", targets: ["FrameBrowserFixture"]),
+        .executable(name: "squidra-meta-qualification-fixture", targets: ["MetaQualificationFixture"]),
         .executable(name: "squidra-timeline-browser-fixture", targets: ["TimelineBrowserFixture"]),
         .executable(name: "squidra-consolidation-browser-fixture", targets: ["ConsolidationBrowserFixture"]),
     ],
@@ -57,6 +58,7 @@ let package = Package(
         .executableTarget(name: "PublicationCrashFixture", dependencies: ["SquidraAgentRuntime", "SquidraCognition", "SquidraDomain", "SquidraPostgres", "SquidraProtocols", "SquidraSecurity", "SquidraTemporal", "SquidraTools", .product(name: "PostgresNIO", package: "postgres-nio")], path: "Tests/PublicationCrashFixture"),
         .executableTarget(name: "RunCrashFixture", dependencies: ["SquidraAgentRuntime", "SquidraTools", "SquidraDomain", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio")], path: "Tests/RunCrashFixture"),
         .target(name: "SquidraPostgres", dependencies: ["SquidraCognition", "SquidraMemory", "SquidraSpatial", "SquidraProtocols", "SquidraDomain", "SquidraWorld", "SquidraAgentRuntime", "SquidraTools", "SquidraSecurity", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log"), "SquidraPerception"]),
+        .executableTarget(name: "MetaQualificationFixture", dependencies: ["SquidraMeta", "SquidraCognition", .product(name: "Crypto", package: "swift-crypto")], path: "Tests/MetaQualificationFixture"),
         .target(name: "SquidraMeta", dependencies: ["SquidraDomain", "SquidraCognition", "SquidraPerception", .product(name: "Crypto", package: "swift-crypto")]),
         .executableTarget(
             name: "SquidraServer",
