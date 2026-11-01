@@ -15,7 +15,7 @@ import zipfile
 root=Path(__file__).resolve().parents[1]
 target=platform.system().lower()+'-'+platform.machine().lower()
 if target not in ['darwin-arm64','linux-aarch64']: raise SystemExit('Unsupported build target')
-build=['swift','build','-c','release','--product','squidra','--force-resolved-versions','-j','4']
+build=['swift','build','-c','release','--product','squidra','--force-resolved-versions','-j','2' if target=='linux-aarch64' else '4']
 if target=='linux-aarch64': build += ['--static-swift-stdlib']
 subprocess.run(build,cwd=root,check=True)
 subprocess.run(['npm','run','build'],cwd=root/'web',check=True)
