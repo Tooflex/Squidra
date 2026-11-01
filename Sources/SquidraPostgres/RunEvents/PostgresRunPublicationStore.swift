@@ -143,6 +143,32 @@ public struct PostgresRunPublicationStore: RunPublicationStore {
             return true
         }
     }
+    /// Publishes an already completed archive from a stopped registered process.
+    /// Local ownership permits finalization before lease expiry or after the
+    /// execution budget ends; this path never resumes execution or renews a lease.
+    public func recoverCompleted(runID: UUID, ownership: LocalRunOwnership, at: UTCInstant, deadline: ContinuousClock.Instant) async throws -> Bool {
+        guard ownership.actorID == events.actorID else { throw RunEventStoreError.notFound }
+        guard ownership.isHeld else { throw RunEventStoreError.conflict }
+        return try await events.transaction(deadline) { c in
+            guard ownership.isHeld else { throw RunEventStoreError.conflict }
+            guard let metadata = try await events.select(c,runID:runID,write:true) else { throw RunEventStoreError.notFound }
+            guard !metadata.expired else { throw RunEventStoreError.expired }
+            let actor = ownership.actorID,domain = ownership.domainID,file = ownership.fileID,owner = ownership.ownerID
+            let registered = try await BoundedPostgresQuery.rows(c,"""
+                SELECT o.owner_id FROM read_run_owners o JOIN read_run_local_domains d
+                    ON d.actor_id=o.actor_id AND d.domain_id=o.domain_id AND d.file_id=o.file_id
+                WHERE o.actor_id=\(actor) AND o.run_id=\(runID)
+                    AND o.domain_id=\(domain) AND o.file_id=\(file) AND o.owner_id<>\(owner)
+                """)
+            guard registered.count == 1 else { throw RunEventStoreError.conflict }
+            let state = try await events.publicationMetadata(c,runID:runID)
+            guard state.phase == .running,!metadata.info.isTerminal else { return false }
+            guard let publicationOwner = state.owner else { throw RunEventStoreError.corruptRecord }
+            let stream = try await events.recoverArchivedCompletion(c,binding:metadata.info.binding,at:at,authorization:.stoppedOwner(publicationOwner))
+            guard ownership.isHeld else { throw RunEventStoreError.conflict }
+            return stream != nil
+        }
+    }
     public func recoverExpired(actorID: UUID, runID: UUID, at: UTCInstant, deadline: ContinuousClock.Instant) async throws -> RunPublicationStatus {
         guard actorID == events.actorID else { throw RunEventStoreError.notFound }
         return try await events.transaction(deadline) { connection in
