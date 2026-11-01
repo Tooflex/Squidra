@@ -58,6 +58,13 @@ final class ConfirmedMovementTests: XCTestCase, @unchecked Sendable {
         XCTAssertTrue(try f.detector().evaluate(before+[f.sample(10,x: 0.2),f.sample(11,x: 0.2),f.sample(12,x: 0.2)]).events.isEmpty)
         let changed = try [f.sample(2,x: 0.2,version: "2"),f.sample(3,x: 0.2,version: "2"),f.sample(4,x: 0.2,version: "2")]
         XCTAssertTrue(try f.detector().evaluate(before+changed).events.isEmpty)
+        let newFrame = try SpatialCoordinateFrame(actorID: f.actor,id: UUID(),up: .positiveZ,calibration: f.frame().calibration)
+        let movedFrameSamples = try (2...4).map { i -> MovementSample in
+            let sample = try f.sample(i,x: 0.2),o = sample.observation!
+            return MovementSample(observedAt: sample.observedAt,observation: SpatialObservation(actorID: o.actorID,entityID: o.entityID,
+                coordinateFrameID: newFrame.id,geometry: o.geometry,association: o.association,validity: o.validity,source: o.source),frame: newFrame)
+        }
+        XCTAssertTrue(try f.detector().evaluate(before+movedFrameSamples).events.isEmpty)
     }
     func testSimultaneousContradictionsRemainVisibleAndDoNotChooseInputOrder() throws {
         let f = Fixture(),a = try f.sample(2,x: 0.2),b = try f.sample(2,x: 0.8)
