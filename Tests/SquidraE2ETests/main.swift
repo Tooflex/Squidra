@@ -26,7 +26,7 @@ func require(_ condition: Bool) throws { if !condition { throw Failure.invalid }
     }
     static func run() async throws {
         let args=CommandLine.arguments,env=ProcessInfo.processInfo.environment
-        guard args.count==5,["seed","verify","fake"].contains(args[1]),env["SQUIDRA_DEMO_FIXTURE"]=="1",
+        guard args.count==5,["seed","verify","fake","latency"].contains(args[1]),env["SQUIDRA_DEMO_FIXTURE"]=="1",
               let port=env["SQUIDRA_TEST_DB_PORT"].flatMap(Int.init),let password=env["SQUIDRA_TEST_DB_PASSWORD"] else { throw Failure.invalid }
         let scenario=try JSONDecoder().decode(Scenario.self,from:Data(contentsOf:URL(fileURLWithPath:args[2])))
         try require(scenario.schemaVersion==1 && scenario.origin=="authored-synthetic-replay" && scenario.entity=="Arduino")
@@ -107,6 +107,7 @@ func require(_ condition: Bool) throws { if !condition { throw Failure.invalid }
             if args[1] != "seed" { try require(try Data(contentsOf:reportPath)==bytes) }
             else { try bytes.write(to:reportPath,options:.atomic) }
             if args[1]=="fake" { try await fakeModelDemo(client:client,identity:identity,scenario:scenario,path:reportPath.deletingLastPathComponent().appendingPathComponent("fake-model.json")) }
+            if args[1]=="latency" { try await latencyDemo(client:client,identity:identity,scenario:scenario,path:reportPath.deletingLastPathComponent().appendingPathComponent("latency-raw.json")) }
             print("HISTORICAL_DEMO_VERIFIED")
         }
     }

@@ -25,6 +25,7 @@ rejected before execution. `T09-INVARIANTS` maps to the same command.
 | `T14-RUN` | Validated planning, scoped reads, grounded citations, request correlation and failure paths |
 | `SQD-028` | Runtime checkpoints, approval waits, durable reconciliation, effect-process crashes, ownership, publication and automatic host recovery |
 | `SQD-031` | Frozen annotated component and PostgreSQL query datasets, actual predictions and thresholds |
+| `T09-LATENCY-CONTRACTS` / `T09-LATENCY` | Quantile regressions, raw scripted-runtime samples and separate tool-free model-port overhead |
 | `T08-FAKE-MODEL` | Historical replay, one notification, process reproduction, scripted questions and negative cases |
 | `SQD-035` | Dependency analysis, targeted SAST, tracked secret scan and Swift lint, with their negative contracts |
 
@@ -41,7 +42,7 @@ markers. No key or real-provider opt-in is passed to child processes.
 A nonblocking lock prevents concurrent runs of this release command. Do not run
 other test suites against the shared `.build/issue-tests` report paths during it.
 Any failed command, invalid report or source change makes the gate fail. The
-report preserves failed and not-executed steps. All eight completion markers are
+report preserves failed and not-executed steps. All ten completion markers are
 emitted only after all gates and the final clean-source comparison succeed.
 
 ## What a passing gate does and does not establish
@@ -62,9 +63,18 @@ Existing real Meta/SAM qualification receipts are separate dated evidence and
 are not revalidated by this command.
 
 `gateStatus: passed` still records **`releaseStatus: not_ready`**. This component
-implements the invariant-report portion of #45. The p50/p95 and median tool-free
-latency measurements, full #44/#42 demo acceptance, remaining #48 data-lifecycle
+implements the invariant-report portion of #45. Full product tool-free/HTTP/real-model latency measurements, full #44/#42 demo
+acceptance, remaining #48 data-lifecycle
 requirements, final hosted CI qualification and explicit epic acceptance remain
 outstanding. Suite wall times include setup/build/test overhead and must never be
 presented as request latency. No SLA is invented. No automatic release, CI change
 or issue closure occurs.
+
+
+The report now also copies offline latency raw samples, summary and verification
+receipt, checks their commit and hashes, and recomputes their statistics. Runtime
+p50/p95 use real PostgreSQL with a scripted model; the separate model-port median
+has no tool execution. Timing boundaries and limitations are documented in
+[the demo profile](demo.md#offline-latency-profile). Neither is a measured
+end-to-end tool-free product question or Meta inference time. No pass threshold
+is imposed on these latency values; validity and completeness are checked.

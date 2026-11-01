@@ -22,6 +22,8 @@ SUITES = [
     ('T14-RUN', 'runtime_contracts'),
     ('SQD-028', 'crash_recovery'),
     ('SQD-031', 'annotated_evaluations'),
+    ('T09-LATENCY-CONTRACTS', 'latency_contracts'),
+    ('T09-LATENCY', 'offline_latency'),
     ('T08-FAKE-MODEL', 'historical_demo'),
     ('SQD-035', 'security_gates'),
 ]
@@ -110,7 +112,7 @@ def main():
                   'platform': {'system': platform.system(), 'release': platform.release(), 'machine': platform.machine()},
                   'limitations': ['Fixture-scoped assertions; suite counts are not domain event counts or production guarantees.',
                                   'No new real-provider qualification; no hosted CI qualification.',
-                                  'Latency p50/p95 and tool-free median are not measured by suite wall times.',
+                                  'Scripted runtime latency and model-port overhead do not measure full tool-free product, HTTP or real model latency.',
                                   'Full issue 45 dependencies and human epic acceptance remain unverified.'],
                   'steps': [{'suite': s, 'marker': m, 'status': 'not_executed'} for s, m in SUITES]}
         def save():
@@ -148,6 +150,35 @@ def main():
                 if xml.exists():
                     shutil.copyfile(xml, out / (suite + '.xml'))
                     step['xmlSHA256'] = digest(xml.read_bytes())
+                if suite == 'T09-LATENCY':
+                    directories=[]
+                    for line in result.stdout.decode().splitlines():
+                        if line.startswith('{'):
+                            candidate=json.loads(line)
+                            if isinstance(candidate,dict) and 'evidence_directory' in candidate:
+                                directories.append(Path(candidate['evidence_directory']))
+                    if len(directories)!=1:
+                        raise ValueError('Missing latency artifact directory')
+                    directory=directories[0]
+                    if directory.is_symlink() or directory.resolve().parent != (ROOT/'.build/demo').resolve():
+                        raise ValueError('Unexpected latency artifact directory')
+                    verification=json.loads((directory/'verification.json').read_text())
+                    summary_data=(directory/'latency-summary.json').read_bytes()
+                    raw_data=(directory/'latency-raw.json').read_bytes()
+                    summary_value=json.loads(summary_data)
+                    if (verification['source_commit']!=before['commit'] or verification['source_dirty'] is not False
+                            or verification['latency_summary_sha256']!=digest(summary_data)
+                            or summary_value['rawSHA256']!=digest(raw_data)):
+                        raise ValueError('Latency provenance mismatch')
+                    from latency_metrics import evaluate
+                    if evaluate(json.loads(raw_data))!=summary_value['metrics']:
+                        raise ValueError('Latency statistics mismatch')
+                    step['latencyMetrics']=summary_value['metrics']
+                    step['latencyArtifactSHA256']={}
+                    for name in ['latency-summary.json','latency-raw.json','verification.json']:
+                        data=(directory/name).read_bytes()
+                        (out/name).write_bytes(data)
+                        step['latencyArtifactSHA256'][name]=digest(data)
                 if suite == 'SQD-031':
                     step['evaluationArtifacts'] = {}
                     for profile in ['components-v1', 'world-queries-v1']:

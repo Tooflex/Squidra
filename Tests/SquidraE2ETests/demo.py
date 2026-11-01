@@ -9,13 +9,15 @@ import secrets
 import socket
 import subprocess
 import sys
+import importlib.util
 import tempfile
 import time
 import uuid
 
 profile=sys.argv[1] if len(sys.argv)==2 else '--profile=offline-replay'
-if len(sys.argv)>2 or profile not in ['--profile=offline-replay','--profile=offline-fake-model']:raise SystemExit('Unsupported demo profile')
+if len(sys.argv)>2 or profile not in ['--profile=offline-replay','--profile=offline-fake-model','--profile=offline-latency']:raise SystemExit('Unsupported demo profile')
 fake=profile=='--profile=offline-fake-model'
+latency=profile=='--profile=offline-latency'
 
 root=Path(__file__).resolve().parents[2]
 engine=os.environ.get('SQUIDRA_CONTAINER_ENGINE','docker')
@@ -53,7 +55,7 @@ try:
         run(['bash','Scripts/dev-db.sh','migrate'],cwd=root,env=dict(os.environ,SQUIDRA_DB_CONTAINER=name,SQUIDRA_CONTAINER_ENGINE=engine))
         env={'PATH':os.environ['PATH'],'HOME':temporary,'SQUIDRA_DEMO_FIXTURE':'1','SQUIDRA_TEST_DB_PORT':port,'SQUIDRA_TEST_DB_PASSWORD':password}
         receipt=temp/'identity.json';report=out/'evidence.json';scenario=root/'fixtures/demo/scenario.json'
-        for mode in ['seed','verify','verify']+(['fake'] if fake else []):
+        for mode in ['seed','verify','verify']+(['fake'] if fake else [])+(['latency'] if latency else []):
             result=run([executable,mode,str(scenario),str(receipt),str(report)],cwd=root,env=env)
             if result.stdout.decode().splitlines().count('HISTORICAL_DEMO_VERIFIED')!=1:raise RuntimeError('Incomplete demo process')
         evidence=json.loads(report.read_text())
@@ -83,7 +85,18 @@ try:
             assert cases['fabricatedCitation']['failure']=='invalidAnswer' and cases['fabricatedCitation']['worldReads']==1
             print('SQUIDRA_TEST_PASS:fake_model_grounded_questions')
             print('SQUIDRA_TEST_PASS:fake_model_rejects_denial_and_fabrication')
-        manifest={'checked_at_utc':datetime.now(timezone.utc).isoformat(),'source_commit':run(['git','rev-parse','HEAD'],cwd=root).stdout.decode().strip(),'source_dirty':bool(run(['git','status','--porcelain'],cwd=root).stdout.strip()),'evidence_sha256':hashlib.sha256(report.read_bytes()).hexdigest(),'scope':'authored fixture; PostgreSQL production projection/watch APIs; no real model','fresh_process_verifications':2,'profile':profile,'fake_model_sha256':hashlib.sha256((out/'fake-model.json').read_bytes()).hexdigest() if fake else None}
+        if latency:
+            spec=importlib.util.spec_from_file_location('latency_metrics',root/'Tests/SquidraAcceptanceTests/latency_metrics.py')
+            metrics=importlib.util.module_from_spec(spec);spec.loader.exec_module(metrics)
+            raw=json.loads((out/'latency-raw.json').read_text())
+            result={'metrics':metrics.evaluate(raw),'swiftVersion':run(['swift','--version'],cwd=root).stdout.decode().strip(),
+                    'rawSHA256':hashlib.sha256((out/'latency-raw.json').read_bytes()).hexdigest(),
+                    'scope':'Runtime execute with scripted model and real PostgreSQL; separate tool-free ModelRouter fixture overhead; no HTTP/browser/network/inference latency',
+                    'sla':None,'outliersRemoved':False}
+            (out/'latency-summary.json').write_text(json.dumps(result,indent=2,allow_nan=False)+'\n')
+            print('SQUIDRA_TEST_PASS:runtime_latency_samples')
+            print('SQUIDRA_TEST_PASS:tool_free_model_port_samples')
+        manifest={'checked_at_utc':datetime.now(timezone.utc).isoformat(),'source_commit':run(['git','rev-parse','HEAD'],cwd=root).stdout.decode().strip(),'source_dirty':bool(run(['git','status','--porcelain'],cwd=root).stdout.strip()),'evidence_sha256':hashlib.sha256(report.read_bytes()).hexdigest(),'scope':'authored fixture; PostgreSQL production projection/watch APIs; no real model','fresh_process_verifications':2,'profile':profile,'latency_summary_sha256':hashlib.sha256((out/'latency-summary.json').read_bytes()).hexdigest() if latency else None,'fake_model_sha256':hashlib.sha256((out/'fake-model.json').read_bytes()).hexdigest() if fake else None}
         (out/'verification.json').write_text(json.dumps(manifest,indent=2)+'\n')
 finally:
     if identity:
