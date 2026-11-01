@@ -82,7 +82,12 @@ final class ApprovalWaitTests: XCTestCase, @unchecked Sendable {
             let fixture = try await Self.fixture();_ = try await fixture.wait.suspend(fixture.run,for:fixture.record)
             try await Self.decide(fixture,response:response)
             guard case .refused(let terminal) = try await fixture.wait.resume(actorID:fixture.record.binding.actorID,approvalID:fixture.record.id,deadline:.now.advanced(by:.seconds(1))) else { return XCTFail("Denied resumed") }
-            XCTAssertEqual(terminal.state,.failed);XCTAssertEqual(terminal.terminalCode,.policyDenied);XCTAssertEqual(terminal.calls,0)
+            XCTAssertEqual(terminal.state,response.decision == .withdrawn ? .cancelled : .failed)
+            XCTAssertEqual(terminal.terminalCode,response.decision == .withdrawn ? .cancelled : .policyDenied);XCTAssertEqual(terminal.calls,0)
+            let persisted = try await fixture.runs.load(actorID:terminal.actorID,runID:terminal.id,deadline:.now.advanced(by:.seconds(1)))
+            XCTAssertEqual(persisted.state,terminal.state)
+            do { _ = try await fixture.wait.resume(actorID:terminal.actorID,approvalID:fixture.record.id,deadline:.now.advanced(by:.seconds(1)));XCTFail("Terminal waiter resumed") }
+            catch { XCTAssertEqual(error as? RunError,.terminal) }
         }
         for approved in [false,true] {
             let fixture = try await Self.fixture();_ = try await fixture.wait.suspend(fixture.run,for:fixture.record)

@@ -56,6 +56,21 @@ enum RunRoutes {
                 return response
             } catch { throw mapped(error) }
         }
+        router.post("/api/v1/runs/:run/cancel") { request,context in
+            do {
+                guard let dependencies else { throw HTTPError(.serviceUnavailable) }
+                let id = try await identity(request,context:context,dependencies:dependencies,mutation:true)
+                let before = try await dependencies.publication.status(actorID:dependencies.actorID,runID:id,deadline:.now.advanced(by:.seconds(4)))
+                if before.stream.isTerminal { return try json(.ok,RunHTTPStatus(before,runtime:nil)) }
+                guard let submission = dependencies.submission else { throw HTTPError(.serviceUnavailable) }
+                let accepted = try await submission.coordinator.requestCancellation(actorID:dependencies.actorID,runID:id)
+                // Reload even if ownership was released during the lookup. An
+                // orphaned active run needs recovery, not a fabricated cancellation.
+                let after = try await dependencies.publication.status(actorID:dependencies.actorID,runID:id,deadline:.now.advanced(by:.seconds(4)))
+                guard accepted || after.stream.isTerminal else { throw HTTPError(.conflict) }
+                return try json(accepted ? .accepted : .ok,RunHTTPStatus(after,runtime:nil))
+            } catch { throw mapped(error) }
+        }
         router.get("/api/v1/runs/:run") { request,context in
             do {
                 guard let dependencies else { throw HTTPError(.serviceUnavailable) }
@@ -101,9 +116,9 @@ enum RunRoutes {
             } catch { throw mapped(error) }
         }
     }
-    private static func identity(_ request:Request,context:BoundaryContext,dependencies:Dependencies) async throws -> UUID {
+    private static func identity(_ request:Request,context:BoundaryContext,dependencies:Dependencies,mutation:Bool = false) async throws -> UUID {
         try context.requireActor(dependencies.actorID)
-        guard request.method == .get,request.uri.query == nil,let id = UUID(uuidString:context.parameters.get("run") ?? "") else { throw HTTPError(.badRequest) }
+        guard request.method == (mutation ? .post : .get),request.uri.query == nil,let id = UUID(uuidString:context.parameters.get("run") ?? "") else { throw HTTPError(.badRequest) }
         for try await part in request.body { guard part.readableBytes == 0 else { throw HTTPError(.badRequest) } }
         return id
     }

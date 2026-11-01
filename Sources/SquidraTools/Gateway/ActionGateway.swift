@@ -120,8 +120,15 @@ public struct ActionGateway: Sendable {
         catch {
             let (began,rejection) = await state.snapshot()
             if let permit,let ledger {
-                if began { _ = try? await ledger.markUnknown(permit,deadline:databaseDeadline(context.deadline)) }
-                else { _ = try? await ledger.complete(permit,result:.failed(.notApplied),deadline:databaseDeadline(context.deadline)) }
+                // Owned cleanup survives caller cancellation and an exhausted
+                // attempt deadline. Await it before reporting the interrupted call.
+                let cleanup = Task {
+                    let deadline = ContinuousClock.now.advanced(by:.seconds(4))
+                    if began { _ = try await ledger.markUnknown(permit,deadline:deadline) }
+                    else { _ = try await ledger.complete(permit,result:.failed(.notApplied),deadline:deadline) }
+                }
+                do { try await cleanup.value }
+                catch { throw ActionGatewayError.outcomeUnconfirmed }
             }
             throw rejection ?? error
         }

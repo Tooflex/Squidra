@@ -58,6 +58,8 @@ private actor FixtureLedger: ActionLedgerStore {
         guard let record = records[id],record.command.actorID == actorID else { throw ActionLedgerError.notFound };return record
     }
     func update(_ record: ActionRecord, to status: ActionStatus, result: ActionResult?, providerReference: String?, deadline: ContinuousClock.Instant) throws -> ActionRecord {
+        try Task.checkCancellation()
+        guard ContinuousClock.now < deadline else { throw ActionLedgerError.unavailable }
         if status.isFinal && failFinalization { throw ActionLedgerError.unavailable }
         guard records[record.id]?.version == record.version else { throw ActionLedgerError.versionConflict }
         let next = try ActionRecord(id:record.id,command:record.command,status:status,version:record.version+1,result:result,providerReference:providerReference)
@@ -182,6 +184,30 @@ final class ActionGatewayTests: XCTestCase, @unchecked Sendable {
         let task = Task { try await gateway.invoke(action) };task.cancel()
         do { _ = try await task.value;XCTFail("Cancellation ignored") } catch { XCTAssertTrue(error is CancellationError) }
         let count = await spy.count;XCTAssertEqual(count,0)
+    }
+    func testInterruptedMutationPersistsUnknownAndRequiresReconciliationWithoutRetry() async throws {
+        for cancel in [true,false] {
+            let definition = try Self.definition(.r1,timeout:1000),spy = ExecutorSpy(.slow),store = FixtureLedger()
+            let ledger = ActionLedger(store:store),gateway = try Self.gateway(definition,spy:spy,policy:Self.hostPolicy(definition),ledger:ledger)
+            let action = try Self.action(definition,deadline:.now.advanced(by:cancel ? .seconds(2) : .milliseconds(100)))
+            let task = Task { try await gateway.invoke(action) }
+            let end = ContinuousClock.now.advanced(by:.seconds(1))
+            while await spy.count == 0 {
+                guard ContinuousClock.now < end else { task.cancel();_ = try? await task.value;return XCTFail("Executor never started") }
+                try await Task.sleep(for:.milliseconds(1))
+            }
+            if cancel { task.cancel() }
+            do { _ = try await task.value;XCTFail("Interrupted mutation succeeded") } catch {}
+            guard case .reconciliationRequired(let record) = try await gateway.invoke(Self.action(definition)) else { return XCTFail("Unknown effect lost or retried") }
+            XCTAssertEqual(record.status,.unknown);XCTAssertNil(record.result)
+            let count = await spy.count;XCTAssertEqual(count,1)
+            // Only independent confirmation can resolve uncertainty; this
+            // fixture supplies confirmed non-application, never an automatic undo.
+            _ = try await ledger.reconcile(record,confirmed:.failed(.notApplied),deadline:.now.advanced(by:.seconds(1)))
+            guard case .replay(let resolved) = try await gateway.invoke(Self.action(definition)) else { return XCTFail("Reconciled result missing") }
+            XCTAssertEqual(resolved.result?.failure,.notApplied)
+            let finalCount = await spy.count;XCTAssertEqual(finalCount,1)
+        }
     }
     func testMutationNeedsLedgerAndReplaysOneEffect() async throws {
         let definition = try Self.definition(.r1),spy = ExecutorSpy(),action = try Self.action(definition)
