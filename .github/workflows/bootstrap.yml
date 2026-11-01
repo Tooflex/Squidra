@@ -107,6 +107,8 @@ jobs:
         run: bash Scripts/test-issue.sh T11-META-COST
       - name: Meta language model budget boundary
         run: bash Scripts/test-issue.sh T11-META-MODEL
+      - name: Shared Meta attempt budget
+        run: bash Scripts/test-issue.sh T11-META-BUDGET
       - name: SAM image request contract
         run: bash Scripts/test-issue.sh T11-SAM-IMAGE
       - name: Native SAM mask codec and detections

@@ -1119,5 +1119,9 @@
   "T11-META-MODEL": {
     "kind": "xctest",
     "filter": "^SquidraMetaTests\\.MetaLanguageModelTests/"
+  },
+  "T11-META-BUDGET": {
+    "kind": "xctest",
+    "filter": "^SquidraMetaTests\\.MetaFileAttemptBudgetTests/"
   }
 }
