@@ -17,6 +17,7 @@ let package = Package(
         .executable(name: "squidra-eval-database", targets: ["DatabaseEval"]),
         .executable(name: "squidra-run-crash-fixture", targets: ["RunCrashFixture"]),
         .executable(name: "squidra-movement-crash-fixture", targets: ["MovementCrashFixture"]),
+        .executable(name: "squidra-watch-crash-fixture", targets: ["WatchCrashFixture"]),
     ],
     dependencies: [
         .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", exact: "2.13.0"),
@@ -43,6 +44,7 @@ let package = Package(
         .executableTarget(name: "DatabaseEval", dependencies: ["SquidraDomain", "SquidraWorld", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio")], path: "Evals/Database"),
         .executableTarget(name: "EvalRunner", dependencies: ["SquidraDomain", "SquidraTemporal", "SquidraSpatial", "SquidraPerception"], path: "Evals/Runner"),
         .executableTarget(name: "MovementCrashFixture", dependencies: ["SquidraPerception", "SquidraSpatial", "SquidraDomain", "SquidraWorld", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio")], path: "Tests/MovementCrashFixture"),
+        .executableTarget(name: "WatchCrashFixture", dependencies: ["SquidraMemory", "SquidraPerception", "SquidraSpatial", "SquidraDomain", "SquidraWorld", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio")], path: "Tests/WatchCrashFixture"),
         .executableTarget(name: "RunCrashFixture", dependencies: ["SquidraAgentRuntime", "SquidraTools", "SquidraDomain", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio")], path: "Tests/RunCrashFixture"),
         .target(name: "SquidraPostgres", dependencies: ["SquidraMemory", "SquidraSpatial", "SquidraProtocols", "SquidraDomain", "SquidraWorld", "SquidraAgentRuntime", "SquidraTools", "SquidraSecurity", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log"), "SquidraPerception"]),
         .target(name: "SquidraMeta", dependencies: ["SquidraDomain", "SquidraCognition", "SquidraPerception", .product(name: "Crypto", package: "swift-crypto")]),
