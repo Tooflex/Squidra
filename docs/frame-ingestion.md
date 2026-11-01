@@ -141,7 +141,7 @@ It is an HTTP/PostgreSQL check, not a browser, SAM, live-model or Linux qualific
 ## Read-host scope for imported entities
 
 An explicitly injected `ReadHostConfiguration` can opt into
-`allowSyntheticImportedEntities`. This requires the synthetic import profile;
+`allowImportedEntities`. This requires an explicit import profile;
 without it composition fails. The default is false. The offline CLI has no
 configured language model; the explicit Meta qualification profile can use this
 imported-entity scope for questions, with separate cloud-data consent and budget
@@ -203,3 +203,38 @@ importer, association store, journal and projection using fake transport/budget.
 It verifies cloud provenance, exact source confidence, denied transfer consent,
 missing admission, wrong identity/read scopes and no writes for unknown scores.
 No external API call, budget-ledger mutation or schema migration is involved.
+
+## SAM server and browser configuration
+
+The explicit `SQUIDRA_SAM_IMPORT=1` profile selects SAM 3.1. Configure all of
+`SQUIDRA_SAM_CONCEPT`, `SQUIDRA_SAM_CAMERA_ID`, `SQUIDRA_SAM_SCENE_ID`,
+`SQUIDRA_SAM_COORDINATE_FRAME_ID` and `SQUIDRA_SAM_CLOUD_MEDIA_CONSENT=1`.
+The scene and coordinate frame must already exist for the configured actor.
+This profile is mutually exclusive with `SQUIDRA_SYNTHETIC_IMPORT`.
+It shares `SQUIDRA_META_BUDGET_DIRECTORY` and the credential loader with the
+Meta question host: exactly one of `MODEL_API_KEY` or `MODEL_API_KEY_FILE`.
+The private file must be an owned, regular, single-link 0600 file, with no symlink.
+Never place a key in a checked-in configuration. The existing dated budget ledger
+must be preserved; startup does not initialize or reset an allowance.
+
+`SQUIDRA_PROFILE=meta-qualification` additionally enables the Meta question host
+with its existing model and text-cloud-consent settings. Imported entity grants
+use the selected import policy's exact model, camera, scene and actor scope.
+The default configuration still has neither import nor cloud questions enabled.
+
+Authenticated `GET /api/v1/frame-import-capabilities` exposes deployment, byte
+limit and whether cloud consent is required; without an import profile it is 404.
+Synthetic POST bodies retain their three fields. SAM POST bodies require exactly
+`schemaVersion`, `imageBase64`, `permitsLocalProcessing` and
+`permitsCloudTransfer`; both consents must be true. SAM accepts PNG up to 64 KiB
+and 1024 × 1024 pixels. The complete import has a 25-second deadline within the
+30-second HTTP boundary; the UI waits up to 35 seconds and never retries a POST.
+Receipts carry the actual `cloud` deployment and `meta.sam` / `alias:sam-3.1`.
+
+The browser reads capabilities before showing the form, requires an unchecked
+per-image transfer consent and clears it after submission or logout. It rejects
+a receipt with a different deployment or SAM identity. Its non-retention message
+applies to Squidra only; Meta retention depends on account terms. Scene membership
+remains inferred, without pixel-to-world calibration. Offline configuration,
+captured-provider HTTP/SQL and browser tests do not establish a new live-provider
+qualification or incur a paid API call.

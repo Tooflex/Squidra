@@ -43,6 +43,35 @@ final class MetaReadHostConfigurationTests: XCTestCase, @unchecked Sendable {
          "SQUIDRA_UI_ORIGIN":"http://localhost:3000","SQUIDRA_DB_PORT":"5432","SQUIDRA_DB_USER":"squidra",
          "SQUIDRA_DB_PASSWORD":String(repeating:"fixture",count:6),"SQUIDRA_DB_NAME":"squidra"]
     }
+    func testSAMProfileRequiresMediaConsentScopeCredentialBudgetAndDatedWindow() throws {
+        let dir = try directory(), actor = UUID()
+        XCTAssertNil(try SAMImportConfiguration.read(environment:environment(dir),actorID:actor,clock:clock()))
+        var env = environment(dir)
+        let values = ["SQUIDRA_SAM_IMPORT":"1","SQUIDRA_SAM_CONCEPT":"red square","SQUIDRA_SAM_CAMERA_ID":UUID().uuidString,
+                      "SQUIDRA_SAM_SCENE_ID":UUID().uuidString,"SQUIDRA_SAM_COORDINATE_FRAME_ID":UUID().uuidString,"SQUIDRA_SAM_CLOUD_MEDIA_CONSENT":"1"]
+        env.merge(values) { _,new in new }
+        let configured = try XCTUnwrap(SAMImportConfiguration.read(environment:env,actorID:actor,clock:clock()))
+        XCTAssertEqual(configured.policy.deployment,.cloud);XCTAssertEqual(configured.policy.cloudIdentity,configured.model.identity)
+        XCTAssertEqual(configured.policy.actorID,actor)
+        for key in Array(values.keys)+["MODEL_API_KEY","SQUIDRA_META_BUDGET_DIRECTORY"] {
+            var missing = env;missing.removeValue(forKey:key)
+            XCTAssertThrowsError(try SAMImportConfiguration.read(environment:missing,actorID:actor,clock:clock()),key)
+        }
+        for (key,value) in [("SQUIDRA_SAM_IMPORT","true"),("SQUIDRA_SAM_CLOUD_MEDIA_CONSENT","0"),("SQUIDRA_SAM_CONCEPT","<image>"),("SQUIDRA_SAM_CAMERA_ID","invalid")] {
+            var invalid = env;invalid[key] = value
+            XCTAssertThrowsError(try SAMImportConfiguration.read(environment:invalid,actorID:actor,clock:clock()),key)
+        }
+        XCTAssertThrowsError(try SAMImportConfiguration.read(environment:env,actorID:actor,clock:clock(MetaFileAttemptBudget.validUntilSeconds-30)))
+        var server = baseEnvironment().merging(env,uniquingKeysWith:{ _,new in new })
+        server["SQUIDRA_PROFILE"] = "meta-qualification";server.removeValue(forKey:"SQUIDRA_META_ENTITY_IDS")
+        let config = try ServerConfiguration(environment:server,clock:clock())
+        XCTAssertEqual(config.importPolicy?.deployment,.cloud);XCTAssertTrue(try XCTUnwrap(config.configuredReadHost).allowImportedEntities)
+        let root = URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        server.merge(["SQUIDRA_SYNTHETIC_IMPORT":"1","SQUIDRA_SYNTHETIC_FIXTURE":root.appendingPathComponent("fixtures/providers/vision-synthetic.v1.json").path,
+                      "SQUIDRA_SYNTHETIC_CAMERA_ID":UUID().uuidString,"SQUIDRA_SYNTHETIC_SCENE_ID":UUID().uuidString,"SQUIDRA_SYNTHETIC_COORDINATE_FRAME_ID":UUID().uuidString]) { _,new in new }
+        XCTAssertThrowsError(try ServerConfiguration(environment:server,clock:clock()))
+        XCTAssertFalse(FileManager.default.fileExists(atPath:dir.appendingPathComponent("live-budget.json").path))
+    }
     func testKeyAloneDoesNotActivateAndExplicitProfileBuildsActualAdapter() throws {
         let env = environment(try directory());var all = baseEnvironment().merging(env,uniquingKeysWith:{ _,b in b })
         XCTAssertNil(try ServerConfiguration(environment:all,clock:clock()).configuredReadHost)
@@ -72,7 +101,7 @@ final class MetaReadHostConfigurationTests: XCTestCase, @unchecked Sendable {
     func testImportedScopeIsExplicitAndExpiryRequiresFullRunWindow() throws {
         var env = environment(try directory());env.removeValue(forKey:"SQUIDRA_META_ENTITY_IDS")
         XCTAssertThrowsError(try host(env))
-        let imported = try host(env,imported:true);XCTAssertTrue(imported.allowSyntheticImportedEntities);XCTAssertTrue(imported.entities.isEmpty)
+        let imported = try host(env,imported:true);XCTAssertTrue(imported.allowImportedEntities);XCTAssertTrue(imported.entities.isEmpty)
         XCTAssertThrowsError(try host(env,imported:true,time:MetaFileAttemptBudget.validUntilSeconds-100))
         XCTAssertThrowsError(try host(env,imported:true,time:MetaFileAttemptBudget.validUntilSeconds))
     }

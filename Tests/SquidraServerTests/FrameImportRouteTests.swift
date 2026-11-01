@@ -7,6 +7,8 @@ import SquidraCognition
 import SquidraSecurity
 import SquidraTools
 import SquidraPostgres
+import SquidraMeta
+import SquidraPerception
 import XCTest
 @testable import SquidraServer
 
@@ -82,7 +84,7 @@ final class FrameImportRouteTests: XCTestCase, @unchecked Sendable {
         let env = try Self.environment(),config = try ServerConfiguration(environment:env),profile = try XCTUnwrap(config.syntheticImport)
         let db = config.database.makeClient(), actor = config.boundary.actorID,scene = profile.policy.locationID,coordinate = profile.policy.coordinateFrameID
         let model = ImportedQuestionModelFixture()
-        let host = try ReadHostConfiguration(models:[model],entities:[],allowSyntheticImportedEntities:true)
+        let host = try ReadHostConfiguration(models:[model],entities:[],allowImportedEntities:true)
         let noProfile = try ServerConfiguration(environment:env.filter { !$0.key.hasPrefix("SQUIDRA_SYNTHETIC_") })
         XCTAssertThrowsError(try ServerComposition.live(configuration:noProfile,readHost:host))
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with:Data(contentsOf:Self.fixture)) as? [String:Any])
@@ -153,6 +155,47 @@ final class FrameImportRouteTests: XCTestCase, @unchecked Sendable {
             }
         }
     }
+    func testCloudHTTPRequiresTransferConsentAndPublishesCapturedSAMProvenance() async throws {
+        let env = try Self.environment().filter { !$0.key.hasPrefix("SQUIDRA_SYNTHETIC_") },config = try ServerConfiguration(environment:env)
+        let root = Self.fixture.deletingLastPathComponent(),db = config.database.makeClient()
+        let capture = try XCTUnwrap(JSONSerialization.jsonObject(with:Data(contentsOf:root.appendingPathComponent("sam-image-live.v1.json"))) as? [String:Any])
+        let report = try XCTUnwrap(capture["report"] as? [String:Any]),transport = HTTPRecordedSAMTransport(text:try XCTUnwrap(report["segmentationText"] as? String))
+        let model = try MetaSAMVisionModel(concept:"red square",transport:transport),budget = HTTPRecordedSAMBudget()
+        let policy = try FrameScenePolicy(actorID:config.boundary.actorID,cameraID:UUID(),locationID:UUID(),coordinateFrameID:UUID(),cloudIdentity:model.identity)
+        let pipeline = try PostgresFrameIngestion(client:db,model:model,policy:policy,cloudAdmission:MetaSAMCloudAdmission(budget:budget))
+        let encoded = try Data(contentsOf:root.appendingPathComponent("sam-red-square.png")).base64EncodedString()
+        let headers:HTTPFields = [.authorization:"Bearer "+env["SQUIDRA_AUTH_TOKEN"]!,.contentType:"application/json"]
+        let actor = policy.actorID,scene = policy.locationID,coordinate = policy.coordinateFrameID
+        try await withThrowingTaskGroup(of:Void.self) { group in
+            group.addTask { await db.run() };defer { group.cancelAll() }
+            _ = try await db.query("INSERT INTO world_entities(id,actor_id,kind) VALUES(\(scene),\(actor),'fixture_scene')").collect()
+            _ = try await db.query("INSERT INTO coordinate_frames(id,actor_id,name,dimensions,units) VALUES(\(coordinate),\(actor),'SAM host scene',3,'metres')").collect()
+            try await ServerComposition.application(configuration:config,readiness:{.ready},frameImports:FrameImportRoutes(ingestion:pipeline)).test(.router) { http in
+                let denied = try await http.executeRequest(uri:"/api/v1/frame-import-capabilities",method:.get,headers:[:],body:nil);XCTAssertEqual(denied.status,.unauthorized)
+                let response = try await http.executeRequest(uri:"/api/v1/frame-import-capabilities",method:.get,headers:headers,body:nil)
+                XCTAssertEqual(response.status,.ok);XCTAssertEqual(response.headers[.cacheControl],"no-store")
+                let capabilities = try XCTUnwrap(JSONSerialization.jsonObject(with:Data(response.body.readableBytesView)) as? [String:Any])
+                XCTAssertEqual(capabilities["deployment"] as? String,"cloud");XCTAssertEqual(capabilities["maximumImageBytes"] as? Int,65536);XCTAssertEqual(capabilities["requiresCloudTransferConsent"] as? Bool,true)
+                let valid:[String:Any] = ["schemaVersion":"1","imageBase64":encoded,"permitsLocalProcessing":true,"permitsCloudTransfer":true]
+                for (changes,status):([String:Any],HTTPResponse.Status) in [(["permitsCloudTransfer":false],.forbidden),(["permitsCloudTransfer":"true"],.badRequest),(["permitsCloudTransfer":NSNull()],.forbidden),(["permitsLocalProcessing":false],.forbidden),(["actorId":UUID().uuidString],.badRequest),(["imageBase64":Data(repeating:0,count:65537).base64EncodedString()],.badRequest)] {
+                    let body = try JSONSerialization.data(withJSONObject:valid.merging(changes,uniquingKeysWith:{ _,new in new }))
+                    let result = try await http.executeRequest(uri:"/api/v1/frames/import",method:.post,headers:headers,body:.init(bytes:body));XCTAssertEqual(result.status,status)
+                }
+                var missing = valid;missing.removeValue(forKey:"permitsCloudTransfer")
+                let absent = try await http.executeRequest(uri:"/api/v1/frames/import",method:.post,headers:headers,body:.init(bytes:JSONSerialization.data(withJSONObject:missing)));XCTAssertEqual(absent.status,.badRequest)
+                let callsBefore = await transport.calls,reservesBefore = await budget.calls;XCTAssertEqual(callsBefore,0);XCTAssertEqual(reservesBefore,0)
+                let result = try await http.executeRequest(uri:"/api/v1/frames/import",method:.post,headers:headers,body:.init(bytes:JSONSerialization.data(withJSONObject:valid)))
+                XCTAssertEqual(result.status,.created)
+                let receipt = try XCTUnwrap(JSONSerialization.jsonObject(with:Data(result.body.readableBytesView)) as? [String:Any])
+                XCTAssertEqual(receipt["deployment"] as? String,"cloud");XCTAssertEqual(receipt["modelId"] as? String,"meta.sam");XCTAssertEqual(receipt["modelVersion"] as? String,"alias:sam-3.1")
+                XCTAssertEqual(receipt["basis"] as? String,"inferred");XCTAssertEqual(receipt["mediaRetained"] as? Bool,false)
+                let entities = try XCTUnwrap(receipt["entities"] as? [[String:Any]]);XCTAssertEqual(entities.count,1)
+                let entity = try XCTUnwrap((entities[0]["id"] as? String).flatMap(UUID.init(uuidString:)))
+                let grant = try await PostgresImportedEntityReadScope(client:db,policy:policy).contains(entity,deadline:.now.advanced(by:.seconds(4)));XCTAssertTrue(grant)
+                let calls = await transport.calls,reserves = await budget.calls;XCTAssertEqual(calls,1);XCTAssertEqual(reserves,1)
+            }
+        }
+    }
     func testDefaultProfileDoesNotMountImageImport() async throws {
         let env=try Self.environment().filter {!$0.key.hasPrefix("SQUIDRA_SYNTHETIC_")},config=try ServerConfiguration(environment:env)
         try await ServerComposition.application(configuration:config,readiness:{.ready}).test(.router) { client in
@@ -177,4 +220,18 @@ private actor ImportedQuestionModelFixture: LanguageModel {
 private actor ImportedReceiptBox {
     private(set) var data = Data()
     func store(_ value: Data) { data = value }
+}
+
+private actor HTTPRecordedSAMBudget: MetaSAMAttemptBudget {
+    private(set) var calls = 0
+    func reserveSAM(attemptID: UUID, frameID: UUID, deadline: ContinuousClock.Instant) { calls += 1 }
+}
+private actor HTTPRecordedSAMTransport: MetaResponsesTransport {
+    let text: String
+    private(set) var calls = 0
+    init(text: String) { self.text = text }
+    func post(_ body: Data, maximumResponseBytes: Int, deadline: ContinuousClock.Instant) async throws -> MetaHTTPResponse {
+        calls += 1
+        return MetaHTTPResponse(status:200,contentType:"application/json",body:try JSONSerialization.data(withJSONObject:["object":"response","model":"sam-3.1","status":"completed","output":[["type":"message","role":"assistant","status":"completed","content":[["type":"output_text","text":text]]]]]))
+    }
 }

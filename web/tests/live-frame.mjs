@@ -29,7 +29,7 @@ try {
   await page.locator('#image').setInputFiles({name:'unknown.png',mimeType:'image/png',buffer:unknown});
   await page.locator('#submit-import').click();expect(imports,'consent blocks import').toBe(0);
   await page.locator('#consent').check();await page.locator('#submit-import').click();
-  await expect(page.getByRole('alert')).toContainText('image hors de la fixture');
+  await expect(page.getByRole('alert')).toContainText('image non prise en charge');
   await expect(page.locator('#receipt')).toBeEmpty();expect(imports,'one rejected image').toBe(1);
   await page.locator('#new-import').click();await expect(page.locator('#consent')).not.toBeChecked();
   await page.locator('#image').setInputFiles({name:'fixture.png',mimeType:'image/png',buffer:png});
