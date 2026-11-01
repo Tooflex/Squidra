@@ -32,6 +32,38 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
         return try ConfirmedMovementDetector(actorID: actor,entityID: entity,epochID: UUID(),entityType: "cup",
             policy: MovementPolicy(id: UUID(),thresholdsByType: ["cup": MovementThreshold(minimumDisplacementMeters: 0.1)])).evaluate(samples)
     }
+    func testDurableTaskRoundTripConflictAndActorScope() async throws {
+        try await RunHTTPTestSupport.withClients { client,second in
+            let actor = UUID(),run = UUID(),trace = UUID(),requestID = UUID(),thread = UUID(),entity = UUID()
+            let binding = AGUIRunBinding(actorID:actor,runID:run,threadID:thread,requestID:requestID)
+            _ = try await PostgresRunEventStore(client:client,actorID:actor).create(binding,retentionSeconds:3600,deadline:.now.advanced(by:.seconds(4)))
+            let options = try ReadPlanningOptions(preferredModelID:"local-fixture",maximumOutputTokens:64,
+                deadline:UTCInstant(secondsSince1970:1_900_000_000.1234567))
+            let request = try ReadRunRequest(actorID:actor,runID:run,traceID:trace,requestID:requestID,question:"private recovery question",
+                planningScope:ReadPlanningScope(entities:[PlanningEntity(id:entity,label:"Private label")],maximumWindowSeconds:123.456789),
+                effectiveToolScope:["world:read"],intent:.historical,modelOptions:options,budget:RunBudget(steps:9,calls:2,activeMilliseconds:12000))
+            let task = StoredReadRunTask(request:request,threadID:thread)
+            let store = PostgresReadRunTaskStore(client:client,actorID:actor)
+            try await store.save(task,deadline:.now.advanced(by:.seconds(4)))
+            try await store.save(task,deadline:.now.advanced(by:.seconds(4)))
+            let loaded = try await PostgresReadRunTaskStore(client:second,actorID:actor).load(runID:run,deadline:.now.advanced(by:.seconds(4)))
+            let saved = try XCTUnwrap(loaded)
+            XCTAssertEqual(saved.threadID,thread);XCTAssertEqual(saved.request.traceID,trace)
+            XCTAssertEqual(saved.request.question,request.question);XCTAssertEqual(saved.request.budget,request.budget)
+            XCTAssertEqual(saved.request.modelOptions.deadline.secondsSince1970.bitPattern,options.deadline.secondsSince1970.bitPattern)
+            XCTAssertEqual(saved.request.planningScope.maximumWindowSeconds.bitPattern,request.planningScope.maximumWindowSeconds.bitPattern)
+            let foreign = try await PostgresReadRunTaskStore(client:second,actorID:UUID()).load(runID:run,deadline:.now.advanced(by:.seconds(4)))
+            XCTAssertNil(foreign)
+            let changed = ReadRunRequest(actorID:actor,runID:run,traceID:trace,requestID:requestID,question:"changed",
+                planningScope:request.planningScope,effectiveToolScope:request.effectiveToolScope,intent:request.intent,modelOptions:options,budget:request.budget)
+            do { try await store.save(StoredReadRunTask(request:changed,threadID:thread),deadline:.now.advanced(by:.seconds(4)));XCTFail("Task was overwritten") }
+            catch { XCTAssertEqual(error as? ReadRunTaskError,.conflict) }
+            do { try await PostgresReadRunTaskStore(client:second,actorID:UUID()).save(task,deadline:.now.advanced(by:.seconds(4)));XCTFail("Foreign task accepted") }
+            catch { XCTAssertEqual(error as? ReadRunTaskError,.invalidState) }
+            do { _ = try await client.query("UPDATE read_run_tasks SET task='{}'::jsonb WHERE actor_id=\(actor) AND run_id=\(run)").collect();XCTFail("Task updated directly") }
+            catch { XCTAssertTrue(error is PSQLError) }
+        }
+    }
     func testLiveWatchDispatcherRunsWithoutModelAndResumesAfterShutdown() async throws {
         try await RunHTTPTestSupport.withClients { client,_ in
             let actor = UUID(),entity = UUID()
@@ -72,6 +104,14 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                 let accepted = try await http.executeRequest(uri:"/api/v1/runs",method:.post,headers:[.authorization:"Bearer "+fixture.token,.contentType:"application/json"],body:RunHTTPTestSupport.body(fixture.entity))
                 XCTAssertEqual(accepted.status,.accepted)
                 let path = try XCTUnwrap(accepted.headers[.location])
+                let acceptedFields = try RunHTTPTestSupport.object(accepted.body)
+                let acceptedID = try XCTUnwrap((acceptedFields["runId"] as? String).flatMap(UUID.init(uuidString:)))
+                let savedTask = try await PostgresReadRunTaskStore(client:client,actorID:fixture.actor).load(runID:acceptedID,deadline:.now.advanced(by:.seconds(4)))
+                XCTAssertEqual(savedTask?.request.question,"Read the fixture entity's historical evidence")
+                XCTAssertEqual(savedTask?.request.planningScope.entities.map(\.id),[fixture.entity])
+                XCTAssertEqual(savedTask?.request.effectiveToolScope,["world:read"])
+                XCTAssertEqual(savedTask?.request.intent,.historical)
+
                 _ = try await RunHTTPTestSupport.completed(http,token:fixture.token,path:path)
                 let events = try await http.executeRequest(uri:path+"/events",method:.get,headers:[.authorization:"Bearer "+fixture.token],body:nil)
                 let frames = try RunHTTPTestSupport.frames(events.body)

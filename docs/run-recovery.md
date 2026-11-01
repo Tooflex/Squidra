@@ -92,3 +92,35 @@ This process fixture demonstrates the host sequence (old process exited, reload,
 reconcile, continue) but does not activate automatic recovery in the application.
 The server still needs a persisted task description and an owned startup/explicit
 continuation path. SQD-028 remains open until that integration is complete.
+
+## Persisted live read tasks
+
+The live `PublishedReadRunCoordinator` now saves a `StoredReadRunTask` after
+creating the event stream and before claiming publication or starting a worker.
+A successful HTTP acceptance therefore has the original question, actor/run/
+request/trace/thread IDs, planning entities, tool scope, answer intent, model
+options, exact absolute deadline and runtime budget in PostgreSQL. Persistence
+failure produces no worker. Stream creation, task save and publication claim are
+separate durable steps; an incomplete admission may leave an unmanaged stream
+and task, never an implicit permission to execute it.
+
+`runtime/004_read_run_tasks.sql` binds the task to the exact stream identity and
+rejects updates. Repeated identical saves are accepted; changing the task for an
+existing run conflicts. The bounded versioned codec reconstructs validated
+values, rejects unknown/noncanonical fields, and stores floating point deadline
+and window values as exact bit strings. Loads are actor scoped. The task contains
+private user text: it is not emitted in status, SSE, errors or tracing. Its
+retention/purge lifecycle must be handled with the containing run data; it is
+not a separate long-lived memory source.
+
+This task is recovery input, not authority. Its saved scope or consent must not
+bypass current host policy, restore elapsed budgets, or authorize a second live
+worker. This step deliberately does not enable a startup scan: continuation of
+ReadRunEngine phases, persisted answer/publication recovery, and verified worker
+ownership still need integration before SQD-028 can close. The existing trace
+and status routes continue to expose only their bounded public data.
+
+T05-HTTP verifies persistence in the live submission path plus exact reload on a
+second database client, idempotent save, conflicting replacement, actor isolation
+and SQL update rejection. Existing recovery unit tests retain their seven budget,
+approval and effect-reconciliation scenarios.
