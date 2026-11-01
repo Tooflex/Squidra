@@ -670,3 +670,31 @@ completed runtime with its archive. Limit-one selections find the eligible run a
 archive, and a taken-over claim disappears from continuation selection. T05-HTTP
 also covers an admission with no runtime through the live server: two model calls,
 one read, original run/trace IDs, bounded budget and correlated trace.
+
+## Automatic host continuation after real process crashes
+
+`SQD-028-AUTOMATIC-HOST-CRASH` runs one XCTest with five process scenarios:
+pre-planning, saved plan, saved read result, saved answer and saved completion.
+For each, the existing fixture commits its boundary under local ownership and is
+killed with SIGKILL. A new XCTest child runs the real `ServerComposition.live`
+with its normal recovery loop, coordinator, PostgreSQL stores, gateway and routes.
+It never calls a resume method directly. Authored model injection exists only in
+the test target; the production CLI has no fixture-provider flag.
+
+The resumed host must complete with the original runtime budget and trace ID,
+one tool invocation and one iteration. Its actual new model calls must be
+2/1/1/0/0 respectively, and traced tool calls 1/1/0/0/0. Persisted plan, result
+(including call ID), answer and completion archives present at the crash boundary
+must remain unchanged. The host exposes ready health and six SSE frames. The
+harness then kills that host and starts another, checks an identical terminal
+runtime and byte-identical SSE replay with zero new model calls, and requires
+clean SIGTERM shutdown. Every child PID is owned by the test and joined; logs and
+credentials stay in private temporary files/environment, with bounded redacted
+child diagnostics only on failure.
+
+This qualifies automatic host recovery for these five saved boundaries on the
+executed platform. It does not qualify a real model provider, CLI model-host
+configuration, cross-host failover or unknown remote effects. Linux process
+qualification remains part of restored CI. Generic pending-action/approval
+recovery and other unverified boundaries still require their respective evidence
+before SQD-028 is complete.
