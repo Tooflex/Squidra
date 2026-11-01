@@ -184,6 +184,8 @@ jobs:
       - name: Verify durable actor-scoped entity association
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-021-SQL
+      - name: Verify durable movement publication
+        run: bash Scripts/test-issue.sh T07-SQL
       - name: Verify frame import to durable evidence and sourced answers
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-020-PUBLISH

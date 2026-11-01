@@ -645,5 +645,21 @@
   "T07-UNIT": {
     "kind": "xctest",
     "filter": "^SquidraPerceptionTests\\.ConfirmedMovementTests/"
+  },
+  "T07-SQL-SWIFT": {
+    "kind": "xctest",
+    "filter": "^SquidraPerceptionTests\\.MovementPublicationSQLTests/"
+  },
+  "T07-SQL": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-movements"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "durable_movement_publication"
+    ]
   }
 }
