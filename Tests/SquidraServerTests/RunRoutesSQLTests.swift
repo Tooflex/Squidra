@@ -32,6 +32,70 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
         return try ConfirmedMovementDetector(actorID: actor,entityID: entity,epochID: UUID(),entityType: "cup",
             policy: MovementPolicy(id: UUID(),thresholdsByType: ["cup": MovementThreshold(minimumDisplacementMeters: 0.1)])).evaluate(samples)
     }
+    func testLiveServerRecoversCompletedArchiveWithoutModelOrDuplicatePublication() async throws {
+        try await RunHTTPTestSupport.withClients { client,second in
+            for concurrent in [true,false] {
+            let actor = UUID(),entity = UUID(),clock = try RunHTTPTestSupport.clock
+            let config = try RunHTTPTestSupport.configuration(actor:actor,token:String(repeating:"b",count:64))
+            let at = try clock.now(),request = try ReadRunRequest(actorID:actor,question:"Where is the fixture?",
+                planningScope:ReadPlanningScope(entities:[PlanningEntity(id:entity,label:"Fixture")]),effectiveToolScope:["world:read"],intent:.historical,
+                modelOptions:ReadPlanningOptions(deadline:UTCInstant(secondsSince1970:at.secondsSince1970+120)))
+            let binding = AGUIRunBinding(actorID:actor,runID:request.runID,threadID:UUID(),requestID:request.requestID)
+            let events = PostgresRunEventStore(client:client,actorID:actor),publication = PostgresRunPublicationStore(client:client,actorID:actor)
+            _ = try await events.create(binding,retentionSeconds:3600,deadline:.now.advanced(by:.seconds(4)))
+            try await PostgresReadRunTaskStore(client:client,actorID:actor).save(StoredReadRunTask(request:request,threadID:binding.threadID),deadline:.now.advanced(by:.seconds(4)))
+            let claim = try await publication.claim(binding,maximumExecutionSeconds:120,at:at,deadline:.now.advanced(by:.seconds(4)))
+            let runtime = PostgresRunStore(client:client)
+            let controller = try await RunController.create(actorID:actor,id:request.runID,traceID:request.traceID,store:runtime,clock:clock)
+            _ = try await controller.transition(to:.validating)
+            _ = try await controller.transition(to:.contextLoading)
+            _ = try await controller.transition(to:.planning)
+            _ = try await controller.validatedProposal(semanticDigest:String(repeating:"a",count:64),invocationKey:"recovery-fixture")
+            _ = try await controller.transition(to:.responding)
+            let context = try AnswerEvidenceContext(snapshot:WorldStateSnapshot(actorID:actor,subjectID:entity,validAt:at,knownAt:at,facts:[],projectedThroughSequence:0,availableThroughSequence:0),expectedActor:actor,intent:.historical,
+                clock:clock,policy:AnswerFreshnessPolicy(maximumObservationAgeSeconds:60,minimumCurrentConfidence:Confidence(0.5)))
+            let text = String(decoding:try JSONSerialization.data(withJSONObject:["schemaVersion":"1","claims":[["kind":"unknown","subjectId":entity.uuidString,"citations":[]]]]),as:UTF8.self)
+            let answer = try GroundedAnswerValidator().validate(ModelResponse(requestID:request.requestID,modelID:"authored-fixture",modelVersion:"1",text:text,outputTokens:1,costMicroUSD:0),expectedRequestID:request.requestID,context:context)
+            try await PostgresReadRunCompletionStore(client:client,actorID:actor).save(snapshot:controller.snapshot(),answer:answer,deadline:.now.advanced(by:.seconds(4)))
+            // Expiry alone cannot turn an unfinished runtime into a success.
+            _ = try await client.query("UPDATE run_event_streams SET created_at=clock_timestamp()-interval '2 hours',execution_lease_until=clock_timestamp()-interval '1 hour' WHERE run_id=\(request.runID)").collect()
+            let unfinished = try await publication.recoverNextCompleted(at:clock.now(),deadline:.now.advanced(by:.seconds(4)))
+            XCTAssertFalse(unfinished)
+            _ = try await controller.finishIteration(progress:.validatedResponse)
+            _ = try await controller.transition(to:.completed,terminalCode:.completed)
+            let foreign = try await PostgresRunPublicationStore(client:second,actorID:UUID()).recoverNextCompleted(at:clock.now(),deadline:.now.advanced(by:.seconds(4)))
+            XCTAssertFalse(foreign)
+            if concurrent {
+                async let one = publication.recoverNextCompleted(at:clock.now(),deadline:.now.advanced(by:.seconds(4)))
+                async let two = PostgresRunPublicationStore(client:second,actorID:actor).recoverNextCompleted(at:clock.now(),deadline:.now.advanced(by:.seconds(4)))
+                let winners = try await [one,two]
+                XCTAssertEqual(winners.filter { $0 }.count,1)
+            }
+            try await ServerComposition.live(configuration:config).test(.live) { http in
+                try await RunHTTPTestSupport.wait {
+                    (try? await publication.status(actorID:actor,runID:request.runID,deadline:.now.advanced(by:.seconds(4))))?.phase == .succeeded
+                }
+                let response = try await http.executeRequest(uri:"/api/v1/runs/"+request.runID.uuidString+"/events",method:.get,
+                    headers:[.authorization:"Bearer "+String(repeating:"b",count:64)],body:nil)
+                XCTAssertEqual(response.status,.ok)
+                let frames = try RunHTTPTestSupport.frames(response.body)
+                XCTAssertEqual(frames.count,6)
+                let value = try XCTUnwrap(frames[1].1["value"] as? NSDictionary)
+                XCTAssertEqual(value,try JSONSerialization.jsonObject(with:JSONEncoder().encode(answer)) as? NSDictionary)
+            }
+            // Stale old publication ownership cannot overwrite recovered output.
+            do { _ = try await publication.finish(claim,outcome:.cancelled,at:clock.now(),deadline:.now.advanced(by:.seconds(4)));XCTFail("Old owner published") }
+            catch { XCTAssertEqual(error as? RunEventStoreError,.conflict) }
+            async let a = publication.recoverNextCompleted(at:clock.now(),deadline:.now.advanced(by:.seconds(4)))
+            async let b = PostgresRunPublicationStore(client:second,actorID:actor).recoverNextCompleted(at:clock.now(),deadline:.now.advanced(by:.seconds(4)))
+            let repeated = try await [a,b];XCTAssertEqual(repeated,[false,false])
+            try await ServerComposition.live(configuration:config).test(.live) { _ in
+                let status = try await publication.status(actorID:actor,runID:request.runID,deadline:.now.advanced(by:.seconds(4)))
+                XCTAssertEqual(status.stream.nextSequence,7);XCTAssertEqual(status.phase,.succeeded)
+            }
+            }
+        }
+    }
     func testDurableTaskRoundTripConflictAndActorScope() async throws {
         try await RunHTTPTestSupport.withClients { client,second in
             let actor = UUID(),run = UUID(),trace = UUID(),requestID = UUID(),thread = UUID(),entity = UUID()

@@ -149,5 +149,33 @@ published grounded answer and its checkpoint precedes the completed runtime.
 The engine test injects a lost write acknowledgement after capture and verifies
 that no new model call occurs and the responding state survives.
 
-Automatic archive publication and phase continuation remain unimplemented at
-this step; no startup scan or read route initiates execution. SQD-028 remains open.
+The live server now owns a bounded publication-recovery worker. It scans only
+actor-owned, unexpired streams whose publication lease expired, runtime is
+`COMPLETED`, and responding archive predates the terminal runtime version. It
+locks one stream (`SKIP LOCKED`), verifies task/request/thread/actor/subject scope,
+and appends the archived answer, text frames and success marker atomically.
+Migration `runtime/006_publication_recovery_index.sql` indexes running streams
+by actor and lease order to support the bounded scan. The private PostgreSQL
+path reuses stream chronology and byte-limit validation;
+it exposes no public raw producer constructor or GroundedAnswer decoder.
+
+A completed archive is already an owned run result: recovery makes it available
+through the same authenticated status/SSE boundary without using saved scope as
+new tool/model authority. Message identity derives from the existing run ID.
+Concurrent workers produce one terminal stream; the former owner cannot publish
+after its lease expires. The worker runs even without a model configuration and
+is cancelled/joined before PostgreSQL shutdown. Idle polls are 250 ms. A corrupt
+archive fails the service rather than skipping data or claiming success.
+
+Nonterminal runtimes, live leases, expired retained streams and absent archives
+are not candidates. Publication recovery never changes runtime state, reconciles
+an effect, or dispatches a model/tool. Explicit `recoverExpired` also prefers a
+completed valid archive; its existing recovery-required failure remains for
+other expired runs. Earlier engine-phase continuation and abrupt-process server
+qualification remain required before SQD-028 closes.
+
+T05-HTTP covers real model-free server activation, unfinished-state exclusion,
+foreign actor isolation, concurrent recovery winners, exact archived/published
+JSON equality, stale-owner rejection and a second server instance without a
+duplicate. The fixture advances the publication lease in SQL; it does not claim
+to be the actual SIGKILL qualification.

@@ -45,6 +45,7 @@ enum ServerComposition {
             runs:try! RunRoutes.Dependencies(actorID:configuration.boundary.actorID,
                 events:events,publication:publication,runtime:runtime,submission:submission,traces:recorder),
             beforeServing:{ _ = try await recovery.recover() },
+            publicationStep: { try await publication.recoverNextCompleted(at:UTCInstant(secondsSince1970:Date().timeIntervalSince1970),deadline:.now.advanced(by:.seconds(4))) },
             watchStep: {
                 let progressed = try await watches.processNext(deadline: .now.advanced(by: .seconds(4)))
                 if progressed { _ = try await recovery.recover() }
@@ -57,6 +58,7 @@ enum ServerComposition {
                             client: PostgresClient? = nil, approvals: ApprovalCoordinator? = nil, ledger: (any ActionLedgerStore)? = nil,
                             worldReads: WorldReadRoutes? = nil, runs: RunRoutes.Dependencies? = nil,
                             beforeServing: (@Sendable () async throws -> Void)? = nil,
+                            publicationStep: (@Sendable () async throws -> Bool)? = nil,
                             watchStep: (@Sendable () async throws -> Bool)? = nil) -> some ApplicationProtocol {
         let router = Router(context: BoundaryContext.self)
         for path in ["/health/live", "/health"] {
@@ -84,6 +86,7 @@ enum ServerComposition {
             },
             logger: Logger(label: "squidra.server", factory: { _ in SwiftLogNoOpLogHandler() }))
         if let client { app.addServices(client) }
+        if let publicationStep { app.addServices(PublicationRecoveryService(processNext:publicationStep)) }
         if let watchStep { app.addServices(WatchWorkerService(processNext: watchStep)) }
         if let coordinator = runs?.submission?.coordinator { app.addServices(ReadWorkerService(coordinator:coordinator)) }
         if let beforeServing { app.beforeServerStarts(perform:beforeServing) }
