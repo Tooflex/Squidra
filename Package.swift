@@ -12,6 +12,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "SquidraDomain", targets: ["SquidraDomain"]),
+        .library(name: "SquidraSandbox", targets: ["SquidraSandbox"]),
         .executable(name: "squidra", targets: ["SquidraServer"]),
         .executable(name: "squidra-eval", targets: ["EvalRunner"]),
         .executable(name: "squidra-eval-database", targets: ["DatabaseEval"]),
@@ -37,6 +38,8 @@ let package = Package(
     ],
     targets: [
         .target(name: "SquidraDomain"),
+        .target(name: "SquidraSandbox", dependencies: [.product(name: "Crypto", package: "swift-crypto")]),
+        .testTarget(name: "SquidraSandboxTests", dependencies: ["SquidraSandbox"]),
     ] + applicationModules.map { name in
         .target(name: name, dependencies: [.byName(name: "SquidraDomain")] +
             (name == "SquidraCognition" ? [.byName(name: "SquidraWorld"), .byName(name: "SquidraTools"), .byName(name: "SquidraMemory")] : []) +

@@ -149,6 +149,8 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-028-UNIT
       - name: Verify exclusive local process ownership
         run: bash Scripts/test-issue.sh SQD-028-OWNERSHIP
+      - name: Bounded sandbox host contracts
+        run: bash Scripts/test-issue.sh SQD-012-UNIT
       - name: Bounded delegation contracts
         run: bash Scripts/test-issue.sh SQD-010
       - name: Run host FSM and budget tests
