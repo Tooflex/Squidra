@@ -1168,5 +1168,9 @@
       "sqd_020_http"
     ],
     "requires_database": true
+  },
+  "SQD-024": {
+    "kind": "xctest",
+    "filter": "^SquidraSpatialTests\\.CameraLidarFusionTests/"
   }
 }
