@@ -109,7 +109,7 @@ case "${1:-}" in
   down)
     assert_owned; "$container_engine" rm -f "$db_container" >/dev/null
     echo 'Container removed; development data volume retained.' ;;
-  test-timeline-live|test-web-live|test-consolidation-http|test-consolidation|test-run-crash|test-run-recovery|test-client|test-server|test-run-store|test-ledger|test-approvals|test-journal|test-projection|test-changes|test-world-tools|test-read-runs|test-recovery|test-restart|test-run-events|test-run-publication|test-run-workers|test-automatic-host-crash|test-run-http|test-saved-answer-crash|test-saved-completion-crash|test-saved-result-crash|test-saved-plan-crash|test-preplanning-crash|test-owned-publication-crash|test-publication-crash|test-watch-crash|test-watches|test-eval|test-movement-crash|test-movements|test-associations|test-frame-ingestion|test-tracing)
+  test-approval-live|test-timeline-live|test-web-live|test-consolidation-http|test-consolidation|test-run-crash|test-run-recovery|test-client|test-server|test-run-store|test-ledger|test-approvals|test-journal|test-projection|test-changes|test-world-tools|test-read-runs|test-recovery|test-restart|test-run-events|test-run-publication|test-run-workers|test-automatic-host-crash|test-run-http|test-saved-answer-crash|test-saved-completion-crash|test-saved-result-crash|test-saved-plan-crash|test-preplanning-crash|test-owned-publication-crash|test-publication-crash|test-watch-crash|test-watches|test-eval|test-movement-crash|test-movements|test-associations|test-frame-ingestion|test-tracing)
     # Explicit integration-only exception: ephemeral TCP port on loopback, never 0.0.0.0.
     db_container="squidra-client-test-$(python3 -c 'import uuid;print(uuid.uuid4().hex[:12])')"
     credentials="$(mktemp)"; created=false
@@ -231,6 +231,8 @@ PY
       echo 'SQUIDRA_TEST_PASS:durable_approvals'
     elif [[ "$1" == test-run-crash ]]; then
       python3 Scripts/test-run-crash.py "$credentials" "$test_port"
+    elif [[ "$1" == test-approval-live ]]; then
+      python3 Scripts/test-approval-live.py "$credentials" "$test_port"
     elif [[ "$1" == test-timeline-live ]]; then
       python3 Scripts/test-timeline-live.py "$credentials" "$test_port"
     elif [[ "$1" == test-web-live ]]; then
@@ -305,5 +307,5 @@ PY
       python3 Tests/SquidraPostgresTests/concurrency.py "$container_engine" "$db_container"
     fi
     ;;
-  *) echo 'Usage: Scripts/dev-db.sh build|up|up-local|migrate|test|test-runtime|test-timeline-live|test-web-live|test-consolidation-http|test-consolidation|test-run-crash|test-run-recovery|test-client|test-server|test-run-store|test-ledger|test-approvals|test-journal|test-projection|test-changes|test-world-tools|test-read-runs|test-recovery|test-restart|test-run-events|test-run-publication|test-run-workers|test-automatic-host-crash|test-run-http|test-saved-answer-crash|test-saved-completion-crash|test-saved-result-crash|test-saved-plan-crash|test-preplanning-crash|test-owned-publication-crash|test-publication-crash|test-watch-crash|test-watches|test-eval|test-movement-crash|test-movements|test-associations|test-frame-ingestion|test-tracing|down' >&2; exit 2 ;;
+  *) echo 'Usage: Scripts/dev-db.sh build|up|up-local|migrate|test|test-runtime|test-approval-live|test-timeline-live|test-web-live|test-consolidation-http|test-consolidation|test-run-crash|test-run-recovery|test-client|test-server|test-run-store|test-ledger|test-approvals|test-journal|test-projection|test-changes|test-world-tools|test-read-runs|test-recovery|test-restart|test-run-events|test-run-publication|test-run-workers|test-automatic-host-crash|test-run-http|test-saved-answer-crash|test-saved-completion-crash|test-saved-result-crash|test-saved-plan-crash|test-preplanning-crash|test-owned-publication-crash|test-publication-crash|test-watch-crash|test-watches|test-eval|test-movement-crash|test-movements|test-associations|test-frame-ingestion|test-tracing|down' >&2; exit 2 ;;
 esac

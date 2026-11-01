@@ -132,7 +132,36 @@ and assistive navigation. No manual screen-reader qualification is claimed.
 `bash Scripts/test-issue.sh T06-APPROVALS` requires six Chromium scenarios:
 exact digest and keyboard confirmation, refusal/withdrawal, local/server expiry,
 changed command/conflict, unavailable/malformed/401, and local-origin/session
-isolation. These fixtures intercept HTTP and do not execute commands. Real
-browser-to-PostgreSQL authorization, frame import and historical questions remain
-part of #42; the existing real consolidation review tests do not prove this
-new authorization flow. No command execution or live-provider claim is made.
+isolation. These fixtures intercept HTTP and do not execute commands. The separate live
+authorization suite below covers browser-to-PostgreSQL decisions. Frame import
+and historical questions remain part of #42; consolidation review tests do not
+substitute for authorization tests. No command execution or live-provider claim is made.
+
+
+## Real command authorization qualification
+
+`bash Scripts/test-issue.sh T06-APPROVALS-LIVE` starts isolated PostgreSQL, the
+normal CLI server and Chromium with no HTTP interception. A test-only opt-in
+fixture creates four reserved ledger commands through the production APIs,
+then requests approvals. The browser approves, refuses and withdraws three
+requests. For the fourth, the real server deadline has elapsed while the browser
+clock deliberately lags by a minute: the attempted authorization returns 409,
+and a refresh exposes the durably expired state. Database timestamps are not
+rewritten. The browser also checks exact digest/fingerprint, preservation of an
+integer above JavaScript's safe range in the original arguments text, inert
+script text, keyboard confirmation and rejection of an invalid owner token.
+
+A fresh SQL client verifies all four decisions, versions, actor identities and
+command bindings. Every ledger entry remains reserved at version 1, without a
+result or provider receipt; no executor is configured or invoked. The normal
+server is stopped cleanly and restarted, then a fresh browser reloads the four
+decisions. Full approval and ledger rows must remain byte-identical after reload.
+This proves durable authorization, not external command execution or SIGKILL
+recovery. Seeded commands and arguments are authored test data.
+
+The harness uses ephemeral loopback listeners and exact UI origins. Browser and
+static-server environments exclude database credentials. Private temporary logs
+are removed rather than echoed; fixture/browser phases have bounded waits and
+owned servers are stopped and joined. No production fixture mode, model calls,
+new dependency or schema migration is introduced. Linux and manual screen-reader
+qualification remain separate from these local macOS checks.

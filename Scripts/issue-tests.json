@@ -1027,5 +1027,18 @@
     "tests": [
       "typed_web_approvals"
     ]
+  },
+  "T06-APPROVALS-LIVE": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-approval-live"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "approval_sql_decide",
+      "approval_sql_reload"
+    ]
   }
 }
