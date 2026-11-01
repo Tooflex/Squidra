@@ -32,6 +32,7 @@ enum ServerComposition {
         let publication = PostgresRunPublicationStore(client:client,actorID:configuration.boundary.actorID)
         let runtime = PostgresRunStore(client:client)
         let submission:RunRoutes.Submission?
+        let continuationStep: (@Sendable () async throws -> Bool)?
         if let readHost {
             let clock = try SystemClock(timeZone:IANATimeZone(identifier:"Etc/UTC"))
             let router = try ModelRouter(models:readHost.models.map { TracedLanguageModel($0) },clock:clock)
@@ -43,7 +44,40 @@ enum ServerComposition {
             let coordinator = try PublishedReadRunCoordinator(actorID:configuration.boundary.actorID,executor:TracedReadExecutor(base:engine,recorder:recorder),
                 events:events,publication:publication,clock:clock,tasks:PostgresReadRunTaskStore(client:client,actorID:configuration.boundary.actorID),ownership:ownershipStore)
             submission = try RunRoutes.Submission(coordinator:coordinator,clock:clock,entities:readHost.entities,budget:readHost.budget)
-        } else { submission = nil }
+            if let ownershipStore,let localOwnership {
+                let tasks = PostgresReadRunTaskStore(client:client,actorID:configuration.boundary.actorID)
+                let allowed = Set(readHost.entities.map(\.id))
+                continuationStep = {
+                    for candidate in try await ownershipStore.previousRuns(deadline:.now.advanced(by:.seconds(4))) {
+                        guard let task = try await tasks.load(runID:candidate.runID,deadline:.now.advanced(by:.seconds(4))) else { continue }
+                        let snapshot = try await runtime.load(actorID:candidate.actorID,runID:candidate.runID,deadline:.now.advanced(by:.seconds(4)))
+                        guard !snapshot.state.isTerminal else { continue }
+                        do {
+                            if try await coordinator.recover(task,claim:{
+                                try await publication.takeOver(runID:candidate.runID,ownership:localOwnership,deadline:.now.advanced(by:.seconds(4)))
+                            },execute:{ request in
+                                let correlation = try TraceCorrelation(traceID:request.traceID,runID:request.runID,taskID:request.requestID)
+                                try await recorder.withTrace(correlation) { session in
+                                    if let usage = try? TraceUsage(requestID:request.requestID) { await session.recordUsage(usage) }
+                                    guard !request.planningScope.allowGlobalChanges,request.planningScope.entities.allSatisfy({ allowed.contains($0.id) }) else { throw ReadRunFailureCode.recoveryRequired }
+                                    switch snapshot.state {
+                                    case .created,.validating,.contextLoading: _ = try await engine.resumeBeforePlanning(request,expectedVersion:snapshot.version)
+                                    case .planning: _ = try await engine.resumeSavedPlan(request,expectedVersion:snapshot.version)
+                                    case .executingTool: _ = try await engine.resumeSavedToolResult(request,expectedVersion:snapshot.version)
+                                    case .responding: _ = try await engine.resumeSavedAnswer(request,expectedVersion:snapshot.version)
+                                    default: throw ReadRunFailureCode.recoveryRequired
+                                    }
+                                }
+                            },complete:{
+                                _ = try await publication.recoverCompleted(runID:candidate.runID,ownership:localOwnership,
+                                    at:clock.now(),deadline:.now.advanced(by:.seconds(4)))
+                            }) { return true }
+                        } catch RunEventStoreError.conflict { continue }
+                    }
+                    return false
+                }
+            } else { continuationStep = nil }
+        } else { submission = nil;continuationStep = nil }
         return application(configuration: configuration, readiness: { try await readiness.check() }, client: client,
             approvals:approvals,ledger:PostgresActionLedger(client:client),worldReads:worldReads,
             runs:try! RunRoutes.Dependencies(actorID:configuration.boundary.actorID,
@@ -60,6 +94,7 @@ enum ServerComposition {
                             at:UTCInstant(secondsSince1970:Date().timeIntervalSince1970),deadline:.now.advanced(by:.seconds(4))) { return true }
                     }
                 }
+                if try await continuationStep?() == true { return true }
                 return try await publication.recoverNextCompleted(at:UTCInstant(secondsSince1970:Date().timeIntervalSince1970),deadline:.now.advanced(by:.seconds(4)))
             },
             watchStep: {
