@@ -64,7 +64,7 @@ states and byte-identical journal rows before and after each browser phase.
 The fixture uses authored observations rather than perception/model output. It
 is a test target, never a production server mode. Browser and static-server
 environments exclude database credentials. Private temporary logs are removed
-and are not echoed because browser fill errors can contain tokens. All child
-processes have bounded waits and are joined on exit. This tests graceful restart,
+and are not echoed because browser fill errors can contain tokens. Fixture and browser phases
+have bounded waits; owned servers are stopped and joined on exit. This tests graceful restart,
 not SIGKILL. `frameId` is a coordinate frame and is labelled “Repère spatial”;
 it is not represented as a source image.
