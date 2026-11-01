@@ -1,18 +1,18 @@
-# Private tracing foundation
+# Private run tracing
 
 `PrivateTraceRecorder` uses actual OpenTelemetry SDK spans and a bounded
-in-memory exporter. It is an isolated library foundation; run, model, gateway,
-journal, projection and HTTP integration are still tracked under SQD-030. No
-server composition enables tracing automatically in this change.
+in-memory exporter. The live read host installs worker, model, tool and projection-query tracing.
+Journal/projector decorators provide the corresponding ingestion hooks. No network
+exporter is configured.
 
 ## Qualified dependency boundary
 
-The new dependency is exact `opentelemetry-swift-core` 2.6.0, revision
+The pinned dependency is exact `opentelemetry-swift-core` 2.6.0, revision
 `c6fcee77cfc21ba400366f12475217c7b6e1d605`, Apache-2.0. Its Swift 6 manifest's only
 package dependency is swift-atomics >=1.3.1, already pinned in Squidra. SwiftNIO
 is declared directly at its existing locked version to expose the existing
-NIOConcurrencyHelpers product. Resolving adds only the SDK repository pin;
-existing dependency versions/revisions remain unchanged.
+NIOConcurrencyHelpers product. The original SDK integration added only that repository pin; live-host wiring
+changes no dependency versions or revisions.
 Sources: [release](https://github.com/open-telemetry/opentelemetry-swift-core/releases/tag/2.6.0),
 [immutable manifest](https://github.com/open-telemetry/opentelemetry-swift-core/blob/c6fcee77cfc21ba400366f12475217c7b6e1d605/Package.swift),
 [license](https://github.com/open-telemetry/opentelemetry-swift-core/blob/c6fcee77cfc21ba400366f12475217c7b6e1d605/LICENSE).
@@ -74,19 +74,21 @@ Run `bash Scripts/test-issue.sh SQD-030-UNIT`. The suite inspects actual SDK spa
 export and parent IDs, host correlation, concurrent/nested isolation, original
 error propagation with secret canaries absent from snapshots, cancellation,
 usage references, bounded capacity/depth and defensive exporter redaction.
-Required Linux/macOS CI must qualify the pinned graph before merge.
+Hosted Linux/macOS qualification will be rerun after the explicitly authorized CI suspension.
 
-End-to-end model/tool/event correlation, host HTTP IDs, durable run integration
-and any optional remote exporter remain separate tasks under SQD-030. A future
+The live-worker qualification below covers model/tool/event correlation, host
+HTTP IDs and durable run integration. A future
 exporter must preserve the same content restrictions and require explicit host
-configuration. Rollback removes this isolated foundation and its dependency pin;
-no database migration or server behavior changes here.
+configuration. Disabling host tracing requires removing the explicit decorators and executor
+wrapper; it must preserve the underlying gateway and runtime behavior. No database
+migration is required.
 
 ## Opt-in port decorators
 
 `TracedLanguageModel`, `TracedToolExecutor`, `TracedWorldRepository` and
 `TracedWorldProjector` use the current task-local private session when present.
-They are explicit composition choices; the server does not install them here.
+They are explicit composition choices; the live read host installs the model and
+tool wrappers. Journal/projector wrappers remain available to ingestion hosts.
 Every underlying operation executes once with its original values, error and
 cancellation semantics. Calls without a session remain unrecorded. Nested and
 concurrent sessions restore their own context; no SDK global context is used.
@@ -106,9 +108,7 @@ Prompts, model/tool identity strings, targets, idempotency keys, source labels,
 raw output, payloads and exception descriptions remain excluded.
 
 Run `bash Scripts/test-issue.sh SQD-030-PORTS` for actual ModelRouter/ActionGateway
-composition and controlled journal/projection qualification. Server activation,
-durable PostgreSQL trace composition and run/HTTP end-to-end tracing remain open
-under SQD-030.
+composition and controlled journal/projection qualification. The live HTTP qualification below completes worker/server correlation.
 
 ## PostgreSQL source qualification
 
@@ -125,5 +125,41 @@ spans under one host trace/run/task correlation. Source labels and output remain
 present in the actor's evidence response and absent from the trace snapshot.
 Negative cases verify that foreign actors, mismatched targets, unknown input
 properties and denied policy cause no SQL query dispatch after decoration.
-This qualifies component composition; it does not activate HTTP/run tracing or
-claim an LLM answered the question correctly.
+This qualifies component composition; the separate live test below verifies
+HTTP/run activation. Neither test measures actual provider quality.
+
+## Live worker and authenticated retrieval
+
+ServerComposition creates a bounded process-local recorder by default, or accepts
+an explicitly supplied private recorder for host diagnostics. The owned read
+worker opens the root using the server-generated traceId/runId; taskId is the
+host request UUID for this single-task run. It records requestId on the root and
+attempt IDs on model spans. Closing the submitting HTTP connection does not own
+or close this trace. The root describes executor completion, not successful
+publication or network delivery; persisted run status remains authoritative.
+
+TracedWorldQueries records actual projection-query spans and committed watermarks.
+After answer grounding succeeds, answer reference spans record only cited source
+event UUIDs. They are reference spans, not invented journal-read operations. Model
+and tool decorators preserve original target resolution and permission checks.
+No model names, questions, labels, arguments, raw SQL, output text or errors are
+added to the export. A read run need not append a new journal event; its trace
+links back to the immutable events used by its answer.
+
+Authenticated `GET /api/v1/runs/:run/trace` first verifies actor-scoped durable
+run ownership and retention. It returns at most 256 redacted ended SDK spans for
+that run, schemaVersion 1 and retention `bounded_process_memory`. Anonymous,
+foreign and absent-run requests retain their normal boundary errors. Replay and
+trace reads do not execute models or tools. Traces disappear on process restart
+or bounded-buffer eviction. `partial` is true if no ended root is retained, any
+recorder drops have occurred, or the response was capped. The dropped-span flag
+is deliberately conservative across the recorder; it never asserts completeness
+after a known drop. Retrieval never clears other runs' spans.
+
+Run `bash Scripts/test-issue.sh SQD-030` for the complete acceptance gate: private
+SDK isolation/redaction, model/tool/journal/projection port correlation, actual
+PostgreSQL source identity, and live worker/HTTP retrieval. The live test checks
+host trace/run/task IDs, actual SDK root/model/tool/projection spans, cited event
+identity, auth/isolation and absent secret/prompt/source canaries. Cancellation
+ends root and child spans without evidence or leaked text. All export is in
+memory; no mandatory telemetry endpoint or network transmission is introduced.

@@ -610,5 +610,18 @@
       "database_grounded_answer",
       "live_read_transport"
     ]
+  },
+  "SQD-030": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/test-tracing.py"
+    ],
+    "tests": [
+      "private_sdk_contracts",
+      "port_correlation",
+      "durable_source_correlation",
+      "live_worker_tracing"
+    ]
   }
 }

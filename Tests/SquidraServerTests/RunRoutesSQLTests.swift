@@ -5,6 +5,7 @@ import PostgresNIO
 import SquidraAgentRuntime
 import SquidraDomain
 import SquidraCognition
+import SquidraObservability
 import SquidraPostgres
 import SquidraProtocols
 import XCTest
@@ -15,8 +16,9 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
     func testLiveCompositionOwnsReadPipelineAndReportsModelFreeLimitation() async throws {
         try await RunHTTPTestSupport.withClients { client,_ in
             let (fixture,model,_,source) = try await RunHTTPTestSupport.realHarness(client:client)
+            let recorder = PrivateTraceRecorder(limits:try TraceLimits())
             let host = try ReadHostConfiguration(models:[model],entities:[PlanningEntity(id:fixture.entity,label:"Allowed fixture entity")])
-            try await ServerComposition.live(configuration:fixture.configuration,readHost:host).test(.live) { http in
+            try await ServerComposition.live(configuration:fixture.configuration,readHost:host,traceRecorder:recorder).test(.live) { http in
                 let capabilities = try await http.executeRequest(uri:"/api/v1/run-capabilities",method:.get,headers:[.authorization:"Bearer "+fixture.token],body:nil)
                 XCTAssertEqual(capabilities.status,.ok)
                 XCTAssertEqual(try RunHTTPTestSupport.object(capabilities.body)["textRuns"] as? Bool,true)
@@ -29,6 +31,35 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                 let answer = try XCTUnwrap(frames[1].1["value"] as? [String:Any])
                 let evidence = try XCTUnwrap(answer["evidence"] as? [[String:Any]])
                 XCTAssertEqual((evidence.first?["id"] as? String).flatMap(UUID.init(uuidString:)),source)
+                let traceResponse = try await http.executeRequest(uri:path+"/trace",method:.get,headers:[.authorization:"Bearer "+fixture.token],body:nil)
+                XCTAssertEqual(traceResponse.status,.ok)
+                let trace = try RunHTTPTestSupport.object(traceResponse.body)
+                XCTAssertEqual(trace["partial"] as? Bool,false)
+                let spans = try XCTUnwrap(trace["spans"] as? [[String:Any]])
+                let acceptance = try RunHTTPTestSupport.object(accepted.body)
+                let traceID = try XCTUnwrap(acceptance["traceId"] as? String)
+                let runID = try XCTUnwrap(acceptance["runId"] as? String)
+                let requestID = try XCTUnwrap(acceptance["requestId"] as? String)
+                XCTAssertEqual(spans.filter { $0["stage"] as? String == "model" }.count,2)
+                XCTAssertEqual(spans.filter { $0["stage"] as? String == "tool" }.count,1)
+                XCTAssertEqual(spans.filter { $0["stage"] as? String == "projection" }.count,1)
+                let rootSpan = try XCTUnwrap(spans.first { $0["stage"] as? String == "run" })
+                XCTAssertEqual(rootSpan["outcome"] as? String,"ok")
+                for span in spans {
+                    let attributes = try XCTUnwrap(span["attributes"] as? [String:String])
+                    XCTAssertEqual(attributes["squidra.trace_id"],traceID)
+                    XCTAssertEqual(attributes["squidra.run_id"],runID)
+                    XCTAssertEqual(attributes["squidra.task_id"],requestID)
+                }
+                XCTAssertTrue(spans.contains { ($0["attributes"] as? [String:String])?["squidra.event_id"] == source.uuidString.lowercased() })
+                let text = String(buffer:traceResponse.body)
+                for canary in [fixture.token,"fixture:http-read-private-canary","Allowed fixture entity","Read the fixture entity"] { XCTAssertFalse(text.contains(canary)) }
+                let unauthorized = try await http.executeRequest(uri:path+"/trace",method:.get,headers:[:],body:nil)
+                XCTAssertEqual(unauthorized.status,.unauthorized)
+                let foreignTrace = try await http.executeRequest(uri:path+"/trace",method:.get,headers:[.authorization:"Bearer "+fixture.token,.init("X-Actor-ID")!:UUID().uuidString],body:nil)
+                XCTAssertEqual(foreignTrace.status,.forbidden)
+                let absentTrace = try await http.executeRequest(uri:"/api/v1/runs/"+UUID().uuidString+"/trace",method:.get,headers:[.authorization:"Bearer "+fixture.token],body:nil)
+                XCTAssertEqual(absentTrace.status,.notFound)
                 let denied = try await http.executeRequest(uri:"/api/v1/runs",method:.post,headers:[.authorization:"Bearer "+fixture.token,.contentType:"application/json"],body:RunHTTPTestSupport.body(UUID()))
                 XCTAssertEqual(denied.status,.forbidden)
             }
@@ -43,6 +74,30 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                 XCTAssertEqual(unavailable.status,.serviceUnavailable)
             }
             let calls = await model.calls;XCTAssertEqual(calls,2)
+            await fixture.coordinator.shutdown()
+        }
+    }
+    func testLiveTraceCancellationEndsRootWithoutPublishingQuestionOrEvidence() async throws {
+        try await RunHTTPTestSupport.withClients { client,_ in
+            let (fixture,model,_,_) = try await RunHTTPTestSupport.realHarness(client:client,pauseOnModelCall:1)
+            let recorder = PrivateTraceRecorder(limits:try TraceLimits())
+            let host = try ReadHostConfiguration(models:[model],entities:[PlanningEntity(id:fixture.entity,label:"private-label-canary")])
+            try await ServerComposition.live(configuration:fixture.configuration,readHost:host,traceRecorder:recorder).test(.live) { http in
+                let accepted = try await http.executeRequest(uri:"/api/v1/runs",method:.post,headers:[.authorization:"Bearer "+fixture.token,.contentType:"application/json"],body:RunHTTPTestSupport.body(fixture.entity))
+                let path = try XCTUnwrap(accepted.headers[.location])
+                try await RunHTTPTestSupport.wait { await model.calls == 1 }
+                let cancelled = try await http.executeRequest(uri:path+"/cancel",method:.post,headers:[.authorization:"Bearer "+fixture.token],body:nil)
+                XCTAssertEqual(cancelled.status,.accepted)
+                try await RunHTTPTestSupport.wait { let snapshot = await recorder.snapshot();return snapshot.spans.contains { $0.stage == .run } }
+                let snapshot = await recorder.snapshot()
+                XCTAssertEqual(snapshot.activeTraces,0);XCTAssertEqual(snapshot.activeSpans,0)
+                XCTAssertEqual(snapshot.spans.first { $0.stage == .run }?.outcome,"cancelled")
+                XCTAssertEqual(snapshot.spans.first { $0.stage == .model }?.outcome,"cancelled")
+                XCTAssertFalse(snapshot.spans.contains { $0.attributes["squidra.event_id"] != nil })
+                let response = try await http.executeRequest(uri:path+"/trace",method:.get,headers:[.authorization:"Bearer "+fixture.token],body:nil)
+                XCTAssertEqual(response.status,.ok)
+                XCTAssertFalse(String(buffer:response.body).contains("private-label-canary"))
+            }
             await fixture.coordinator.shutdown()
         }
     }
