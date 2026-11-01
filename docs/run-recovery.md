@@ -39,8 +39,7 @@ its next transition or dispatch reservation.
 `SQD-028-UNIT` covers budget preservation, clock regression, expiry, stale
 controllers, lost acknowledgements, approval waiting, missing ledger identity,
 and verified/unverifiable effects. This is the checkpoint component of SQD-028;
-PostgreSQL/process-crash boundary qualification, host activation and end-to-end
-resumption are still pending. This document does not claim the full issue complete.
+Host activation and end-to-end application resumption are still pending. This document does not claim the full issue complete.
 
 ## PostgreSQL checkpoint qualification
 
@@ -60,5 +59,36 @@ checkpoint acknowledgement reloads the confirmed ledger result without repeating
 the verifier or effect. The original controller performs no work during recovery.
 
 This qualifies storage and lost-acknowledgement boundaries. It does not simulate
-OS process death, network partition or a concurrent live worker. The process-kill
-harness and host continuation activation remain required for the complete story.
+OS process death, network partition or a concurrent live worker. The separate process-kill harness below covers abrupt process death. Host
+continuation activation remains required for the complete story.
+
+## Actual process-crash qualification
+
+`bash Scripts/test-issue.sh SQD-028-CRASH` builds the separate
+`squidra-run-crash-fixture` executable under Tests/RunCrashFixture. It requires an
+explicit fixture opt-in and isolated database credentials; it is not the server's
+recovery interface. The harness owns one seed process at a time, waits for its
+atomic marker written after durable SQL commits, sends SIGKILL to that exact
+process, and verifies its exit before starting a fresh recovery process. Markers
+contain fixture UUIDs and stage names, never credentials. Credentials stay in the
+child environment. Temporary markers/logs and database containers are cleaned up.
+
+Four stages cover reserved (no dispatch permit yet), pending (unverifiable effect),
+committed effect, and durable result. An existing reserved row can now be claimed
+atomically by ActionLedger.prepare after normal gateway authorization. Competing
+claimants use the same version check; only one obtains a permit. Pending/unknown
+rows still never grant another dispatch. This fixes the previously stranded
+reservation after a crash between reserve and claim.
+
+The reserved stage resumes with the original key, charges its second bounded
+attempt, executes once and completes. The pending stage explicitly terminates
+RECOVERY_REQUIRED without assuming the absent receipt proves non-application.
+The effect and result stages complete from the confirmed receipt/result without
+executing again. Each fresh process checks durable terminal state, exact attempt
+count and zero/one effect as appropriate. Linux execution remains to be qualified
+when hosted CI is restored; the local run uses macOS and real PostgreSQL.
+
+This process fixture demonstrates the host sequence (old process exited, reload,
+reconcile, continue) but does not activate automatic recovery in the application.
+The server still needs a persisted task description and an owned startup/explicit
+continuation path. SQD-028 remains open until that integration is complete.

@@ -102,12 +102,16 @@ final class ActionFingerprintTests: XCTestCase, @unchecked Sendable {
         do { _ = try await ledger.complete(permit,result:.failed(.providerFailure),deadline:.now.advanced(by:.seconds(2))); XCTFail("Stale permit overwrote unknown") }
         catch { XCTAssertEqual(error as? ActionLedgerError,.reconciliationRequired) }
     }
-    func testCrashBeforeClaimAndAfterClaimNeverGrantsAnotherDispatch() async throws {
+    func testCrashBeforeClaimCanClaimOnceButAfterClaimNeverDispatchesAgain() async throws {
         let store = MemoryLedger(), command = try Self.command()
         // Crash after durable reservation, before a claim or effect.
         _ = try await store.reserve(command,deadline:.now.advanced(by:.seconds(2)))
+        guard case .dispatch(let recovered) = try await ActionLedger(store:store).prepare(command,deadline:.now.advanced(by:.seconds(2))) else {
+            return XCTFail("Unclaimed reservation could not recover")
+        }
+        XCTAssertEqual(recovered.record.command.idempotencyKey,command.idempotencyKey)
         guard case .inProgress = try await ActionLedger(store:store).prepare(command,deadline:.now.advanced(by:.seconds(2))) else {
-            return XCTFail("A stranded reservation dispatched again")
+            return XCTFail("Recovered claim dispatched twice")
         }
         let freshStore = MemoryLedger(), freshCommand = try Self.command(key:"before-effect")
         guard case .dispatch = try await ActionLedger(store:freshStore).prepare(freshCommand,deadline:.now.advanced(by:.seconds(2))) else {
@@ -117,6 +121,17 @@ final class ActionFingerprintTests: XCTestCase, @unchecked Sendable {
         guard case .inProgress = try await ActionLedger(store:freshStore).prepare(freshCommand,deadline:.now.advanced(by:.seconds(2))) else {
             return XCTFail("A stranded claim dispatched again")
         }
+    }
+    func testExistingUnclaimedReservationHasOneWinnerAfterRestart() async throws {
+        let store = MemoryLedger(),command = try Self.command(key:"reserved-before-crash")
+        let reserved = try await store.reserve(command,deadline:.now.advanced(by:.seconds(2)))
+        XCTAssertEqual(reserved.record.status,.reserved)
+        async let a = ActionLedger(store:store).prepare(command,deadline:.now.advanced(by:.seconds(2)))
+        async let b = ActionLedger(store:store).prepare(command,deadline:.now.advanced(by:.seconds(2)))
+        let outcomes = try await [a,b]
+        let permits = outcomes.compactMap { if case .dispatch(let permit) = $0 { return permit };return nil as ActionDispatchPermit? }
+        XCTAssertEqual(permits.count,1);XCTAssertEqual(permits.first?.record.id,reserved.record.id)
+        guard case .inProgress = try await ActionLedger(store:store).prepare(command,deadline:.now.advanced(by:.seconds(2))) else { return XCTFail("Pending claim dispatched again") }
     }
     func testInternalResultVersionIsActuallyValidatedOnDecode() throws {
         var json = try XCTUnwrap(JSONSerialization.jsonObject(with:JSONEncoder().encode(ActionResult.failed(.notApplied))) as? [String:Any])
