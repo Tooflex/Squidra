@@ -25,6 +25,10 @@ public struct ConsolidationArchive: Sendable {
               let text = String(data: data, encoding: .utf8) else { throw ConsolidationStoreError.invalidArchive }
         return text
     }
+    public func genesisEncoded() throws -> String {
+        var original = self; original.envelope.commands.removeAll()
+        return try original.encoded()
+    }
     /// Storage uses this exact predecessor for append-only CAS. Genesis has none.
     public func predecessor() throws -> String? {
         guard !envelope.commands.isEmpty else { return nil }

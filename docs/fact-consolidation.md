@@ -131,3 +131,74 @@ foreign actors, no authentication, closed/duplicate/escaped bodies, stale versio
 contradictions and a failing-store fixture. It does not claim a browser UI, a
 multi-principal approval model, archive import, or live model extraction. Journals
 are still provisioned by the host through the archive/store API.
+
+## Import a local structured batch
+
+The normal CLI now supports `squidra consolidate --input /absolute/path/batch.json`
+with the same actor/database/token/origin environment as `serve`. It does not
+start an HTTP listener or invoke a model. Input is an owner-provided structured
+batch, not automatic extraction from arbitrary text. All imported source records
+are privateOnly. Source UUIDs are declared references retained verbatim; this
+command does not look them up in the world journal or prove their semantic truth.
+
+The input is a regular file of at most 1 MiB; symlinks, FIFOs and other special
+files are refused. It is read through a nonblocking, no-follow descriptor and
+checked for complete bounded input. The existing strict JSON parser rejects
+invalid UTF-8, duplicate/canonical-equivalent keys, NULs, excessive nesting and
+more than 4096 nodes. Objects are closed at each level. No actor, sensitivity,
+review, status, command history or approver field can be imported.
+
+```json
+{
+  "schemaVersion": "1",
+  "journalId": "10000000-0000-0000-0000-000000000001",
+  "batchId": "20000000-0000-0000-0000-000000000002",
+  "records": [{
+    "id": "30000000-0000-0000-0000-000000000003",
+    "subjectId": "40000000-0000-0000-0000-000000000004",
+    "sourceIds": ["50000000-0000-0000-0000-000000000005"],
+    "text": "Authored example: the key was red."
+  }],
+  "predicates": [{"name": "key.color", "critical": true}],
+  "candidates": [{
+    "subjectId": "40000000-0000-0000-0000-000000000004",
+    "predicate": "key.color",
+    "value": "red",
+    "validFrom": "2026-01-01T00:00:00Z",
+    "validUntil": null,
+    "quotations": {"30000000-0000-0000-0000-000000000003": "the key was red."}
+  }]
+}
+```
+
+This is an authored example with illustrative IDs, not recorded world evidence.
+Use real source identifiers and original text for real inputs. Supply 1–32
+candidates, explicit RFC3339 validity, bounded original records and host-owned
+predicate definitions under the existing workspace limits. Every new proposal
+is pending or conflicted; even noncritical ones require explicit review.
+
+The command validates the complete candidate batch before its first write. It
+then saves genesis and one proposal operation through the durable store, retrying
+at most three CAS conflicts. Journal and batch IDs are caller-selected idempotency
+keys. Repeating an identical batch returns the same proposal IDs and current
+states, including an already committed approval/rejection; it never resets a
+review. Changed originals/catalogue or changed contents under an existing batch
+ID fail. A new batch ID may append within the same immutable source catalogue;
+a new source catalogue requires a new journal. Conflicts are scoped to a journal,
+not global semantic reconciliation across all knowledge.
+
+Success prints only schema version, journal UUID/version and proposal IDs/versions/
+states as JSON. Open that journal UUID in the Web UI. A database interruption can
+leave a committed genesis without the proposal operation; rerun the same file to
+complete it safely. Errors are filtered and never print input text or credentials.
+The input file and original evidence are not modified or deleted.
+
+`SQD-029` now includes import parser, pre-write validation, idempotency, retained
+review and concurrent import tests. `T06-REVIEW-LIVE` prepares authored files and
+uses this normal CLI command for all journal creation, then exercises real browser
+review and SQL restart verification. It also refuses injected review fields,
+changed batches, symlinks, FIFOs and oversized files, and verifies retries before
+and after review. The fixture executable now only prepares input files and verifies
+the database; it no longer seeds journals directly. Automatic model extraction,
+scheduling and integration of reviewed knowledge into model context remain separate
+work under #29.

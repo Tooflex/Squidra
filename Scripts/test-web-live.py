@@ -78,7 +78,7 @@ with tempfile.TemporaryDirectory(prefix='squidra-web-live-') as directory:
     manifest = root / 'fixture.json'
     fixture = str(binaries / 'squidra-consolidation-browser-fixture')
     token = secrets.token_hex(32)
-    def run_private(command, env, name):
+    def run_private(command, env, name, expected=0):
         log = root / (name + '.log')
         with log.open('w') as stream:
             process = subprocess.Popen(command, cwd=ROOT, env=env, stdout=stream, stderr=stream)
@@ -88,7 +88,7 @@ with tempfile.TemporaryDirectory(prefix='squidra-web-live-') as directory:
             except subprocess.TimeoutExpired:
                 stop(process)
                 raise RuntimeError('Owned fixture timed out')
-            if result:
+            if result != expected:
                 # Raw browser errors can contain fill arguments: never echo logs.
                 raise RuntimeError('Owned integration step failed: ' + name)
             output = log.read_text()
@@ -97,7 +97,7 @@ with tempfile.TemporaryDirectory(prefix='squidra-web-live-') as directory:
             return output
         finally:
             stop(process)
-    run_private([fixture, 'seed', str(manifest)], fixture_env, 'seed')
+    run_private([fixture, 'prepare', str(manifest)], fixture_env, 'seed')
     info = json.loads(manifest.read_text())
     # No database credentials are forwarded to the browser/static host.
     browser_keys = {'PATH', 'HOME', 'TMPDIR', 'TMP', 'TEMP', 'USER', 'USERNAME', 'LOGNAME', 'LANG', 'LC_ALL', 'DISPLAY', 'XAUTHORITY', 'XDG_RUNTIME_DIR', 'PLAYWRIGHT_BROWSERS_PATH', 'CI', 'SystemRoot', 'WINDIR'}
@@ -108,6 +108,32 @@ with tempfile.TemporaryDirectory(prefix='squidra-web-live-') as directory:
         origin = 'http://127.0.0.1:' + str(ui_port)
         server_env = dict(browser_env, SQUIDRA_PORT='0', SQUIDRA_AUTH_TOKEN=token, SQUIDRA_ACTOR_ID=info['actor'], SQUIDRA_UI_ORIGIN=origin,
                           SQUIDRA_DB_PORT=db_port, SQUIDRA_DB_USER='squidra', SQUIDRA_DB_PASSWORD=password, SQUIDRA_DB_NAME='squidra')
+        cli = str(binaries / 'squidra')
+        first_output = None
+        for index, key in enumerate(['proposal', 'rejectedProposal', 'conflictedProposal']):
+            path = str(manifest) + '.' + str(index) + '.input.json'
+            result = json.loads(run_private([cli, 'consolidate', '--input', path], server_env, 'import-' + str(index)))
+            if result['journalVersion'] != 1 or len(result['proposals']) != (2 if index == 2 else 1):
+                raise RuntimeError('Import did not create the bounded proposal batch')
+            info[key] = result['proposals'][0]['id']
+            if index == 0:
+                first_output = result
+        manifest.write_text(json.dumps(info))
+        first_input = Path(str(manifest) + '.0.input.json')
+        retry = json.loads(run_private([cli, 'consolidate', '--input', str(first_input)], server_env, 'retry-import'))
+        if retry != first_output:
+            raise RuntimeError('Identical import did not preserve proposal identity')
+        original = json.loads(first_input.read_text())
+        for name, change in [('review', lambda data: data.update(review={'approved': True})),
+                             ('changed-batch', lambda data: data['candidates'][0].update(value='green'))]:
+            data = json.loads(json.dumps(original)); change(data)
+            path = root / (name + '.json'); path.write_text(json.dumps(data))
+            run_private([cli, 'consolidate', '--input', str(path)], server_env, 'refuse-' + name, expected=1)
+        symlink = root / 'link.json'; symlink.symlink_to(first_input)
+        fifo = root / 'pipe'; os.mkfifo(fifo)
+        oversized = root / 'oversized.json'; oversized.write_bytes(b' ' * 1_048_577)
+        for path in [symlink, fifo, oversized]:
+            run_private([cli, 'consolidate', '--input', str(path)], server_env, 'refuse-' + path.name, expected=1)
         for phase in ['decide', 'reload']:
             server, port = start([str(binaries / 'squidra'), 'serve'], server_env, root / ('server-' + phase + '.log'), 'SQUIDRA listening 127.0.0.1:')
             readiness(port)
@@ -116,6 +142,9 @@ with tempfile.TemporaryDirectory(prefix='squidra-web-live-') as directory:
             output = run_private(['node', 'web/tests/live-review.mjs'], env, 'browser-' + phase)
             if output.strip() != 'SQUIDRA_WEB_LIVE_PASS:' + phase:
                 raise RuntimeError('Browser phase did not confirm completion')
+            retained = json.loads(run_private([cli, 'consolidate', '--input', str(first_input)], server_env, 'reviewed-retry-' + phase))
+            if retained['journalVersion'] != 2 or retained['proposals'][0]['state'] != 'approved' or retained['proposals'][0]['id'] != info['proposal']:
+                raise RuntimeError('Import retry replaced a committed review')
             run_private([fixture, 'verify', str(manifest)], fixture_env, 'verify-' + phase)
             stop(server, require_clean=True)
             server = None
