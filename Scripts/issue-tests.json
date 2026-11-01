@@ -965,5 +965,18 @@
     "tests": [
       "typed_web_review"
     ]
+  },
+  "T06-REVIEW-LIVE": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-web-live"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "browser_sql_decide",
+      "browser_sql_reload"
+    ]
   }
 }

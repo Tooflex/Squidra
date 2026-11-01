@@ -59,6 +59,8 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-029
       - name: Verify typed local review interface in Chromium
         run: bash Scripts/test-issue.sh T06-REVIEW
+      - name: Verify browser review against real server and PostgreSQL
+        run: bash Scripts/test-issue.sh T06-REVIEW-LIVE
       - name: Run T01 Domain tests
         run: bash Scripts/test-issue.sh T01
       - name: Run bounded JSON document tests
