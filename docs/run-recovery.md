@@ -1,5 +1,24 @@
 # Run recovery
 
+## Current qualification entry point
+
+Run `bash Scripts/test-issue.sh SQD-028` for the aggregate recovery check.
+It executes checkpoint unit tests, approval wait contracts, PostgreSQL effect
+reconciliation, actual effect process crashes, local ownership, normal CLI
+publication recovery, automatic read-host process crashes, and HTTP status
+regressions. Each child must pass its own nonzero-test validation before the
+aggregate reports its marker; failure preserves the child exit code.
+
+Automatic startup continuation is implemented for persisted read tasks when the
+host has a read configuration and holds the actor's local ownership lock. The
+normal model-free CLI can recover completed publication archives. Generic
+`RunRecovery` and `ApprovalWait` remain explicit host operations; the automatic
+read host does not execute effectful tasks or resume approval workflows.
+The sections below record successive implementation stages; earlier statements
+that all host activation is pending are superseded by the automatic read-host
+sections. This gate does not claim real-provider or Linux qualification, nor
+completion of every acceptance criterion in #28.
+
 `RunRecovery` is a host recovery operation for a worker that has stopped. It is
 not a live takeover endpoint: the host must join the old worker, or verify its
 process has exited, before calling it. No HTTP route or startup scan activates
