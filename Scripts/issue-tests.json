@@ -1242,6 +1242,22 @@
       "restored_invariants",
       "unsafe_and_corrupt_rejected",
       "unowned_container_rejected"
-    ]
+    ],
+    "requires_database": true
+  },
+  "T12-MEDIA-SWIFT": {
+    "kind": "xctest",
+    "filter": "^SquidraRetentionTests\\.MediaTests/"
+  },
+  "T12-MEDIA": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Tests/SquidraRetentionTests/media.py"
+    ],
+    "tests": [
+      "media_adapter"
+    ],
+    "requires_database": true
   }
 }

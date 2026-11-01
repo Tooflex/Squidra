@@ -6,6 +6,7 @@ public enum ExpectedDatabaseSchema {
         .init(namespace: "world", version: "003_movement_epochs.sql", checksum: "e96a0eab93d6aea5cbd4f9520070d64b7a710128335c21e6e26a22636927a2a9"),
         .init(namespace: "world", version: "004_watch_intentions.sql", checksum: "54e1d74d4d901852ea0271c6bd8ddcbc6579ce387f50bd23d42434dccc64f3bf"),
         .init(namespace: "world", version: "005_watch_dispatch.sql", checksum: "41340bc05d4a408dd110f13d12392f628ec8e92f33596e0c319ed9ef519db9b0"),
+        .init(namespace: "world", version: "006_media_retention.sql", checksum: "bece54b71d9960292bad8eb7cd3435bdf1f1ec920f46b15ea962c88ed7c1dd60"),
         .init(namespace: "runtime", version: "001_runtime.sql", checksum: "7d77c9f2ce1278e85ed3b4992d5ee54f30031d13ecb8e9f5162b3d8ef96e9a68"),
         .init(namespace: "runtime", version: "002_run_events.sql", checksum: "801a6ae6729ec2216e3ffb499818ad6fc2cc0ed13e1db5d8c5ef85246a8e6d39"),
         .init(namespace: "runtime", version: "003_run_publication.sql", checksum: "da4f36d93ea15d108ad1c2ec22121656a6aa9189b636e2e6a56e2b7c5db4ad93"),

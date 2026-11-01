@@ -73,6 +73,7 @@ let package = Package(
                 .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
             ]
         ),
+        .testTarget(name: "SquidraRetentionTests", dependencies: ["SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio")], exclude: ["backup_restore.py", "media.py"]),
         .testTarget(name: "SquidraPostgresSwiftTests", dependencies: ["SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
         .testTarget(name: "SquidraServerTests", dependencies: ["SquidraMeta", "SquidraMemory", "SquidraPerception", "SquidraSpatial", "SquidraServer", "SquidraObservability", "SquidraWorld", "SquidraProtocols", "SquidraDomain", "SquidraSecurity", "SquidraTools", "SquidraPostgres", .product(name: "HummingbirdTesting", package: "hummingbird"), "SquidraTemporal", "SquidraAgentRuntime", "SquidraCognition", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")], exclude: ["server_process.py"]),
         .testTarget(name: "SquidraAgentRuntimeTests", dependencies: ["SquidraDomain", "SquidraAgentRuntime", "SquidraCognition", "SquidraWorld", "SquidraTools", "SquidraSecurity", "SquidraTemporal", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
