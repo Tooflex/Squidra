@@ -26,7 +26,7 @@ func require(_ condition: Bool) throws { if !condition { throw Failure.invalid }
     }
     static func run() async throws {
         let args=CommandLine.arguments,env=ProcessInfo.processInfo.environment
-        guard args.count==5,["seed","verify"].contains(args[1]),env["SQUIDRA_DEMO_FIXTURE"]=="1",
+        guard args.count==5,["seed","verify","fake"].contains(args[1]),env["SQUIDRA_DEMO_FIXTURE"]=="1",
               let port=env["SQUIDRA_TEST_DB_PORT"].flatMap(Int.init),let password=env["SQUIDRA_TEST_DB_PASSWORD"] else { throw Failure.invalid }
         let scenario=try JSONDecoder().decode(Scenario.self,from:Data(contentsOf:URL(fileURLWithPath:args[2])))
         try require(scenario.schemaVersion==1 && scenario.origin=="authored-synthetic-replay" && scenario.entity=="Arduino")
@@ -104,8 +104,9 @@ func require(_ condition: Bool) throws { if !condition { throw Failure.invalid }
                 "mondayEarly":try evidence(early,location:scenario.initialLocation),"mondayCorrected":try evidence(late,location:scenario.correctedMondayLocation),"tuesday":try evidence(next,location:scenario.tuesdayLocation),
                 "unknown":"noEvidence","notificationCount":notifications.count,"notificationEventID":notifications[0].draft.id.uuidString,"eventIDs":page.events.map { $0.draft.id.uuidString }]
             let bytes=try JSONSerialization.data(withJSONObject:report,options:[.sortedKeys,.prettyPrinted])
-            if args[1]=="verify" { try require(try Data(contentsOf:reportPath)==bytes) }
+            if args[1] != "seed" { try require(try Data(contentsOf:reportPath)==bytes) }
             else { try bytes.write(to:reportPath,options:.atomic) }
+            if args[1]=="fake" { try await fakeModelDemo(client:client,identity:identity,scenario:scenario,path:reportPath.deletingLastPathComponent().appendingPathComponent("fake-model.json")) }
             print("HISTORICAL_DEMO_VERIFIED")
         }
     }

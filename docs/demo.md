@@ -10,9 +10,9 @@ Use the default Docker command on hosts where its loopback binding works directl
 The script builds a dedicated fixture executable, creates an owned temporary
 PostgreSQL/PostGIS/pgvector database, applies the existing migrations and exports
 `evidence.json` plus a timestamped `verification.json` under `.build/demo/<run>/`.
-No production database, configuration, provider key or model is used. Credentials
+No production database, configuration or provider key is used. Credentials
 are temporary, private and removed; the owned database is removed and absence
-verified. Only the explicit offline-replay profile is accepted. Other profiles
+verified. The default profile is offline-replay; offline-fake-model is an explicit alternative. Other profiles
 fail before executing a model call or creating a database.
 
 ## Authored UTC scenario
@@ -51,7 +51,41 @@ database restart; those recovery tests are separate.
 
 This component runs **without an LLM** (`modelMode: none`, both fake and real
 model execution false). It does not label a hardcoded answer as model output.
-Fake-model orchestration, real-model integration evidence, the UI dependency
+Real-model integration evidence, the UI dependency
 #42 and full #44 acceptance remain open. Existing Meta/SAM qualification is
 separate evidence; this demo neither reuses its receipt as a new call nor spends
 additional provider budget. It is not a real-perception MVP claim.
+
+## Explicit scripted-model orchestration
+
+```sh
+SQUIDRA_CONTAINER_ENGINE="$PWD/Scripts/colima-test-engine.py" bash Scripts/demo.sh --profile=offline-fake-model
+```
+
+This profile first completes the unchanged no-LLM replay and its two fresh-process
+verifications. It then starts a separate fixture process to execute six questions
+through the production `ReadRunEngine`, action gateway, host policy, PostgreSQL
+run store and location projection. `fixture.historical-demo` version `1` implements
+`LanguageModel` with scripted proposals and claims. It is not a neural model and
+does not measure inference quality, natural-language understanding or cloud access.
+No provider credentials are passed and no provider model is instantiated.
+
+Three successful questions reproduce Monday's earlier/corrected locations and
+Tuesday's location with exact source citations and confidence. A known entity
+without location evidence produces an unknown answer. The production grounding
+validator rejects a fabricated citation; a deny policy prevents the actual SQL
+read. A counting wrapper measures real projection reads separately from reserved
+tool attempts: a denied attempt still consumes the runtime's attempt budget,
+while executing zero reads. Every case checks the durable terminal checkpoint,
+request/run/trace correlation and exact scripted model call count.
+
+`fake-model.json` exports the validated answers, sources, timestamps, confidence,
+run IDs and negative outcomes, labelled `modelMode: scripted-fixture`,
+`fakeModelExecuted: true`, `realModelExecuted: false`, `providerCalls: 0`.
+`verification.json` includes its hash and selected profile. This process does not
+claim to restart or recover the newly created question runs; the prior replay
+restart checks concern historical facts and notifications. The `T08-FAKE-MODEL`
+runner requires all seven markers; `T08-REPLAY` still requires its original five.
+
+Real-model evidence for this exact historical scenario and the UI acceptance
+remain outstanding. Separate Meta/SAM receipts are not substituted for this run.
