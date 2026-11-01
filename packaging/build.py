@@ -44,7 +44,11 @@ if target=='darwin-arm64':
         add(binary,'bin/squidra',0o755)
         for path in stage.glob('*.dylib'): add(path,'bin/'+path.name,0o755)
 else:
-    add(bin_dir/'squidra','bin/squidra',0o755)
+    # Strip debug symbols only from a staged ELF copy, preserving build artifacts.
+    with tempfile.TemporaryDirectory(prefix='squidra-package-elf-') as directory:
+        binary=Path(directory)/'squidra';shutil.copy2(bin_dir/'squidra',binary)
+        subprocess.run(['strip','--strip-debug',str(binary)],check=True)
+        add(binary,'bin/squidra',0o755)
 for bundle in list(bin_dir.glob('*.bundle'))+list(bin_dir.glob('*.resources')):
     for path in bundle.rglob('*'):
         if path.is_file(): add(path,'bin/'+str(path.relative_to(bin_dir)))
