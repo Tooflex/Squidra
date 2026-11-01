@@ -166,8 +166,9 @@ There is no retry, polling or fallback.
 The transport is injected and must enforce response limits while receiving,
 refuse redirects and cooperate with cancellation. The client independently
 validates the complete response and joins the deadline/cancellation tasks. This
-component is **not yet registered as a LanguageModel**: qualified spending bounds/accounting and explicit server configuration
-remain necessary. No environment key is read and no network transport is
+component now has a separate LanguageModel adapter described below. Qualified
+spending bounds/accounting and explicit server configuration remain necessary
+before the server can register it. No environment key is read and no network transport is
 implicitly created by this component.
 
 `bash Scripts/test-issue.sh T11-META-RESPONSES` runs eight offline tests with
@@ -399,3 +400,40 @@ Offline `T11-SAM-NATIVE` compares 40 reference-encoded rasters and 18 rejected
 streams, exercises geometry, quotas, cancellation and adapter provenance, and
 reproduces the captured live raster SHA-256. It makes no paid calls. These checks
 qualify the bounded image profile, not arbitrary SAM output or general quality.
+
+
+## Meta language model boundary
+
+`MetaLanguageModel` bridges the text client to the read engine. It requires an
+explicit `MetaTextQualification` from the host, an injected clock and a mandatory
+`MetaAttemptBudget`. Qualification identifies the Standard model, expiration
+and a conservative per-attempt upper bound including failures. The constructor
+checks that the bound covers the published full input context and 4096 output
+tokens; that minimum check does not verify account terms or qualify a deployment.
+No default qualification, live budget implementation or environment activation
+is supplied by this adapter.
+
+Consent, capabilities, request size/output limits, deadline and qualification
+expiry are checked before reservation. The budget implementation must atomically
+persist each attempt against a cumulative cap before returning, honor the
+monotonic deadline and retain reservations on failures, cancellation or uncertain
+outcomes. Attempt IDs are unique even when planning and answering share a request
+ID. Authorization latency consumes the same deadline as transport. Usage estimates
+do not refund reservations. The existing private 100 EUR test ledger still needs
+a host integration before real server questions can make paid calls.
+
+The domain model port lacks function call IDs. Its tool messages are therefore
+encoded as JSON objects with `kind=untrusted_tool_data` and the original content,
+carried at user-message authority. Existing system/user/assistant messages retain
+their roles. No tool result becomes a system instruction or fabricated function
+call. Quoting is a representation, not a security boundary: the read engine still
+validates generated plans, source citations and permissions. The raw Responses
+client continues to reject unrepresentable tool-role messages.
+
+Returned ModelResponse values use the host request ID, explicit hosted alias,
+visible structured text, output usage and dated published-rate estimate. Provider
+response IDs and reasoning are omitted. Rate limits and transient availability
+failures map to the router's retryable provider errors; other failures remain
+terminal. The adapter itself never retries. Any router fallback requires a new
+budget reservation. `T11-META-MODEL` tests these boundaries offline, including both
+models, cumulative refusal, quoted hostile tool data and joined cancellation.

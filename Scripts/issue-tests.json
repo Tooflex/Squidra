@@ -1115,5 +1115,9 @@
   "T11-SAM-NATIVE": {
     "kind": "xctest",
     "filter": "^SquidraMetaTests\\.SAMNativeTests/"
+  },
+  "T11-META-MODEL": {
+    "kind": "xctest",
+    "filter": "^SquidraMetaTests\\.MetaLanguageModelTests/"
   }
 }
