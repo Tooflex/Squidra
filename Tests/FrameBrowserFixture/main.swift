@@ -15,7 +15,7 @@ private struct Receipt: Decodable {
 }
 private func run() async throws {
     let env = ProcessInfo.processInfo.environment, args = Array(CommandLine.arguments.dropFirst())
-    guard env["SQUIDRA_BROWSER_FIXTURE"] == "1", args.count == 2, ["seed","verify"].contains(args[0]),
+    guard env["SQUIDRA_BROWSER_FIXTURE"] == "1", args.count == 2, ["seed","verify","verify-sam"].contains(args[0]),
           let port = env["SQUIDRA_TEST_DB_PORT"].flatMap(Int.init), let password = env["SQUIDRA_TEST_DB_PASSWORD"] else { throw Failure.invalid }
     let path = URL(fileURLWithPath:args[1])
     let client = try LocalDatabaseConfiguration(port:port,username:"squidra",password:password,database:"squidra").makeClient()
@@ -30,10 +30,13 @@ private func run() async throws {
         } else {
             let m = try JSONDecoder().decode(Manifest.self,from:Data(contentsOf:path))
             let r = try JSONDecoder().decode(Receipt.self,from:Data(contentsOf:path.appendingPathExtension("receipt.json")))
-            guard r.schemaVersion == "1",r.deployment == "synthetic",r.basis == "inferred",!r.mediaRetained,
+            let sam = args[0] == "verify-sam"
+            let deployment = sam ? "cloud" : "synthetic"
+            guard r.schemaVersion == "1",r.deployment == deployment,r.basis == "inferred",!r.mediaRetained,
                   r.cameraId == m.camera,r.locationId == m.scene,r.coordinateFrameId == m.coordinate,r.frameId == r.observationEventId,
-                  r.modelId == "fixture.vision",r.modelVersion == "1.0.0",r.imageSHA256 == "41e0529cc7f8e5df0fd2a1d3e3265244739d50e9355aa5a0596db021d6835bb1",
-                  r.validityMilliseconds == 1000,r.entities.count == 2,Set(r.entities.map(\.localId)) == ["red","blue"] else { throw Failure.invalid }
+                  r.modelId == (sam ? "meta.sam" : "fixture.vision"),r.modelVersion == (sam ? "alias:sam-3.1" : "1.0.0"),
+                  r.imageSHA256 == (sam ? "62201c030c004452926e53f8f9c3659bfdcf22519812552c94aaa26e700993dc" : "41e0529cc7f8e5df0fd2a1d3e3265244739d50e9355aa5a0596db021d6835bb1"),
+                  r.validityMilliseconds == 1000,r.entities.count == (sam ? 1 : 2),sam || Set(r.entities.map(\.localId)) == ["red","blue"] else { throw Failure.invalid }
             let observed = try RFC3339.parse(r.observedAt), known = try RFC3339.parse(r.knownAt)
             let micros = Int64((observed.secondsSince1970*1_000_000).rounded())
             let journal = PostgresWorldRepository(client:client), projection = PostgresLocationProjection(actorID:m.actor,client:client)
@@ -42,17 +45,37 @@ private func run() async throws {
                   let observation = page.events.first,let last = page.events.last,
                   observation.draft.type == "perception.frame_imported",try RFC3339.format(last.recordedAt) == r.knownAt else { throw Failure.invalid }
             let payload = try JSONSerialization.jsonObject(with:observation.draft.payload.bytes) as? [String:Any]
-            guard payload?["imageSHA256"] as? String == r.imageSHA256,payload?["deployment"] as? String == "synthetic",
+            guard payload?["imageSHA256"] as? String == r.imageSHA256,payload?["deployment"] as? String == deployment,
+                  payload?["modelId"] as? String == r.modelId,payload?["modelVersion"] as? String == r.modelVersion,
                   payload?["imageBase64"] == nil,payload?["mask"] == nil else { throw Failure.invalid }
+            let detections = payload?["detections"] as? [[String:Any]] ?? []
+            let proof: [String:Any]?
+            if sam {
+                proof = try JSONSerialization.jsonObject(with:Data(contentsOf:path.appendingPathExtension("proof.json"))) as? [String:Any]
+                guard detections.count == 1,payload?["width"] as? Int == 512,payload?["height"] as? Int == 512,
+                      let detection = detections.first,detection["label"] as? String == "red square",
+                      let x = detection["x"] as? Int,let y = detection["y"] as? Int,
+                      let width = detection["width"] as? Int,let height = detection["height"] as? Int,
+                      abs(x-128) <= 4,abs(y-128) <= 4,abs(width-256) <= 4,abs(height-256) <= 4 else { throw Failure.invalid }
+            } else { proof = nil }
             for (entity,event) in zip(r.entities,page.events.dropFirst()) {
                 guard event.draft.actorID == m.actor,event.draft.causationID == r.observationEventId,
                       event.draft.correlationID == r.frameId,event.draft.times.observedMicroseconds == micros else { throw Failure.invalid }
                 let state = try await projection.state(actorID:m.actor,subjectID:entity.id,validAt:observed,knownAt:known,deadline:.now.advanced(by:.seconds(4)))
                 guard state.facts.count == 1,state.uncertainty == [.inferredEvidence],state.projectedThroughSequence == state.availableThroughSequence else { throw Failure.invalid }
                 let fact = state.facts[0]
+                let confidence: Double
+                if sam {
+                    guard let detection = detections.first(where:{ ($0["entityId"] as? String)?.lowercased() == entity.id.uuidString.lowercased() }),
+                          let score = detection["confidence"] as? Double,(0.5...1).contains(score),
+                          proof?["confidence"] as? Double == score,
+                          (proof?["id"] as? String)?.lowercased() == entity.sourceEventId.uuidString.lowercased(),
+                          proof?["observedAt"] as? String == r.observedAt,proof?["recordedAt"] as? String == r.knownAt else { throw Failure.invalid }
+                    confidence = score
+                } else { confidence = 0.875 }
                 guard fact.sourceEventID == entity.sourceEventId,fact.subjectID == entity.id,fact.locationID == m.scene,
-                      fact.frameID == m.coordinate,fact.basis == .inferred,fact.confidence.value == 0.875,
-                      fact.sourceID == "synthetic-frame:" + r.imageSHA256,fact.valid.fromMicroseconds == micros,
+                      fact.frameID == m.coordinate,fact.basis == .inferred,fact.confidence.value == confidence,
+                      fact.sourceID == deployment + "-frame:" + r.imageSHA256,fact.valid.fromMicroseconds == micros,
                       fact.valid.toMicroseconds == micros + 1_000_000 else { throw Failure.invalid }
                 let after = try await projection.state(actorID:m.actor,subjectID:entity.id,
                     validAt:UTCInstant(secondsSince1970:observed.secondsSince1970+1),knownAt:known,deadline:.now.advanced(by:.seconds(4)))

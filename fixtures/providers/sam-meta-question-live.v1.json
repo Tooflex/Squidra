@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-11-01T20:25:00.930Z",
+  "model": "muse-spark-1.3",
+  "outcome": "passed",
+  "source": "public_sam_image",
+  "question": "Quelle \u00e9tait la position de cette entit\u00e9 au 2026-11-01T20:25:01.344949Z, selon les informations connues au 2026-11-01T20:25:02.709209Z ? Cite les preuves et pr\u00e9cise si la position est observ\u00e9e ou inf\u00e9r\u00e9e.",
+  "receipt": {
+    "basis": "inferred",
+    "cameraId": "823B1742-F576-47DB-AA3B-07EE298650AA",
+    "coordinateFrameId": "3E20CBE2-A060-43E0-939F-119ED9DC2927",
+    "deployment": "cloud",
+    "entities": [
+      {
+        "id": "508DF51F-D180-4FC6-B41F-815A4AD2DC99",
+        "localId": "0",
+        "sourceEventId": "CC22A55D-0F5F-4420-AB06-4DF1B97643B4"
+      }
+    ],
+    "frameId": "B9EA2CD3-8357-4FE7-A64B-55A60C8FDF2F",
+    "imageSHA256": "62201c030c004452926e53f8f9c3659bfdcf22519812552c94aaa26e700993dc",
+    "knownAt": "2026-11-01T20:25:02.709209Z",
+    "locationId": "E629FC8B-7D42-4DCC-A0C4-C4FD492B30B9",
+    "mediaRetained": false,
+    "modelId": "meta.sam",
+    "modelVersion": "alias:sam-3.1",
+    "observationEventId": "B9EA2CD3-8357-4FE7-A64B-55A60C8FDF2F",
+    "observedAt": "2026-11-01T20:25:01.344949Z",
+    "schemaVersion": "1",
+    "validityMilliseconds": 1000
+  },
+  "run": {
+    "events": "/api/v1/runs/0f0d064f-d3ef-46e1-94fb-c8a95d03a176/events",
+    "requestId": "6ba77061-4c68-4740-9553-41b594556a6f",
+    "runId": "0f0d064f-d3ef-46e1-94fb-c8a95d03a176",
+    "schemaVersion": "1",
+    "status": "/api/v1/runs/0f0d064f-d3ef-46e1-94fb-c8a95d03a176",
+    "threadId": "e396806f-f43f-4c10-867b-efc0d03a47f4",
+    "traceId": "31717b06-0054-4eb9-99a0-ed5ee102e628"
+  },
+  "runStatus": {
+    "expiresAt": "2026-11-01T21:25:02.843038Z",
+    "leaseExpired": false,
+    "minimumRetainedSequence": "1",
+    "nextSequence": "7",
+    "outputReady": true,
+    "protocolVersion": "1.0",
+    "publicationPhase": "succeeded",
+    "requestId": "6ba77061-4c68-4740-9553-41b594556a6f",
+    "runId": "0f0d064f-d3ef-46e1-94fb-c8a95d03a176",
+    "runtime": {
+      "activeMilliseconds": "6172",
+      "calls": 1,
+      "state": "COMPLETED",
+      "steps": 1,
+      "traceId": "31717b06-0054-4eb9-99a0-ed5ee102e628",
+      "version": "12"
+    },
+    "schemaVersion": "1",
+    "terminal": true,
+    "threadId": "e396806f-f43f-4c10-867b-efc0d03a47f4"
+  },
+  "eventTypes": [
+    "RUN_STARTED",
+    "CUSTOM",
+    "TEXT_MESSAGE_START",
+    "TEXT_MESSAGE_CONTENT",
+    "TEXT_MESSAGE_END",
+    "RUN_FINISHED"
+  ],
+  "answer": {
+    "text": "Evidence for valid time 2026-11-01T20:25:01.344949Z, known at 2026-11-01T20:25:02.709209Z.\nInferred location evidence for 508df51f-d180-4fc6-b41f-815a4ad2dc99: e629fc8b-7d42-4dcc-a0c4-c4fd492b30b9 in frame 3e20cbe2-a060-43e0-939f-119ed9dc2927; minimum source confidence 0.879, latest cited observation 2026-11-01T20:25:01.344949Z, oldest cited age 7.677 seconds. Citations: cc22a55d-0f5f-4420-ab06-4df1b97643b4.",
+    "claims": [
+      {
+        "kind": "location",
+        "basis": "inferred",
+        "frameId": "3E20CBE2-A060-43E0-939F-119ED9DC2927",
+        "subjectId": "508DF51F-D180-4FC6-B41F-815A4AD2DC99",
+        "locationId": "E629FC8B-7D42-4DCC-A0C4-C4FD492B30B9",
+        "citationIds": [
+          "CC22A55D-0F5F-4420-AB06-4DF1B97643B4"
+        ],
+        "minimumSourceConfidence": 0.8787879347801208
+      }
+    ],
+    "intent": "historical",
+    "status": "grounded",
+    "actorId": "12B0E9B5-3E53-47BC-BF85-CE67A640877C",
+    "evidence": [
+      {
+        "id": "CC22A55D-0F5F-4420-AB06-4DF1B97643B4",
+        "basis": "inferred",
+        "source": "cloud-frame:62201c030c004452926e53f8f9c3659bfdcf22519812552c94aaa26e700993dc",
+        "frameId": "3E20CBE2-A060-43E0-939F-119ED9DC2927",
+        "timeZone": "Etc/UTC",
+        "freshness": "fresh",
+        "subjectId": "508DF51F-D180-4FC6-B41F-815A4AD2DC99",
+        "confidence": 0.8787879347801208,
+        "locationId": "E629FC8B-7D42-4DCC-A0C4-C4FD492B30B9",
+        "observedAt": "2026-11-01T20:25:01.344949Z",
+        "recordedAt": "2026-11-01T20:25:02.709209Z",
+        "schemaVersion": "1",
+        "observationAgeSeconds": 7.676692962646484
+      }
+    ],
+    "requestId": "6BA77061-4C68-4740-9553-41B594556A6F",
+    "uncertainty": [
+      "inferredEvidence"
+    ],
+    "schemaVersion": "1"
+  },
+  "modelUsage": [
+    {
+      "outcome": "ok",
+      "outputTokens": "260",
+      "estimatedCostMicroUSD": "1949"
+    },
+    {
+      "outcome": "ok",
+      "outputTokens": "777",
+      "estimatedCostMicroUSD": "4485"
+    }
+  ],
+  "sqlVerification": "passed",
+  "harnessOutcome": "passed",
+  "reservedEURCentsBefore": 6000,
+  "reservedEURCentsAfter": 9000,
+  "limitations": [
+    "One public synthetic image with real SAM inference; not general scene quality qualification.",
+    "Location is inferred host-configured scene membership, not pixel-to-world calibration.",
+    "Published-rate text estimates are not invoiced spending; SAM charge is not reported by the host trace.",
+    "No account-wide zero-retention, immutable hosted weight revision or Linux runtime qualification is claimed."
+  ]
+}

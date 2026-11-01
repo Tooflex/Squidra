@@ -9,10 +9,10 @@ account retention, billing reconciliation or safe production spending bounds.
 
 | Family | Documented identifier | Documented interface | Squidra execution status |
 | --- | --- | --- | --- |
-| Spark | `muse-spark-1.3` | Hosted multimodal input, text output | HTTP 200; one bounded JSON text probe passed |
+| Spark | `muse-spark-1.3` | Hosted multimodal input, text output | HTTP 200; bounded JSON probe and real grounded browser question passed |
 | Wonder | `muse-wonder-1.0` | Hosted multimodal input, text output | HTTP 200; one bounded JSON text probe passed |
 | Glimmer | `meta-models/Muse-Glimmer-30B` | Self-hosted image/text to text | Weights not downloaded; runtime unqualified |
-| SAM | `sam-3.1` | Hosted prompted image/video segmentation | HTTP 200; one synthetic image mask decoded and compared with expected pixels |
+| SAM | `sam-3.1` | Hosted prompted image/video segmentation | HTTP 200; public-image mask decoded, then real import → Meta question → SQL/browser evidence passed |
 
 The hosted base is `https://api.meta.ai/v1`, authenticated with a Bearer
 `MODEL_API_KEY`. Responses uses `POST /v1/responses`. Public API documentation
@@ -75,9 +75,9 @@ terms:
 
 SAM pricing is $2.50 per thousand images or $0.20 per thousand video frames,
 with a minimum of 50 frames per video request. These are published prices,
-not measured spending or safe per-request reservations. No real provider
-cost bound is configured. Self-hosting costs and all latency/quality metrics
-remain unmeasured. Source: [pricing](https://dev.meta.ai/docs/pricing-rate-limits).
+not measured spending or safe per-request reservations. A dated, explicit qualification profile now enforces a shared durable test
+reservation cap (described below); this is not a production account budget.
+Self-hosting costs and general latency/quality metrics remain unmeasured. Source: [pricing](https://dev.meta.ai/docs/pricing-rate-limits).
 
 Contributor mode permits training use of submitted content. It is not enabled
 or considered consented by Squidra. Standard-mode training restrictions do not
@@ -545,10 +545,10 @@ live screenshot is made. `fixtures/providers/meta-question-live.v1.json` preserv
 this distinction and the sanitized public-data evidence. The first failed attempt
 is not relabeled successful, and neither attempt's reservations are refunded.
 
-The shared ledger now contains **six attempts / 60 EUR reserved out of 100 EUR**.
+At that synthetic-question checkpoint, the shared ledger contained **six attempts / 60 EUR reserved out of 100 EUR**.
 Known published-rate estimates across the initial probes and the completed
 question sum to USD 0.010307, excluding the unknown charge of the first failed
-question attempt. This is not invoiced spending. Four ten-EUR reservations remain.
+question attempt. This is not invoiced spending. Four ten-EUR reservations remained at that checkpoint; the subsequent SAM chain below consumes three.
 
 The live harness is deliberately absent from all CI/local-gate mappings. It can
 only be run explicitly with `SQUIDRA_META_QUESTION_LIVE=1` through
@@ -603,3 +603,47 @@ The normal HTTP import/UI remains synthetic-only until its explicit cloud
 configuration and consent flow are connected. These SQL tests use the existing
 public capture and fake transport/budget; reservations remain six attempts / 60
 EUR. See [frame ingestion](frame-ingestion.md#admitted-cloud-publication).
+
+## Real SAM import → Meta question → verified browser evidence
+
+On 2026-11-01 at 20:25 UTC, the normal CLI imported the public
+`sam-red-square.png` through the real hosted `sam-3.1` adapter and answered a
+French historical question with `muse-spark-1.3`. The complete explicit live
+harness exited successfully, including independent PostgreSQL verification.
+`fixtures/providers/sam-meta-question-live.v1.json` preserves the public fixture
+receipt, run/trace identifiers, grounded answer and measured text usage.
+
+The single SAM detection became one inferred scene-membership fact. Its
+`cloud-frame:` image digest, source event, actor/entity/scene/coordinate IDs,
+exact observed/recorded microseconds and confidence 0.8787879347801208 matched
+between the stored observation, projected fact and displayed citation. The SQL
+verifier checked the red-square bounding box within four pixels, absence of raw
+image/mask bytes in the observation, exact event lineage and one-second expiry.
+It derives confidence from the new stored detection rather than hardcoding the
+previous provider response. No observations or answers were seeded.
+
+The UI submitted one question, rendered the six-event completed run, opened the
+proof using the keyboard, then cleared the answer and browser storage on logout.
+The screenshot was inspected locally. The answer text remains the deterministic
+English grounding renderer even though the question and UI are French; this run
+does not claim language-localized answer rendering or screen-reader validation.
+
+Two text calls reported 260 and 777 output tokens, with published-rate estimates
+of 1,949 and 4,485 micro-USD (USD 0.006434 total). The SAM host does not emit billed
+image cost in that trace; one image was processed. Across recorded text/image
+probes, known recorded estimates now sum to USD 0.016741, excluding this SAM call
+and the earlier failed question's unknown charge. None is invoice reconciliation.
+The durable ledger has **nine attempts / 90 EUR reserved out of 100 EUR**, leaving
+one ten-EUR reservation. Reservations are conservative bounds, not billed spend;
+no reservation was reset or refunded.
+
+To select this explicit paid scenario, set both `SQUIDRA_META_QUESTION_LIVE=1`
+and `SQUIDRA_SAM_QUESTION_LIVE=1` for `Scripts/dev-db.sh test-meta-question-live`.
+It requires three available reservations in the existing shared ledger, selects
+only the public image and explicit SAM media consent, and writes a separate
+`sam-meta-question-live.json` report. An existing SAM report must be preserved
+before another deliberate attempt. No automatic paid retry or CI/local-gate
+entry was added. Failure reports distinguish browser, SQL and harness outcomes.
+The offline synthetic browser import/restart suite and 25 Python checks also
+passed after extending the harness. General quality, account retention,
+immutable hosted revisions and Linux runtime qualification remain unverified.

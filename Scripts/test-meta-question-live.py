@@ -15,6 +15,7 @@ import time
 ROOT = Path(__file__).resolve().parent.parent
 if os.environ.get('SQUIDRA_META_QUESTION_LIVE') != '1':
     raise SystemExit('Explicit live question authorization required')
+SAM = os.environ.get('SQUIDRA_SAM_QUESTION_LIVE') == '1'
 BUDGET = ROOT / '.build/provider-access'
 KEY = ROOT / '.build/secrets/meta-api-key'
 # Reuse the exact existing ledger; no fresh allowance or implicit initialization.
@@ -24,9 +25,12 @@ budget_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(budget_module)
 ledger = json.loads(budget_module.private_file(BUDGET / 'live-budget.json',262144))
 used_before = budget_module.validate(ledger)
-if used_before > 8000:
-    raise SystemExit('Insufficient remaining reservations for plan and answer')
-REPORT = BUDGET / 'meta-question-live.json'
+if used_before > (7000 if SAM else 8000):
+    raise SystemExit('Insufficient remaining reservations for the complete qualification')
+REPORT = BUDGET / ('sam-meta-question-live.json' if SAM else 'meta-question-live.json')
+if SAM and REPORT.exists():
+    raise SystemExit('Preserve the existing SAM report before another explicit attempt')
+report_before = REPORT.read_bytes() if REPORT.exists() else None
 credentials = dict(line.split('=', 1) for line in Path(sys.argv[1]).read_text().splitlines())
 password, db_port = credentials['POSTGRES_PASSWORD'], sys.argv[2]
 fixture_env = {k:v for k,v in os.environ.items() if k in {'PATH','HOME','TMPDIR','TMP','TEMP','USER','LANG','LC_ALL'}}
@@ -117,27 +121,38 @@ with tempfile.TemporaryDirectory(prefix='squidra-meta-question-') as directory:
     browser_env = {key: value for key, value in os.environ.items() if key in browser_keys}
     ui, ui_port = start(['node', 'serve.mjs'], dict(browser_env, SQUIDRA_WEB_PORT='0'), root / 'ui.log', 'SQUIDRA web listening 127.0.0.1:', ROOT / 'web')
     server = None
+    sql_verified = False
+    harness_passed = False
     try:
         origin = 'http://127.0.0.1:' + str(ui_port)
         server_env = dict(browser_env, SQUIDRA_PORT='0', SQUIDRA_AUTH_TOKEN=token, SQUIDRA_ACTOR_ID=info['actor'], SQUIDRA_UI_ORIGIN=origin,
                           SQUIDRA_SYNTHETIC_IMPORT='1', SQUIDRA_SYNTHETIC_FIXTURE=str(ROOT / 'fixtures/providers/vision-synthetic.v1.json'),
                           SQUIDRA_SYNTHETIC_CAMERA_ID=info['camera'], SQUIDRA_SYNTHETIC_SCENE_ID=info['scene'], SQUIDRA_SYNTHETIC_COORDINATE_FRAME_ID=info['coordinate'],
                           SQUIDRA_DB_PORT=db_port, SQUIDRA_DB_USER='squidra', SQUIDRA_DB_PASSWORD=password, SQUIDRA_DB_NAME='squidra')
+        if SAM:
+            server_env = {k:v for k,v in server_env.items() if not k.startswith('SQUIDRA_SYNTHETIC_')}
+            server_env.update(SQUIDRA_SAM_IMPORT='1',SQUIDRA_SAM_CONCEPT='red square',SQUIDRA_SAM_CLOUD_MEDIA_CONSENT='1',
+                              SQUIDRA_SAM_CAMERA_ID=info['camera'],SQUIDRA_SAM_SCENE_ID=info['scene'],SQUIDRA_SAM_COORDINATE_FRAME_ID=info['coordinate'])
         server_env.update(SQUIDRA_PROFILE='meta-qualification',SQUIDRA_META_CLOUD_CONSENT='1',SQUIDRA_META_MODEL='spark',
                           SQUIDRA_META_BUDGET_DIRECTORY=str(BUDGET),MODEL_API_KEY_FILE=str(KEY))
         server, port = start([str(binaries / 'squidra'), 'serve'], server_env, root / 'server.log', 'SQUIDRA listening 127.0.0.1:')
         readiness(port)
         env = dict(browser_env,SQUIDRA_META_QUESTION_LIVE='1',SQUIDRA_META_REPORT=str(REPORT),SQUIDRA_WEB_MANIFEST=str(manifest),
                    SQUIDRA_WEB_ORIGIN=origin,SQUIDRA_API_ORIGIN='http://127.0.0.1:'+str(port),SQUIDRA_WEB_TOKEN=token)
+        if SAM:
+            env['SQUIDRA_SAM_QUESTION_LIVE'] = '1'
         output = run_private(['node','web/tests/live-meta-question.mjs'],env,'browser')
         if output.strip() != 'SQUIDRA_META_QUESTION_PASS':
             raise RuntimeError('Browser did not confirm grounded answer')
-        run_private([fixture,'verify',str(manifest)],fixture_env,'verify')
+        run_private([fixture,'verify-sam' if SAM else 'verify',str(manifest)],fixture_env,'verify')
+        sql_verified = True
         stop(server,require_clean=True);server = None
         report = json.loads(REPORT.read_text())
+        report['sqlVerification'] = 'passed'
         report['reservedEURCentsBefore'] = used_before
         report['reservedEURCentsAfter'] = budget_module.validate(json.loads(budget_module.private_file(BUDGET / 'live-budget.json',262144)))
         REPORT.write_text(json.dumps(report,indent=2)+'\n')
+        harness_passed = True
         print('SQUIDRA_TEST_PASS:meta_question_grounded_browser',flush=True)
     finally:
         try:
@@ -145,3 +160,10 @@ with tempfile.TemporaryDirectory(prefix='squidra-meta-question-') as directory:
                 stop(server)
         finally:
             stop(ui, require_clean=True)
+            if REPORT.exists() and REPORT.read_bytes() != report_before:
+                report = json.loads(REPORT.read_text())
+                report['harnessOutcome'] = 'passed' if harness_passed else 'failed'
+                report['sqlVerification'] = 'passed' if sql_verified else 'not_verified'
+                report['reservedEURCentsBefore'] = used_before
+                report['reservedEURCentsAfter'] = budget_module.validate(json.loads(budget_module.private_file(BUDGET / 'live-budget.json',262144)))
+                REPORT.write_text(json.dumps(report,indent=2)+'\n')
