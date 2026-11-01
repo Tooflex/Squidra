@@ -886,5 +886,21 @@
       "model_free_server_recovery",
       "second_server_replay"
     ]
+  },
+  "SQD-028-AUTOMATIC-HOST-CRASH-SWIFT": {
+    "kind": "xctest",
+    "filter": "^SquidraServerTests\\.AutomaticRecoveryProcessTests/"
+  },
+  "SQD-028-AUTOMATIC-HOST-CRASH": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-automatic-host-crash"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "automatic_host_crash_recovery"
+    ]
   }
 }
