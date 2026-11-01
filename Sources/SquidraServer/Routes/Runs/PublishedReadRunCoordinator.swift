@@ -18,6 +18,7 @@ public actor PublishedReadRunCoordinator {
     private let maximumConcurrentRuns: Int, retentionSeconds: Int
     private var accepting = true
     private var reservations: Set<UUID> = []
+    private var cancellationRequests: Set<UUID> = []
     private var workers: [UUID:Task<Void,Never>] = [:]
     private var shutdownWaiters: [CheckedContinuation<Void,Never>] = []
     public init(actorID: UUID, executor: any ReadRunAnswerExecuting, events: any RunEventStore, publication: any RunPublicationStore,
@@ -53,7 +54,7 @@ public actor PublishedReadRunCoordinator {
         catch { throw ReadRunSubmissionError.recoveryRequired }
         guard claim.binding == binding else { throw ReadRunSubmissionError.recoveryRequired }
         // A shutdown/cancel racing the claim must join publication, not dispatch.
-        guard accepting,!Task.isCancelled else {
+        guard accepting,!Task.isCancelled,!cancellationRequests.contains(request.runID) else {
             await Self.publish(publication,claim:claim,outcome:.cancelled,clock:clock)
             throw accepting ? ReadRunSubmissionError.cancelled : .closed
         }
@@ -73,6 +74,16 @@ public actor PublishedReadRunCoordinator {
         workers[request.runID] = Task { await self.work(bounded,claim:claim,deadline:deadline) }
         registered = true
         return binding
+    }
+    /// Signals only a locally owned execution. True acknowledges the request,
+    /// not a terminal state: callers must read durable publication status.
+    /// A completion already being published wins; no external rollback is implied.
+    public func requestCancellation(actorID: UUID, runID: UUID) throws -> Bool {
+        guard actorID == self.actorID else { throw ReadRunSubmissionError.invalidRequest }
+        guard reservations.contains(runID) else { return false }
+        cancellationRequests.insert(runID)
+        workers[runID]?.cancel()
+        return true
     }
     /// Explicitly await this before tearing down the database/client services.
     /// Includes submissions still awaiting their durable claim.
@@ -120,7 +131,7 @@ public actor PublishedReadRunCoordinator {
         await cleanup.value
     }
     private func release(_ runID: UUID) {
-        workers.removeValue(forKey:runID);reservations.remove(runID)
+        workers.removeValue(forKey:runID);reservations.remove(runID);cancellationRequests.remove(runID)
         if reservations.isEmpty {
             let waiters = shutdownWaiters;shutdownWaiters.removeAll()
             for waiter in waiters { waiter.resume() }
