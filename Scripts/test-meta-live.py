@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import stat
 import subprocess
+import sys
 import tempfile
 import uuid
 
@@ -21,7 +22,7 @@ CAP_CENTS = 10000
 RESERVATION_CENTS = 1000
 VALID_UNTIL = '2026-11-02T00:00:00+00:00'
 FX = {'usdPerEUR': '1.1172', 'date': '2026-10-30', 'source': 'ECB'}
-MODELS = {'spark': 'muse-spark-1.3', 'wonder': 'muse-wonder-1.0'}
+MODELS = {'spark': 'muse-spark-1.3', 'wonder': 'muse-wonder-1.0', 'sam': 'sam-3.1'}
 
 
 class Refused(Exception):
@@ -127,10 +128,13 @@ def main():
             raise Refused('invalid_lock')
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if ledger_path.exists() or ledger_path.is_symlink():
-            ledger = json.loads(private_file(ledger_path, 65536))
+            ledger = json.loads(private_file(ledger_path, 262144))
         else:
             ledger = initial()
         validate(ledger)
+        if args.model == 'sam':
+            subprocess.run([sys.executable, str(ROOT / 'Scripts/test-sam-reference.py'), '--prepare'],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=True)
         # Compile before reserving; no fixture execution or network inference yet.
         subprocess.run(['swift', 'build', '--product', 'squidra-meta-qualification-fixture'], cwd=ROOT,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300, check=True)
@@ -148,6 +152,14 @@ def main():
             if (not isinstance(report, dict) or report.get('reservationID') != item['id']
                     or report.get('model') != item['model'] or report.get('outcome') not in ('passed', 'failed')):
                 raise Refused('invalid_probe_report')
+            if args.model == 'sam' and result.returncode == 0 and report['outcome'] == 'passed':
+                decoded = subprocess.run([sys.executable, str(ROOT / 'Scripts/test-sam-reference.py'), '--decode'],
+                                         input=result.stdout, capture_output=True, timeout=10, check=False)
+                if decoded.returncode != 0 or len(decoded.stdout) > 16384:
+                    report['outcome'] = 'failed'
+                    report['error'] = 'reference_mask_qualification_failed'
+                else:
+                    report = json.loads(decoded.stdout)
             item['report'] = report
             item['status'] = 'passed' if result.returncode == 0 and report['outcome'] == 'passed' else 'failed'
         except Exception:

@@ -2,6 +2,7 @@ import Foundation
 import Crypto
 import SquidraCognition
 import SquidraMeta
+import SquidraPerception
 #if canImport(Darwin)
 import Darwin
 #else
@@ -41,7 +42,8 @@ private func run() async throws -> Int32 {
     let args = Array(CommandLine.arguments.dropFirst()),env = ProcessInfo.processInfo.environment
     guard args.count == 2,env["SQUIDRA_META_LIVE_AUTHORIZED"] == "1",
           let reservation = env["SQUIDRA_META_RESERVATION_ID"],UUID(uuidString:reservation) != nil,
-          ["spark","wonder"].contains(args[0]) else { throw Failure.invalidConfiguration }
+          ["spark","wonder","sam"].contains(args[0]) else { throw Failure.invalidConfiguration }
+    if args[0] == "sam" { return try await runSAM(keyPath:args[1],reservation:reservation) }
     let model: MetaTextModel = args[0] == "spark" ? .spark : .wonder
     let transport = try RecordingTransport(MetaHTTPSResponseTransport(apiKey:key(at:args[1])))
     var report: [String:Any] = ["schemaVersion":1,"model":model.rawValue,"reservationID":reservation,"maximumOutputTokens":64,
@@ -76,6 +78,33 @@ private func run() async throws -> Int32 {
             report["responseFields"] = ["id","object","model","status","output","usage","error"].filter { object[$0] != nil }
             report["responseStatus"] = ["completed","incomplete","failed","queued","in_progress"].first { object["status"] as? String == $0 } ?? "unknown"
         }
+    }
+    try emit(report);return exitCode
+}
+private func runSAM(keyPath: String, reservation: String) async throws -> Int32 {
+    let imageData = try Data(contentsOf:URL(fileURLWithPath:"fixtures/providers/sam-red-square.png"))
+    let imageHash = SHA256.hash(data:imageData).map { String(format:"%02x",$0) }.joined()
+    guard imageHash == "62201c030c004452926e53f8f9c3659bfdcf22519812552c94aaa26e700993dc" else { throw Failure.invalidConfiguration }
+    let image = try PNGFrame(bytes:imageData,mediaType:"image/png")
+    let transport = try RecordingTransport(MetaHTTPSResponseTransport(apiKey:key(at:keyPath)))
+    var report: [String:Any] = ["schemaVersion":1,"model":"sam-3.1","reservationID":reservation,
+        "prompt":"red square","imageSHA256":imageHash,"imageWidth":512,"imageHeight":512,
+        "submittedImageCount":1,"store":false,"stream":false,"checkedAt":ISO8601DateFormatter().string(from:Date())]
+    var exitCode: Int32 = 0
+    do {
+        let result = try await MetaSAMImageClient(transport:transport).segment(image:image,concept:"red square",
+            permitsCloudImageTransfer:true,deadline:.now.advanced(by:.seconds(25)))
+        report["outcome"] = "passed";report["segmentationText"] = result.segmentationText
+        report["imagesProcessed"] = result.imagesProcessed.map { $0 as Any } ?? NSNull()
+        report["estimatedCostMicroUSD"] = 2500;report["costBasis"] = "published_rate_estimate"
+        report["costRateID"] = "meta-sam-image-2026-11-01"
+        report["costUnitBasis"] = "one_submitted_image_not_provider_invoice"
+    } catch let error as MetaResponsesError {
+        report["outcome"] = "failed";report["error"] = String(describing:error);exitCode = 1
+    } catch { report["outcome"] = "failed";report["error"] = "local_failure";exitCode = 1 }
+    if let wire = await transport.response {
+        report["httpStatus"] = wire.status;report["responseBytes"] = wire.body.count
+        report["responseSHA256"] = SHA256.hash(data:wire.body).map { String(format:"%02x",$0) }.joined()
     }
     try emit(report);return exitCode
 }

@@ -1107,5 +1107,9 @@
   "SQD-003-COST": {
     "kind": "xctest",
     "filter": "^SquidraCognitionTests\\.ModelCostTests/"
+  },
+  "T11-SAM-IMAGE": {
+    "kind": "xctest",
+    "filter": "^SquidraMetaTests\\.MetaSAMImageTests/"
   }
 }

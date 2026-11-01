@@ -32,7 +32,7 @@ class MetaLiveBudgetTests(unittest.TestCase):
             self.assertEqual(restored['attempts'][0]['id'], item['id'])
             self.assertEqual(restored['attempts'][0]['status'], 'reserved')
             self.assertEqual(live.validate(restored), 1000)
-            live.reserve(restored, live.MODELS['spark'], self.now)
+            live.reserve(restored, live.MODELS['sam'], self.now)
             self.assertEqual(live.validate(restored), 2000)
 
     def test_expired_snapshot_or_corrupt_ledger_refuses(self):
@@ -60,3 +60,20 @@ class MetaLiveBudgetTests(unittest.TestCase):
             path.chmod(0o600);path.write_bytes(b'x' * 4097)
             with self.assertRaises(live.Refused):
                 live.private_file(path, 4096)
+
+
+class SAMReferenceQuotaTests(unittest.TestCase):
+    def test_untrusted_dimensions_and_payload_are_bounded_before_decoder(self):
+        spec = importlib.util.spec_from_file_location('sam_reference', Path(__file__).with_name('test-sam-reference.py'))
+        module = importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        class NeverDecode:
+            def image_segmentation_format(self):
+                raise AssertionError('Decoder called before resource rejection')
+        variants = [None, 'x' * 16385, '<0f>',
+            '<0f>0<|mask;data=99999,1,!x|>', '<0f>0<|mask;data=0,1,!x|>',
+            '<0f>0<|mask;data=1024,1024,!x|>,1<|mask;data=1,1,!x|>',
+            '<0f>0<|mask;data=1,1,!x|>' * 17,
+            '<0f>0<|box;x1=0;y1=0;x2=0;y2=0;w=999;h=512|><|mask;data=1,1,!x|>']
+        for text in variants:
+            with self.assertRaises(ValueError):
+                module.decode({'segmentationText': text}, NeverDecode())

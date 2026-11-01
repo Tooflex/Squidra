@@ -1,0 +1,48 @@
+{
+  "provenance": "live_authored_image_projection",
+  "providerIdentifiersRetained": false,
+  "rawProviderResponseRetained": false,
+  "report": {
+    "checkedAt": "2026-11-01T19:21:46Z",
+    "costBasis": "published_rate_estimate",
+    "costRateID": "meta-sam-image-2026-11-01",
+    "costUnitBasis": "one_submitted_image_not_provider_invoice",
+    "estimatedCostMicroUSD": 2500,
+    "httpStatus": 200,
+    "imageHeight": 512,
+    "imageSHA256": "62201c030c004452926e53f8f9c3659bfdcf22519812552c94aaa26e700993dc",
+    "imageWidth": 512,
+    "imagesProcessed": 1,
+    "maskQualification": {
+      "box": [
+        128,
+        128,
+        384,
+        383
+      ],
+      "boxConfidence": 0.8787879347801208,
+      "foregroundPixels": 64849,
+      "license": "SAM License",
+      "maskConfidence": 0.8787879347801208,
+      "maskCount": 1,
+      "maskHeight": 255,
+      "maskWidth": 256,
+      "rasterSHA256": "15b728e509bba7561d4d76d9fee577b53ee6f9d82d2e9ecb581f6499c0679526",
+      "referencePackage": "meta-sam-parser",
+      "referenceVersion": "0.1.0",
+      "sourceImageIoU": 0.9895172119140625,
+      "wheelSHA256": "eca156907911c56cef3a350ffc81c34b7e70655e5fa3ccdddb77042c541a0152"
+    },
+    "model": "sam-3.1",
+    "outcome": "passed",
+    "prompt": "red square",
+    "responseBytes": 1013,
+    "responseSHA256": "b79a44f83261740a732b5dab5ceca0f8427a70dfea7febcf75daba8eae94abd5",
+    "schemaVersion": 1,
+    "segmentationText": "<0f>0<|box;x1=128;y1=128;x2=383;y2=382;w=512;h=512;c=0.8787879347801208|><|mask;x=0;y=0;c=0.8787879347801208;data=255,256,!!!!!OHl_!IpE8_(wny43UEsdrB:ZSnLl)D6cnT@wVAR'{oXnEB6HWYiR`|>\n",
+    "store": false,
+    "stream": false,
+    "submittedImageCount": 1
+  },
+  "schemaVersion": "1"
+}
