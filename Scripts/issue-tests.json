@@ -721,5 +721,21 @@
       "component_benchmark",
       "database_benchmark"
     ]
+  },
+  "SQD-026-SQL-SWIFT": {
+    "kind": "xctest",
+    "filter": "^SquidraMemoryTests\\.WatchSQLTests/"
+  },
+  "SQD-026-SQL": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-watches"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "durable_watch_notification"
+    ]
   }
 }

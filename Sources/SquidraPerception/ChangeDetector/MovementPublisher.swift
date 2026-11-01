@@ -27,6 +27,19 @@ public struct MovementPublisher: Sendable {
         }
         return results
     }
+    /// Verify the immutable journal event against its sealed original inputs.
+    /// Payload comparison tolerates PostgreSQL JSON formatting only.
+    public static func validates(_ event: JournalEvent, epoch: MovementEpoch) throws -> Bool {
+        guard event.draft.actorID == epoch.detector.actorID,event.draft.correlationID == epoch.detector.epochID else { return false }
+        for movement in try epoch.evaluate().events where event.draft.sourceID == "movement:"+movement.id {
+            let expected = try draft(movement,origin: epoch.origin),actual = event.draft
+            guard expected.id == actual.id,expected.streamID == actual.streamID,expected.entityIDs == actual.entityIDs,
+                  expected.type == actual.type,expected.times == actual.times,expected.confidence == actual.confidence,
+                  expected.payloadVersion == actual.payloadVersion,expected.causationID == actual.causationID else { return false }
+            return try (JSONSerialization.jsonObject(with: expected.payload.bytes) as? NSDictionary) == (JSONSerialization.jsonObject(with: actual.payload.bytes) as? NSDictionary)
+        }
+        return false
+    }
     private static func draft(_ event: ConfirmedMovement, origin: MovementEvidenceOrigin) throws -> WorldEventDraft {
         let sources = [event.baseline]+event.confirmations
         guard sources.allSatisfy({ $0.source.confidence != nil }) else { throw MovementPublicationError.unknownConfidence }
