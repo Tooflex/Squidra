@@ -23,6 +23,7 @@ enum ServerComposition {
         let worldReads = try WorldReadRoutes(actorID:configuration.boundary.actorID,world:world,changes:world)
         let recovery = WorldProjectionRecovery(actorID:configuration.boundary.actorID,
             repository:PostgresWorldRepository(client:client),projector:world)
+        let watches = PostgresIntentionStore(actorID: configuration.boundary.actorID,client: client)
         let events = PostgresRunEventStore(client:client,actorID:configuration.boundary.actorID)
         let publication = PostgresRunPublicationStore(client:client,actorID:configuration.boundary.actorID)
         let runtime = PostgresRunStore(client:client)
@@ -43,14 +44,20 @@ enum ServerComposition {
             approvals:approvals,ledger:PostgresActionLedger(client:client),worldReads:worldReads,
             runs:try! RunRoutes.Dependencies(actorID:configuration.boundary.actorID,
                 events:events,publication:publication,runtime:runtime,submission:submission,traces:recorder),
-            beforeServing:{ _ = try await recovery.recover() })
+            beforeServing:{ _ = try await recovery.recover() },
+            watchStep: {
+                let progressed = try await watches.processNext(deadline: .now.advanced(by: .seconds(4)))
+                if progressed { _ = try await recovery.recover() }
+                return progressed
+            })
     }
 
     static func application(configuration: ServerConfiguration,
                             readiness: @escaping @Sendable () async throws -> DatabaseReadiness,
                             client: PostgresClient? = nil, approvals: ApprovalCoordinator? = nil, ledger: (any ActionLedgerStore)? = nil,
                             worldReads: WorldReadRoutes? = nil, runs: RunRoutes.Dependencies? = nil,
-                            beforeServing: (@Sendable () async throws -> Void)? = nil) -> some ApplicationProtocol {
+                            beforeServing: (@Sendable () async throws -> Void)? = nil,
+                            watchStep: (@Sendable () async throws -> Bool)? = nil) -> some ApplicationProtocol {
         let router = Router(context: BoundaryContext.self)
         for path in ["/health/live", "/health"] {
             router.get(RouterPath(path)) { _, _ in json(.ok, "{\"status\":\"alive\"}") }
@@ -77,6 +84,7 @@ enum ServerComposition {
             },
             logger: Logger(label: "squidra.server", factory: { _ in SwiftLogNoOpLogHandler() }))
         if let client { app.addServices(client) }
+        if let watchStep { app.addServices(WatchWorkerService(processNext: watchStep)) }
         if let coordinator = runs?.submission?.coordinator { app.addServices(ReadWorkerService(coordinator:coordinator)) }
         if let beforeServing { app.beforeServerStarts(perform:beforeServing) }
         return app

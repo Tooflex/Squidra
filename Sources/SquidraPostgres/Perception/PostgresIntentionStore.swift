@@ -46,29 +46,63 @@ public struct PostgresIntentionStore: IntentionStore {
     }
     public func deliver(intentionID: UUID, eventID: UUID, deadline: ContinuousClock.Instant) async throws -> WatchNotification? {
         try await transaction(deadline) { c in
-            // Same lock as journal append: registration, cancellation and
-            // delivery have a defined order against committed source events.
             try await lock(c)
-            guard let watch = try await select(c,id: intentionID) else { throw WorldJournalError.notFound }
-            let previous = try await BoundedPostgresQuery.rows(c,"SELECT notification_event_id FROM watch_notifications WHERE actor_id=\(actorID) AND intention_id=\(intentionID) AND source_event_id=\(eventID)")
-            if let row = previous.first { return try WatchNotification(intentionID: intentionID,sourceEventID: eventID,notificationEventID: row.decode(UUID.self),created: false) }
-            guard watch.status == .active else { return nil }
-            let event = try await repository.select(c,actorID: actorID,id: eventID)
-            guard event.sequence > watch.afterSequence,event.draft.type == "perception.movement_confirmed",event.draft.entityIDs == [watch.entityID] else { return nil }
-            let epochs = try await BoundedPostgresQuery.rows(c,"SELECT state::text FROM movement_epochs WHERE actor_id=\(actorID) AND epoch_id=\(event.draft.correlationID) AND entity_id=\(watch.entityID)")
-            guard let row = epochs.first else { return nil }
-            let epoch = try MovementEpochCodec.decode(row.decode(String.self))
-            guard try MovementPublisher.validates(event,epoch: epoch) else { return nil }
-            let encoder = JSONEncoder();encoder.outputFormatting = [.sortedKeys,.withoutEscapingSlashes]
-            let payload = try encoder.encode(NotificationPayload(intentionID: intentionID,entityID: watch.entityID,sourceEventID: eventID,movementSource: event.draft.sourceID))
-            let draft = try WorldEventDraft(actorID: actorID,streamID: intentionID,entityIDs: [watch.entityID],type: "memory.watch_notified",
-                times: event.draft.times,sourceID: "watch:"+intentionID.uuidString.lowercased(),confidence: event.draft.confidence,payloadVersion: 1,
-                payload: payload,causationID: eventID,correlationID: event.draft.correlationID)
-            let appended = try await repository.append(draft,expectedVersion: 0,idempotencyKey: "movement:"+eventID.uuidString.lowercased(),connection: c)
-            _ = try await BoundedPostgresQuery.rows(c,"INSERT INTO watch_notifications(actor_id,intention_id,source_event_id,notification_event_id) VALUES(\(actorID),\(intentionID),\(eventID),\(appended.event.draft.id))")
-            _ = try await BoundedPostgresQuery.rows(c,"UPDATE watch_intentions SET status='fulfilled' WHERE actor_id=\(actorID) AND id=\(intentionID)")
-            return WatchNotification(intentionID: intentionID,sourceEventID: eventID,notificationEventID: appended.event.draft.id,created: true)
+            return try await deliver(intentionID: intentionID,eventID: eventID,c: c,verified: nil)
         }
+    }
+    /// Consume exactly one actor journal event and checkpoint its notifications
+    /// atomically. Concurrent workers serialize; empty journals perform no writes.
+    public func processNext(deadline: ContinuousClock.Instant) async throws -> Bool {
+        try await transaction(deadline) { c in
+            try await lock(c)
+            let cursor = try await BoundedPostgresQuery.rows(c,"SELECT last_sequence FROM watch_dispatch_cursors WHERE actor_id=\(actorID)")
+            let after = try cursor.first?.decode(Int64.self) ?? 0
+            let next = try await BoundedPostgresQuery.rows(c,"SELECT event_id,sequence FROM world_events WHERE actor_id=\(actorID) AND sequence>\(after) ORDER BY sequence LIMIT 1")
+            guard let row = next.first else { return false }
+            let (id,sequence) = try row.decode((UUID,Int64).self)
+            let event = try await repository.select(c,actorID: actorID,id: id)
+            if event.draft.type == "perception.movement_confirmed",event.draft.entityIDs.count == 1 {
+                let entity = event.draft.entityIDs[0]
+                let watches = try await BoundedPostgresQuery.rows(c,"SELECT id FROM watch_intentions WHERE actor_id=\(actorID) AND entity_id=\(entity) AND status='active' AND after_sequence<\(sequence) ORDER BY id LIMIT 129")
+                guard watches.count <= 128 else { throw WorldJournalError.corruptRecord }
+                if !watches.isEmpty,try await qualifies(event,c: c) {
+                    for row in watches {
+                        try Task.checkCancellation()
+                        _ = try await deliver(intentionID: row.decode(UUID.self),eventID: id,c: c,verified: event)
+                    }
+                }
+            }
+            _ = try await BoundedPostgresQuery.rows(c,"INSERT INTO watch_dispatch_cursors(actor_id,last_sequence) VALUES(\(actorID),\(sequence)) ON CONFLICT(actor_id) DO UPDATE SET last_sequence=EXCLUDED.last_sequence")
+            return true
+        }
+    }
+    private func qualifies(_ event: JournalEvent,c: PostgresConnection) async throws -> Bool {
+        guard event.draft.entityIDs.count == 1 else { return false }
+        let entity = event.draft.entityIDs[0]
+        let epochs = try await BoundedPostgresQuery.rows(c,"SELECT state::text FROM movement_epochs WHERE actor_id=\(actorID) AND epoch_id=\(event.draft.correlationID) AND entity_id=\(entity)")
+        guard let row = epochs.first else { return false }
+        let epoch = try MovementEpochCodec.decode(row.decode(String.self))
+        return try MovementPublisher.validates(event,epoch: epoch)
+    }
+    private func deliver(intentionID: UUID,eventID: UUID,c: PostgresConnection,verified: JournalEvent?) async throws -> WatchNotification? {
+        guard let watch = try await select(c,id: intentionID) else { throw WorldJournalError.notFound }
+        let previous = try await BoundedPostgresQuery.rows(c,"SELECT notification_event_id FROM watch_notifications WHERE actor_id=\(actorID) AND intention_id=\(intentionID) AND source_event_id=\(eventID)")
+        if let row = previous.first { return try WatchNotification(intentionID: intentionID,sourceEventID: eventID,notificationEventID: row.decode(UUID.self),created: false) }
+        guard watch.status == .active else { return nil }
+        let event: JournalEvent
+        if let verified { event = verified }
+        else { event = try await repository.select(c,actorID: actorID,id: eventID) }
+        guard event.sequence > watch.afterSequence,event.draft.type == "perception.movement_confirmed",event.draft.entityIDs == [watch.entityID] else { return nil }
+        if verified == nil { guard try await qualifies(event,c: c) else { return nil } }
+        let encoder = JSONEncoder();encoder.outputFormatting = [.sortedKeys,.withoutEscapingSlashes]
+        let payload = try encoder.encode(NotificationPayload(intentionID: intentionID,entityID: watch.entityID,sourceEventID: eventID,movementSource: event.draft.sourceID))
+        let draft = try WorldEventDraft(actorID: actorID,streamID: intentionID,entityIDs: [watch.entityID],type: "memory.watch_notified",
+            times: event.draft.times,sourceID: "watch:"+intentionID.uuidString.lowercased(),confidence: event.draft.confidence,payloadVersion: 1,
+            payload: payload,causationID: eventID,correlationID: event.draft.correlationID)
+        let appended = try await repository.append(draft,expectedVersion: 0,idempotencyKey: "movement:"+eventID.uuidString.lowercased(),connection: c)
+        _ = try await BoundedPostgresQuery.rows(c,"INSERT INTO watch_notifications(actor_id,intention_id,source_event_id,notification_event_id) VALUES(\(actorID),\(intentionID),\(eventID),\(appended.event.draft.id))")
+        _ = try await BoundedPostgresQuery.rows(c,"UPDATE watch_intentions SET status='fulfilled' WHERE actor_id=\(actorID) AND id=\(intentionID)")
+        return WatchNotification(intentionID: intentionID,sourceEventID: eventID,notificationEventID: appended.event.draft.id,created: true)
     }
     private struct NotificationPayload: Encodable {
         let schemaVersion = "1", channel = "internal", basis = "inferred"
