@@ -1182,5 +1182,22 @@
   "SQD-010": {
     "kind": "xctest",
     "filter": "^SquidraAgentRuntimeTests\\.DelegationTests/"
+  },
+  "SQD-012-ENGINE": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/sandbox/qualify.py"
+    ],
+    "tests": [
+      "linux_browser_version",
+      "chromium_internal_sandbox",
+      "browser_render",
+      "kernel_limits",
+      "host_access_denied",
+      "network_denied",
+      "workspace_quota_and_isolation",
+      "owned_cleanup"
+    ]
   }
 }
