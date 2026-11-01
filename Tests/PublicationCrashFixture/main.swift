@@ -34,13 +34,13 @@ actor AuthoredModel: LanguageModel {
     }
     static func run() async throws {
         let env = ProcessInfo.processInfo.environment,args = CommandLine.arguments
-        guard args.count == 3,["seed","verify"].contains(args[1]),env["SQUIDRA_PUBLICATION_CRASH_FIXTURE"] == "1",
+        guard args.count == 3,["seed","seed-early","resume-early","verify"].contains(args[1]),env["SQUIDRA_PUBLICATION_CRASH_FIXTURE"] == "1",
               let port = env["SQUIDRA_TEST_DB_PORT"].flatMap(Int.init),let password = env["SQUIDRA_TEST_DB_PASSWORD"] else { throw Failure.invalid }
         let marker = URL(fileURLWithPath:args[2])
         let client = try LocalDatabaseConfiguration(port:port,username:"squidra",password:password,database:"squidra").makeClient()
         try await withThrowingTaskGroup(of:Void.self) { group in
             group.addTask { await client.run() };defer { group.cancelAll() }
-            if args[1] == "seed" {
+            if args[1] == "seed" || args[1] == "seed-early" {
                 let actor = UUID(),entity = UUID(),clock = try SystemClock(timeZone:IANATimeZone(identifier:"Etc/UTC")),at = try clock.now()
                 _ = try await client.query("INSERT INTO world_entities(id,actor_id,kind) VALUES(\(entity),\(actor),'fixture')").collect()
                 let request = try ReadRunRequest(actorID:actor,question:"Where is the authored fixture?",planningScope:ReadPlanningScope(entities:[PlanningEntity(id:entity,label:"Fixture")]),
@@ -50,13 +50,14 @@ actor AuthoredModel: LanguageModel {
                 _ = try await events.create(binding,retentionSeconds:3600,deadline:.now.advanced(by:.seconds(4)))
                 try await PostgresReadRunTaskStore(client:client,actorID:actor).save(StoredReadRunTask(request:request,threadID:binding.threadID),deadline:.now.advanced(by:.seconds(4)))
                 _ = try await publication.claim(binding,maximumExecutionSeconds:15,at:at,deadline:.now.advanced(by:.seconds(4)))
-                let model = try AuthoredModel(entity:entity,at:RFC3339.format(at))
-                let tool = try WorldLocationTool(world:PostgresLocationProjection(actorID:actor,client:client)).registration()
-                let permission = HostActionPermission(actorID:actor,tool:tool.definition.id,capability:tool.definition.capability,
-                    targets:["entity:"+entity.uuidString.lowercased()],scope:["world:read"],expiresAt:.now.advanced(by:.seconds(30)))
-                let engine = try ReadRunEngine(router:ModelRouter(models:[model],clock:clock),gateway:ActionGateway(tools:[tool],policy:HostActionPolicy(permissions:[permission])),
-                    store:PostgresRunStore(client:client),clock:clock,freshness:AnswerFreshnessPolicy(maximumObservationAgeSeconds:60,minimumCurrentConfidence:Confidence(0.5)),
-                    completions:PostgresReadRunCompletionStore(client:client,actorID:actor))
+                if args[1] == "seed-early" {
+                    let controller = try await RunController.create(actorID:actor,id:request.runID,traceID:request.traceID,budget:RunBudget(activeMilliseconds:15000),store:PostgresRunStore(client:client),clock:clock)
+                    _ = try await controller.transition(to:.validating)
+                    let checkpoint = try await controller.transition(to:.contextLoading)
+                    try JSONEncoder().encode(Manifest(actor:actor,run:request.runID,version:checkpoint.version)).write(to:marker,options:.atomic)
+                    try await Task.sleep(for:.seconds(120));throw Failure.invalid
+                }
+                let (engine,model) = try makeEngine(request:request,client:client,clock:clock)
                 let result = try await engine.execute(request)
                 guard result.snapshot.state == .completed,result.snapshot.calls == 1,await model.calls == 2 else { throw Failure.invalid }
                 let status = try await publication.status(actorID:actor,runID:request.runID,deadline:.now.advanced(by:.seconds(4)))
@@ -65,6 +66,17 @@ actor AuthoredModel: LanguageModel {
                 try await Task.sleep(for:.seconds(120));throw Failure.invalid
             } else {
                 let m = try JSONDecoder().decode(Manifest.self,from:Data(contentsOf:marker))
+                if args[1] == "resume-early" {
+                    guard let task = try await PostgresReadRunTaskStore(client:client,actorID:m.actor).load(runID:m.run,deadline:.now.advanced(by:.seconds(4))) else { throw Failure.invalid }
+                    let clock = try SystemClock(timeZone:IANATimeZone(identifier:"Etc/UTC"))
+                    let (engine,model) = try makeEngine(request:task.request,client:client,clock:clock)
+                    let result = try await engine.resumeBeforePlanning(task.request,expectedVersion:m.version)
+                    guard result.snapshot.state == .completed,result.snapshot.calls == 1,result.snapshot.steps == 1,
+                          result.snapshot.budget.activeMilliseconds == 15000,await model.calls == 2 else { throw Failure.invalid }
+                    try JSONEncoder().encode(Manifest(actor:m.actor,run:m.run,version:result.snapshot.version)).write(to:marker,options:.atomic)
+                    print("PREPLANNING_RECOVERY_VERIFIED")
+                    return
+                }
                 let state = try await PostgresRunStore(client:client).load(actorID:m.actor,runID:m.run,deadline:.now.advanced(by:.seconds(4)))
                 guard state.state == .completed,state.version == m.version,state.calls == 1,state.steps == 1 else { throw Failure.invalid }
                 let publication = PostgresRunPublicationStore(client:client,actorID:m.actor)
@@ -82,4 +94,16 @@ actor AuthoredModel: LanguageModel {
             }
         }
     }
+    static func makeEngine(request:ReadRunRequest,client:PostgresClient,clock:SystemClock) throws -> (ReadRunEngine,AuthoredModel) {
+        let actor = request.actorID,entity = request.planningScope.entities[0].id
+        let model = try AuthoredModel(entity:entity,at:RFC3339.format(clock.now()))
+        let tool = try WorldLocationTool(world:PostgresLocationProjection(actorID:actor,client:client)).registration()
+        let permission = HostActionPermission(actorID:actor,tool:tool.definition.id,capability:tool.definition.capability,
+            targets:["entity:"+entity.uuidString.lowercased()],scope:["world:read"],expiresAt:.now.advanced(by:.seconds(30)))
+        let engine = try ReadRunEngine(router:ModelRouter(models:[model],clock:clock),gateway:ActionGateway(tools:[tool],policy:HostActionPolicy(permissions:[permission])),
+            store:PostgresRunStore(client:client),clock:clock,freshness:AnswerFreshnessPolicy(maximumObservationAgeSeconds:60,minimumCurrentConfidence:Confidence(0.5)),
+            completions:PostgresReadRunCompletionStore(client:client,actorID:actor))
+        return (engine,model)
+    }
+
 }

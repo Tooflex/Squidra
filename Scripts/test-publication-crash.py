@@ -14,6 +14,7 @@ import time
 
 ROOT = Path(__file__).resolve().parent.parent
 credential_path, port = sys.argv[1:3]
+early = len(sys.argv) == 4 and sys.argv[3] == "preplanning"
 credentials = dict(line.split('=', 1) for line in Path(credential_path).read_text().splitlines())
 env = dict(os.environ, SQUIDRA_PUBLICATION_CRASH_FIXTURE='1', SQUIDRA_TEST_DB_PORT=port,
            SQUIDRA_TEST_DB_PASSWORD=credentials['POSTGRES_PASSWORD'])
@@ -67,7 +68,7 @@ def get(http_port, path, token):
 with tempfile.TemporaryDirectory(prefix='squidra-publication-crash-') as temp:
     marker = Path(temp) / 'committed.json'
     with (Path(temp) / 'seed.log').open('w') as log:
-        seed = subprocess.Popen([fixture, 'seed', str(marker)], cwd=ROOT, env=env, stdout=log, stderr=log)
+        seed = subprocess.Popen([fixture, 'seed-early' if early else 'seed', str(marker)], cwd=ROOT, env=env, stdout=log, stderr=log)
         try:
             end = time.monotonic() + 30
             while not marker.exists():
@@ -81,7 +82,14 @@ with tempfile.TemporaryDirectory(prefix='squidra-publication-crash-') as temp:
         finally:
             if seed.poll() is None:
                 stop(seed, abrupt=True)
-    print('SQUIDRA_TEST_PASS:completed_worker_sigkill', flush=True)
+    print('SQUIDRA_TEST_PASS:' + ('preplanning_worker_sigkill' if early else 'completed_worker_sigkill'), flush=True)
+    if early:
+        resumed = subprocess.run([fixture, 'resume-early', str(marker)], cwd=ROOT, env=env,
+                                 capture_output=True, text=True, timeout=15)
+        if resumed.returncode or resumed.stdout.strip() != 'PREPLANNING_RECOVERY_VERIFIED':
+            raise RuntimeError('Fresh engine did not continue the original task')
+        manifest = json.loads(marker.read_text())
+        print('SQUIDRA_TEST_PASS:preplanning_continuation', flush=True)
     token = secrets.token_hex(32)
     server_env = dict(env, SQUIDRA_PROFILE='offline', SQUIDRA_PORT='0', SQUIDRA_ACTOR_ID=manifest['actor'],
                       SQUIDRA_AUTH_TOKEN=token, SQUIDRA_UI_ORIGIN='http://localhost:3000',

@@ -34,7 +34,7 @@ public struct ReadRunResult: Sendable {
     }
 }
 /// Exactly one read iteration; no executor port, effectful tool, retry loop or
-/// crash-resume shortcut is available here. All mutable run state is durable.
+/// implicit crash retry is available here. Pre-planning continuation is explicit.
 public struct ReadRunEngine: Sendable {
     private let planner: ReadPlanner, router: ModelRouter, gateway: ActionGateway
     private let decoder: WorldReadEvidenceDecoder, store: any RunStore
@@ -66,6 +66,28 @@ public struct ReadRunEngine: Sendable {
         let controller: RunController
         do { controller = try await RunController.create(actorID:request.actorID,id:request.runID,traceID:request.traceID,budget:budget,store:store,clock:clock) }
         catch { throw ReadRunFailure(runID:request.runID,traceID:request.traceID,code:.recoveryRequired,state:nil) }
+        return try await run(request,controller:controller,deadline:deadline)
+    }
+    /// The host must load the original persisted task and verify the previous
+    /// worker stopped. This is not an HTTP/live takeover or a model retry API.
+    public func resumeBeforePlanning(_ request: ReadRunRequest,expectedVersion: Int64) async throws -> ReadRunResult {
+        let controller: RunController
+        do {
+            try Task.checkCancellation()
+            guard request.effectiveToolScope == ["world:read"] else { throw ReadRunFailureCode.invalidRequest }
+            controller = try await RunController.restoreBeforePlanning(actorID:request.actorID,id:request.runID,traceID:request.traceID,
+                expectedVersion:expectedVersion,store:store,clock:clock)
+        } catch { throw ReadRunFailure(runID:request.runID,traceID:request.traceID,code:Self.classify(error),state:nil) }
+        let snapshot = try await controller.snapshot()
+        if snapshot.state.isTerminal {
+            throw ReadRunFailure(runID:request.runID,traceID:request.traceID,code:.deadlineExceeded,state:snapshot.state)
+        }
+        guard let wallEnd = snapshot.deadlineSecondsSince1970 else { throw ReadRunFailure(runID:request.runID,traceID:request.traceID,code:.recoveryRequired,state:nil) }
+        let remaining = min(wallEnd,request.modelOptions.deadline.secondsSince1970)-(try clock.now()).secondsSince1970
+        let milliseconds = max(0,min(Double(snapshot.budget.activeMilliseconds-snapshot.activeMilliseconds),remaining*1000))
+        return try await run(request,controller:controller,deadline:.now.advanced(by:.milliseconds(Int64(milliseconds.rounded(.down)))))
+    }
+    private func run(_ request: ReadRunRequest,controller: RunController,deadline: ContinuousClock.Instant) async throws -> ReadRunResult {
         do {
             return try await withThrowingTaskGroup(of:ReadRunResult.self) { group in
                 group.addTask { try await perform(request,controller:controller,deadline:deadline) }
@@ -111,8 +133,10 @@ public struct ReadRunEngine: Sendable {
     private func perform(_ request: ReadRunRequest, controller: RunController, deadline: ContinuousClock.Instant) async throws -> ReadRunResult {
         try Task.checkCancellation()
         guard ContinuousClock.now < deadline else { throw ReadRunFailureCode.deadlineExceeded }
-        try Self.active(await controller.transition(to:.validating))
-        try Self.active(await controller.transition(to:.contextLoading))
+        let start = try await controller.snapshot()
+        if start.state == .created { try Self.active(await controller.transition(to:.validating)) }
+        if start.state == .created || start.state == .validating { try Self.active(await controller.transition(to:.contextLoading)) }
+        guard try await controller.snapshot().state == .contextLoading else { throw ReadRunFailureCode.recoveryRequired }
         let memoryContext = try await memory?.context(actorID: request.actorID,
             subjectIDs: Set(request.planningScope.entities.map(\.id)), question: request.question, deadline: deadline)
         try Self.active(await controller.transition(to:.planning,substate:.reasoning))

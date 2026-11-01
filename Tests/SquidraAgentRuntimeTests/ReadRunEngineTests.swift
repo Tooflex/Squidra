@@ -146,6 +146,47 @@ final class ReadRunEngineTests: XCTestCase, @unchecked Sendable {
             XCTAssertEqual(calls.count,2,"Archive failure must not rerun a model")
         }
     }
+    func testPrePlanningContinuationPreservesIdentityBudgetAndFencesOldController() async throws {
+        for stage in [RunState.created,.validating,.contextLoading] {
+            let clock = EngineClockFixture(),store = EngineRunStore(),model = EngineModelFixture(),world = EngineWorldFixture()
+            let request = try Self.request(clock:clock,budget:RunBudget(steps:1,calls:1,retries:0,activeMilliseconds:20000))
+            let old = try await RunController.create(actorID:request.actorID,id:request.runID,traceID:request.traceID,budget:request.budget,store:store,clock:clock)
+            if stage != .created { _ = try await old.transition(to:.validating) }
+            if stage == .contextLoading { _ = try await old.transition(to:.contextLoading) }
+            let checkpoint = try await old.snapshot()
+            try await Task.sleep(for:.milliseconds(20))
+            let engine = try Self.engine(clock:clock,store:store,model:model,world:world)
+            let result = try await engine.resumeBeforePlanning(request,expectedVersion:checkpoint.version)
+            XCTAssertEqual(result.snapshot.id,request.runID);XCTAssertEqual(result.snapshot.traceID,request.traceID)
+            XCTAssertEqual(result.snapshot.budget,request.budget)
+            XCTAssertEqual(result.snapshot.state,.completed);XCTAssertEqual(result.snapshot.steps,1);XCTAssertEqual(result.snapshot.calls,1)
+            XCTAssertGreaterThanOrEqual(result.snapshot.activeMilliseconds,20)
+            let stored = await store.values,requests = await model.requests
+            XCTAssertEqual(stored.count,1);XCTAssertEqual(requests.count,2)
+            do { _ = try await old.transition(to:stage == .created ? .validating : stage == .validating ? .contextLoading : .planning);XCTFail("Stale controller wrote") }
+            catch { XCTAssertEqual(error as? RunStoreError,.conflict) }
+            do { _ = try await engine.resumeBeforePlanning(request,expectedVersion:checkpoint.version);XCTFail("Repeated resume dispatched") }
+            catch let failure as ReadRunFailure { XCTAssertEqual(failure.code,.recoveryRequired) }
+            let count = await model.requests.count;XCTAssertEqual(count,2)
+        }
+    }
+    func testPrePlanningContinuationRejectsDispatchedStageAndExpiresWithoutModel() async throws {
+        for expired in [false,true] {
+            let clock = EngineClockFixture(),store = EngineRunStore(),model = EngineModelFixture(),world = EngineWorldFixture()
+            let request = try Self.request(clock:clock,budget:RunBudget(activeMilliseconds:expired ? 1 : 20000))
+            let old = try await RunController.create(actorID:request.actorID,id:request.runID,traceID:request.traceID,budget:request.budget,store:store,clock:clock)
+            if expired { try await Task.sleep(for:.milliseconds(10)) }
+            else {
+                _ = try await old.transition(to:.validating);_ = try await old.transition(to:.contextLoading);_ = try await old.transition(to:.planning)
+            }
+            let checkpoint = try await old.snapshot(),engine = try Self.engine(clock:clock,store:store,model:model,world:world)
+            do { _ = try await engine.resumeBeforePlanning(request,expectedVersion:checkpoint.version);XCTFail("Unsafe resume succeeded") }
+            catch let failure as ReadRunFailure { XCTAssertEqual(failure.code,expired ? .deadlineExceeded : .recoveryRequired) }
+            let calls = await model.requests.count;XCTAssertEqual(calls,0)
+            let saved = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2)))
+            XCTAssertEqual(saved.state,expired ? .timedOut : .planning)
+        }
+    }
     func testOneStepOneCallCompletesOnlyAfterGroundedValidation() async throws {
         let clock = EngineClockFixture(), store = EngineRunStore(), model = EngineModelFixture(), world = EngineWorldFixture()
         let engine = try Self.engine(clock:clock,store:store,model:model,world:world)

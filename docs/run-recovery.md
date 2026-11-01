@@ -204,3 +204,35 @@ fixture invokes the real engine directly; HTTP acceptance is covered by the live
 integration suite. Earlier-phase continuation and effect-reconciliation activation
 remain required before SQD-028 can close. No production hooks or migration are
 added by this test.
+
+## Explicit continuation before planning
+
+`ReadRunEngine.resumeBeforePlanning` continues the original persisted request
+from `CREATED`, `VALIDATING` or `CONTEXT_LOADING`. The host must first prove that
+the previous worker stopped and reload the task; this is not a live takeover API.
+The exact actor/run/trace and checkpoint version must match. Zero steps/calls and
+absence of iteration/invocation checkpoints ensure no model or tool dispatch has
+started. Planning and later states are rejected rather than retried implicitly.
+
+The controller charges wall-clock downtime against the existing deadline, rejects
+clock regression, preserves the original RunBudget, and writes a version increment
+before returning control. Expired work becomes TIMED_OUT without a model call.
+The continuation skips only already completed initial FSM transitions, may reload
+bounded memory context, then uses the same planner, gateway policy, tool-call
+accounting, grounding and answer archive as ordinary execution. It never creates
+a second runtime row or refreshes a budget. CAS prevents the old controller from
+writing after recovery, but the host's stopped-worker proof remains mandatory.
+
+`T14-RUN` covers all three eligible states, unchanged IDs/budgets, charged downtime,
+one planning/read/answer iteration, stale/repeated recovery refusal and expired or
+already-planning checkpoints without a model call. `SQD-028-PREPLANNING-CRASH`
+uses an owned fixture process stopped by SIGKILL in CONTEXT_LOADING. A separate
+process reloads the exact task from PostgreSQL and invokes this continuation,
+checks the original 15-second budget and one step/call, then leaves publication to
+the normal model-free server after the original lease expires. A second server
+still reads the identical six-event stream. The ordinary completed-boundary crash
+fixture remains available separately.
+
+This exposes and qualifies a real early continuation, but does not yet wire it to
+automatic server ownership recovery. Persisted planning/tool artifacts, uncertain
+model/effect handling and remaining application activation still block SQD-028.
