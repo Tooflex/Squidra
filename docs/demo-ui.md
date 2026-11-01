@@ -202,3 +202,35 @@ origin/logout isolation. The screenshot was inspected locally. These tests do
 not establish integrated browser/PostgreSQL behavior; `SQD-020-HTTP` separately
 covers the real server import and world readback. The full import-to-question-to-
 evidence workflow remains open in #42, as does real provider qualification #47.
+
+## Real browser frame import qualification
+
+`bash Scripts/test-issue.sh T06-IMPORT-LIVE` starts an isolated PostgreSQL
+container, the static UI and the normal `squidra serve` CLI with its explicit
+synthetic profile. The opt-in `squidra-frame-browser-fixture` executable provisions
+only the host-owned scene and coordinate frame. It does not seed observations,
+location facts or association state.
+
+Chromium uses real HTTP without request interception. Missing consent prevents
+submission. A valid PNG with an extra ancillary chunk is refused because its hash
+is outside the frozen fixture. An explicit fresh selection then imports the
+fixture. The browser checks the visible receipt, every source identifier and both
+exact timestamp strings. A structured readback from the browser origin checks
+each entity's location, source event, confidence and inferred basis. This API
+readback is test verification, not a user-facing free-text question or answer.
+
+A separate SQL client verifies that exactly one observation and two location
+events exist, their causation and correlation bind to the host frame, and the
+projection contains the expected inferred facts. Queries at the exact receipt
+instant find the facts; queries at the exclusive one-second endpoint do not.
+The normal CLI then shuts down cleanly and restarts. A fresh browser session
+performs no new import and reads identical historical evidence. Full journal,
+spatial fact and association rows must remain byte-identical after this reload.
+Both browser phases check logout, lack of browser storage and invalid-token
+rejection. Private logs and receipts are temporary and removed; only fixed
+completion markers are published. Browser/static-server environments do not
+receive database credentials.
+
+This qualifies real browser import and durable structured evidence on local
+macOS. It does not qualify free-text question submission, SAM, SIGKILL recovery,
+manual screen-reader use or Linux execution. The full #42 workflow remains open.

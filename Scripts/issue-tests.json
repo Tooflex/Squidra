@@ -1067,5 +1067,18 @@
     "tests": [
       "typed_web_import"
     ]
+  },
+  "T06-IMPORT-LIVE": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-frame-live"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "frame_sql_import",
+      "frame_sql_reload"
+    ]
   }
 }

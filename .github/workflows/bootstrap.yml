@@ -61,6 +61,8 @@ jobs:
         run: bash Scripts/test-issue.sh T06-REVIEW
       - name: Synthetic frame import browser
         run: bash Scripts/test-issue.sh T06-IMPORT
+      - name: Synthetic frame import browser against normal CLI and PostgreSQL
+        run: bash Scripts/test-issue.sh T06-IMPORT-LIVE
       - name: Exact command approval browser
         run: bash Scripts/test-issue.sh T06-APPROVALS
       - name: Approval browser against normal server and PostgreSQL
