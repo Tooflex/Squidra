@@ -1312,5 +1312,22 @@
     "tests": [
       "linux_ownership"
     ]
+  },
+  "SQD-002-LINUX": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Tests/InstallTests/linux_package.py"
+    ],
+    "tests": [
+      "verified_install",
+      "native_cli",
+      "installed_server_database",
+      "installed_web",
+      "safe_uninstall",
+      "unsafe_archives_rejected",
+      "owned_cleanup"
+    ],
+    "requires_database": true
   }
 }

@@ -20,10 +20,17 @@ import zipfile
 
 root=Path(__file__).resolve().parents[2]
 spec=importlib.util.spec_from_file_location('installer',root/'Scripts/install/package.py');pkg=importlib.util.module_from_spec(spec);spec.loader.exec_module(pkg)
-result=subprocess.run(['python3','packaging/build.py'],cwd=root,capture_output=True,text=True,timeout=600)
-if result.returncode:
-    print(result.stdout+result.stderr);raise SystemExit(result.returncode)
-built=json.loads(result.stdout.splitlines()[-1]);archive=Path(built['archive'])
+prebuilt=os.environ.get('SQUIDRA_INSTALL_ARCHIVE')
+external_db=os.environ.get('SQUIDRA_INSTALL_DATABASE_FILE')
+if bool(prebuilt)!=bool(external_db): raise SystemExit('Prebuilt test requires its isolated database configuration')
+if prebuilt:
+    archive=Path(prebuilt)
+    built=json.loads(Path(os.environ['SQUIDRA_INSTALL_BUILD_REPORT']).read_text())
+else:
+    result=subprocess.run(['python3','packaging/build.py'],cwd=root,capture_output=True,text=True,timeout=600)
+    if result.returncode:
+        print(result.stdout+result.stderr);raise SystemExit(result.returncode)
+    built=json.loads(result.stdout.splitlines()[-1]);archive=Path(built['archive'])
 engine=os.environ.get('SQUIDRA_CONTAINER_ENGINE','docker');identity=None
 name='squidra-client-test-'+uuid.uuid4().hex[:12];nonce=uuid.uuid4().hex
 
@@ -64,23 +71,32 @@ try:
         for arg in ['--help','--version']:
             output=run([str(prefix/'bin/squidra'),arg],cwd=directory,env=env).stdout
             assert b'Squidra' in output or b'squidra' in output
-        load_commands=run(['/usr/bin/otool','-l',str(prefix/'bin/squidra')]).stdout
-        assert b'/Applications/Xcode' not in load_commands
-        assert (prefix/'bin/libswiftCompatibilitySpan.dylib').is_file()
-        run(['/usr/bin/codesign','--verify',str(prefix/'bin/squidra')])
+        if pkg.target()=='darwin-arm64':
+            load_commands=run(['/usr/bin/otool','-l',str(prefix/'bin/squidra')]).stdout
+            assert b'/Applications/Xcode' not in load_commands
+            assert (prefix/'bin/libswiftCompatibilitySpan.dylib').is_file()
+            run(['/usr/bin/codesign','--verify',str(prefix/'bin/squidra')])
+        else:
+            assert not __import__('shutil').which('swift'), 'Runtime qualification must not have a Swift toolchain'
+            dependencies=run(['ldd',str(prefix/'bin/squidra')]).stdout
+            assert b'not found' not in dependencies
         print('SQUIDRA_TEST_PASS:native_cli')
-        credentials=temp/'credentials';credentials.touch(mode=0o600);password=secrets.token_urlsafe(32)
-        credentials.write_text('POSTGRES_DB=squidra\nPOSTGRES_USER=squidra\nPOSTGRES_PASSWORD='+password+'\n')
-        identity=run([engine,'create','--name',name,'--label','io.squidra.database=test','--label','io.squidra.install-test='+nonce,'--publish','127.0.0.1::5432','--env-file',str(credentials),'--tmpfs','/var/lib/postgresql/data:rw,nosuid,size=1g','localhost/squidra-postgres:17-postgis3.6.4-vector0.8.7']).stdout.decode().strip()
-        run([engine,'start',identity])
-        for _ in range(60):
-            if subprocess.run([engine,'exec',identity,'pg_isready','-U','squidra','-d','squidra'],capture_output=True).returncode==0:break
-            time.sleep(.25)
-        else:raise AssertionError('DB readiness timeout')
-        binding=run([engine,'port',name,'5432/tcp']).stdout.decode().strip()
-        assert binding.startswith('127.0.0.1:');port=int(binding.split(':')[1])
-        with socket.create_connection(('127.0.0.1',port),timeout=5):pass
-        run(['bash','Scripts/dev-db.sh','migrate'],cwd=root,env=dict(os.environ,SQUIDRA_DB_CONTAINER=name,SQUIDRA_CONTAINER_ENGINE=engine))
+        if external_db:
+            connection=json.loads(Path(external_db).read_text())
+            port=connection['port'];password=connection['password']
+        else:
+            credentials=temp/'credentials';credentials.touch(mode=0o600);password=secrets.token_urlsafe(32)
+            credentials.write_text('POSTGRES_DB=squidra\nPOSTGRES_USER=squidra\nPOSTGRES_PASSWORD='+password+'\n')
+            identity=run([engine,'create','--name',name,'--label','io.squidra.database=test','--label','io.squidra.install-test='+nonce,'--publish','127.0.0.1::5432','--env-file',str(credentials),'--tmpfs','/var/lib/postgresql/data:rw,nosuid,size=1g','localhost/squidra-postgres:17-postgis3.6.4-vector0.8.7']).stdout.decode().strip()
+            run([engine,'start',identity])
+            for _ in range(60):
+                if subprocess.run([engine,'exec',identity,'pg_isready','-U','squidra','-d','squidra'],capture_output=True).returncode==0:break
+                time.sleep(.25)
+            else:raise AssertionError('DB readiness timeout')
+            binding=run([engine,'port',name,'5432/tcp']).stdout.decode().strip()
+            assert binding.startswith('127.0.0.1:');port=int(binding.split(':')[1])
+            with socket.create_connection(('127.0.0.1',port),timeout=5):pass
+            run(['bash','Scripts/dev-db.sh','migrate'],cwd=root,env=dict(os.environ,SQUIDRA_DB_CONTAINER=name,SQUIDRA_CONTAINER_ENGINE=engine))
         service_env=dict(env,SQUIDRA_PROFILE='offline',SQUIDRA_AUTH_TOKEN=secrets.token_hex(32),SQUIDRA_ACTOR_ID=str(uuid.uuid4()),SQUIDRA_UI_ORIGIN='http://localhost:3000',SQUIDRA_PORT='0',SQUIDRA_DB_PORT=str(port),SQUIDRA_DB_USER='squidra',SQUIDRA_DB_PASSWORD=password,SQUIDRA_DB_NAME='squidra')
         process=subprocess.Popen([str(prefix/'bin/squidra'),'serve'],cwd=directory,env=service_env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
         try:
@@ -121,7 +137,7 @@ try:
             except ValueError:pass
             assert not prefix.exists() and not (temp/'escape').exists()
         for wrong_target,wrong_content in [(True,False),(False,True)]:
-            m={'format':1,'target':'linux-arm64' if wrong_target else pkg.target(),'source_commit':'a'*40,'source_dirty':False,'files':{'bin/squidra':{'sha256':pkg.sha(b'x'),'size':1,'mode':0o755}}}
+            m={'format':1,'target':'unsupported-target' if wrong_target else pkg.target(),'source_commit':'a'*40,'source_dirty':False,'files':{'bin/squidra':{'sha256':pkg.sha(b'x'),'size':1,'mode':0o755}}}
             buf=io.BytesIO()
             with zipfile.ZipFile(buf,'w') as z:
                 z.writestr('bin/squidra',b'y' if wrong_content else b'x')
@@ -139,4 +155,4 @@ finally:
         run([engine,'rm','-f',name])
         remaining=run([engine,'ps','--all','--filter','id='+identity,'--format','{{.ID}}']).stdout.strip()
         if remaining:raise AssertionError('Owned container cleanup incomplete')
-print('SQUIDRA_TEST_PASS:owned_cleanup')
+if not external_db: print('SQUIDRA_TEST_PASS:owned_cleanup')
