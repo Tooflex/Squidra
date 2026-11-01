@@ -808,5 +808,20 @@
       "model_free_server_recovery",
       "second_server_replay"
     ]
+  },
+  "SQD-028-SAVED-PLAN-CRASH": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-saved-plan-crash"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "saved_plan_worker_sigkill",
+      "saved_plan_continuation",
+      "model_free_server_recovery",
+      "second_server_replay"
+    ]
   }
 }
