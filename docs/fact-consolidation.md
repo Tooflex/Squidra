@@ -42,7 +42,46 @@ journal write/delete capability, external publisher or destructive operation.
 `bash Scripts/test-issue.sh SQD-029` verifies seven scenarios spanning citation
 and actor isolation, atomic failures, changed idempotency keys, exact reviews,
 rejection, critical proposals, overlapping and adjacent periods, late conflicts,
-source preservation, bounded capacity and cancellation. This is an in-memory
-reference implementation. Durable proposal storage, extraction from live batches,
-authenticated review UI and application scheduling remain to integrate before
+source preservation, bounded capacity and cancellation. The workspace is in-memory; the durable journal/store pair below adds persistence.
+Extraction from live batches, authenticated review UI and application scheduling
+remain to integrate before
 claiming end-to-end SQD-029 completion. No live model quality/cost is measured.
+
+## Durable journal
+
+`ConsolidationArchive` records the immutable originals, predicate catalogue,
+proposal batches with stable IDs, and exact review commands. `workspace()` replays
+those commands through the same validators to reconstruct conflicts, versions
+and review history. It never trusts a serialized approved/conflicted status.
+The version-1 canonical JSON envelope rejects unknown fields, forged citations
+and noncanonical encodings. It is limited to 2 MiB and 512 operations in addition
+to the workspace's existing limits; oversized appends leave the archive unchanged.
+An exact batch replay does not append another operation.
+
+`PostgresConsolidationStore` binds an actor and stores this private journal in
+runtime migration 011. Save genesis before appending any operations. Each later
+save must match the exact stored predecessor and add one operation; the SQL
+trigger independently preserves the immutable header and full command prefix.
+A byte-identical retry succeeds after a committed write with an unobserved
+acknowledgement. Concurrent different appends cannot both win. On conflict or
+ambiguous transport failure, reload and inspect the durable state; never create
+a fresh proposal or review key to conceal uncertainty. The adapter bounds database
+I/O to five seconds and closes/joins an owned connection on cancellation.
+
+SQL rejects non-genesis insertion, deletion, truncation, source replacement and
+history rewrites. Backups and retention remain separate work; this migration
+intentionally adds no destructive cleanup. Review authentication is still a trusted
+host responsibility, and private database access is not granted to models.
+Calling `workspace()` gives an inspection/replay copy; mutations to that copy are
+not persisted. Apply mutations to the archive and save it before reporting them
+as durable. Export only from a freshly loaded, committed archive, with the same
+limitation on previously returned copies described above.
+
+`bash Scripts/test-issue.sh SQD-029-DURABLE` uses real isolated PostgreSQL and
+separate clients to verify stable IDs, review reconstruction, exact retry,
+concurrent append CAS, late conflict withdrawal, original preservation, actor
+isolation, deadline refusal, malformed archive rejection and SQL history guards.
+This qualifies persistence and client reload, not process SIGKILL, live extraction,
+HTTP approval authentication or application scheduling. Those integrations remain
+open in #29; the earlier reference adapter's lack of persistence is addressed by
+this explicit journal/store pair.

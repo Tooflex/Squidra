@@ -16,5 +16,6 @@ public enum ExpectedDatabaseSchema {
         .init(namespace: "runtime", version: "008_read_run_tool_results.sql", checksum: "0443a96e1c838f71de55e171548a9619680e54c3fee94b5c93484e7fb8f0c64d"),
         .init(namespace: "runtime", version: "009_read_run_answers.sql", checksum: "a2f9e3f209de947d3b7f5c393ebb825e5662048208b60b0b628e4e827b6fd9e6"),
         .init(namespace: "runtime", version: "010_read_run_ownership.sql", checksum: "9d990b238ff4da13fd874eec8becf7c13b37cca205c3e63a56a9baae021a1828"),
+        .init(namespace: "runtime", version: "011_consolidation_journals.sql", checksum: "54c9354ec009c4e2c9f131efed203ae02ac1664212d12b1fff5012f271b70844"),
     ]
 }
