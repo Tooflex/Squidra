@@ -1172,5 +1172,9 @@
   "SQD-024": {
     "kind": "xctest",
     "filter": "^SquidraSpatialTests\\.CameraLidarFusionTests/"
+  },
+  "SQD-010": {
+    "kind": "xctest",
+    "filter": "^SquidraAgentRuntimeTests\\.DelegationTests/"
   }
 }
