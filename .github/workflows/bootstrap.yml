@@ -155,6 +155,10 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-028-SAVED-PLAN-CRASH
       - name: Verify saved read result continuation after SIGKILL
         run: bash Scripts/test-issue.sh SQD-028-SAVED-RESULT-CRASH
+      - name: Verify saved answer continuation after SIGKILL
+        run: bash Scripts/test-issue.sh SQD-028-SAVED-ANSWER-CRASH
+      - name: Verify saved completion continuation after SIGKILL
+        run: bash Scripts/test-issue.sh SQD-028-SAVED-COMPLETION-CRASH
       - name: Verify durable approval decisions and expiry
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-009-PERSISTENCE

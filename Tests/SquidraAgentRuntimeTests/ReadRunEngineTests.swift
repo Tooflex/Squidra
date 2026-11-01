@@ -21,6 +21,8 @@ private actor EngineRunStore: RunStore {
     let ambiguousReservation: Bool
     private var ambiguousPlanningClaim: Bool
     private var ambiguousReadCheckpoint = false
+    private var responseCheckpointsUntilFailure = 0
+    func failResponseCheckpoint(after count: Int = 1) { responseCheckpointsUntilFailure = count }
     func failNextReadCheckpoint() { ambiguousReadCheckpoint = true }
     private(set) var values: [UUID:RunSnapshot] = [:]
     private(set) var history: [RunState] = []
@@ -37,6 +39,10 @@ private actor EngineRunStore: RunStore {
         try Task.checkCancellation()
         guard let old = values[snapshot.id], old.version == expectedVersion, !old.state.isTerminal else { throw RunStoreError.conflict }
         try snapshot.validate(); values[snapshot.id] = snapshot; history.append(snapshot.state)
+        if responseCheckpointsUntilFailure > 0 && old.state == .responding {
+            responseCheckpointsUntilFailure -= 1
+            if responseCheckpointsUntilFailure == 0 { throw RunStoreError.unavailable }
+        }
         if ambiguousReadCheckpoint && old.state == .executingTool && snapshot.state == .executingTool && old.calls == 1 { ambiguousReadCheckpoint = false;throw RunStoreError.unavailable }
         if ambiguousPlanningClaim && old.state == .planning && snapshot.state == .planning { ambiguousPlanningClaim = false;throw RunStoreError.unavailable }
         if ambiguousReservation && snapshot.state == .executingTool && snapshot.calls == 1 { throw RunStoreError.unavailable }
@@ -103,13 +109,17 @@ private actor EngineModelFixture: LanguageModel {
 
 private actor CompletionFixture: ReadRunCompletionStore {
     let fail: Bool
+    let store: EngineRunStore?
+    private(set) var saveCalls = 0
     private(set) var saved: StoredReadRunCompletion?
     private(set) var state: RunState?
-    init(fail: Bool) { self.fail = fail }
-    func save(snapshot: RunSnapshot,answer: GroundedAnswer,deadline: ContinuousClock.Instant) throws {
+    init(fail: Bool,store: EngineRunStore? = nil) { self.fail = fail;self.store = store }
+    func save(snapshot: RunSnapshot,answer: GroundedAnswer,deadline: ContinuousClock.Instant) async throws {
+        saveCalls += 1
         state = snapshot.state
         saved = StoredReadRunCompletion(actorID:snapshot.actorID,runID:snapshot.id,requestID:answer.requestId,
             respondingVersion:snapshot.version,answerJSON:try JSONEncoder().encode(answer))
+        await store?.failResponseCheckpoint()
         if fail { throw ReadRunTaskError.unavailable }
     }
     func load(runID: UUID,deadline: ContinuousClock.Instant) -> StoredReadRunCompletion? { saved }
@@ -166,6 +176,17 @@ private actor AnswerFixture: ReadRunAnswerStore {
         if fail { throw ReadRunTaskError.unavailable }
     }
     func load(runID: UUID,deadline: ContinuousClock.Instant) -> StoredReadRunAnswer? { saved }
+    func corrupt(_ field: String) throws {
+        guard let old = saved else { return }
+        if field == "missing" { saved = nil;return }
+        var wire = try JSONSerialization.jsonObject(with:old.archive) as! [String:Any]
+        if field == "request" { wire["requestID"] = UUID().uuidString }
+        if field == "budget" { wire["reserved"] = 6 }
+        if field == "text" { wire["text"] = "{}" }
+        saved = StoredReadRunAnswer(actorID:field == "actor" ? UUID() : old.actorID,runID:old.runID,requestID:old.requestID,
+            respondingVersion:old.respondingVersion,archive:try JSONSerialization.data(withJSONObject:wire))
+    }
+
 }
 
 // SAFETY: stateless suite; models, query counters and stores are actors.
@@ -184,6 +205,80 @@ final class ReadRunEngineTests: XCTestCase, @unchecked Sendable {
         let policy: any PolicyEngine = deny ? DenyAllActionPolicy() : HostActionPolicy(permissions:permissions)
         return try ReadRunEngine(router:ModelRouter(models:[model],clock:clock),gateway:ActionGateway(tools:registrations,policy:policy),store:store,
             clock:clock,freshness:AnswerFreshnessPolicy(maximumObservationAgeSeconds:2000,minimumCurrentConfidence:Confidence(0.5)),memory:memory,completions:completions,plans:plans,toolResults:toolResults,answers:answers)
+    }
+    func testSavedAnswerCompletesWithoutCallsAndPreservesExistingGroundedBytes() async throws {
+        for boundary in ["answer","completion","iteration","claim","resumedCompletion"] {
+            let clock = EngineClockFixture(),store = EngineRunStore(),world = EngineWorldFixture(),model = EngineModelFixture(cost:5)
+            let plans = PlanFixture(fail:false),tools = ToolResultFixture(fail:false),answers = AnswerFixture(fail:["answer","claim","resumedCompletion"].contains(boundary))
+            let completions = CompletionFixture(fail:["completion","resumedCompletion"].contains(boundary),store:boundary == "iteration" ? store : nil)
+            let request = try Self.request(clock:clock,cost:10)
+            let engine = try Self.engine(clock:clock,store:store,model:model,world:world,completions:completions,plans:plans,toolResults:tools,answers:answers)
+            do { _ = try await engine.execute(request);XCTFail("Ambiguous persistence accepted") }
+            catch let failure as ReadRunFailure { XCTAssertEqual(failure.code,.recoveryRequired) }
+            let original = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2)))
+            let originalCompletion = await completions.saved
+            XCTAssertEqual(original.state,.responding)
+            let freshModel = EngineModelFixture(.invalidPlan)
+            let resumed = try Self.engine(clock:clock,store:store,model:freshModel,world:world,deny:true,completions:completions,plans:plans,toolResults:tools,answers:answers)
+            var version = original.version
+            if boundary == "claim" {
+                await store.failResponseCheckpoint()
+                do { _ = try await resumed.resumeSavedAnswer(request,expectedVersion:version);XCTFail("Lost claim ignored") }
+                catch let failure as ReadRunFailure { XCTAssertEqual(failure.code,.recoveryRequired) }
+                version = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2))).version
+            }
+            if boundary == "resumedCompletion" {
+                do { _ = try await resumed.resumeSavedAnswer(request,expectedVersion:version);XCTFail("Ambiguous recovered completion ignored") }
+                catch let failure as ReadRunFailure { XCTAssertEqual(failure.code,.recoveryRequired) }
+                version = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2))).version
+            }
+            try await Task.sleep(for:.milliseconds(20))
+            let result = try await resumed.resumeSavedAnswer(request,expectedVersion:version)
+            XCTAssertEqual(result.snapshot.state,.completed);XCTAssertEqual(result.snapshot.budget,original.budget)
+            XCTAssertGreaterThanOrEqual(result.snapshot.activeMilliseconds,original.activeMilliseconds)
+            XCTAssertEqual(result.snapshot.calls,1);XCTAssertEqual(result.snapshot.steps,1)
+            XCTAssertEqual(result.reservedModelCostUpperBoundMicroUSD,10)
+            let finalCompletion = await completions.saved,saves = await completions.saveCalls
+            XCTAssertNotNil(finalCompletion);XCTAssertEqual(saves,1)
+            if let originalCompletion { XCTAssertEqual(finalCompletion?.answerJSON,originalCompletion.answerJSON) }
+            do { _ = try await resumed.resumeSavedAnswer(request,expectedVersion:result.snapshot.version);XCTFail("Terminal run resumed") }
+            catch let failure as ReadRunFailure { XCTAssertEqual(failure.code,.recoveryRequired) }
+            let originalCalls = await model.requests.count,newCalls = await freshModel.requests.count,reads = await world.calls
+            XCTAssertEqual(originalCalls,2);XCTAssertEqual(newCalls,0);XCTAssertEqual(reads,1)
+        }
+    }
+    func testSavedAnswerExpiryDoesNotCallModelsOrPublishCompletion() async throws {
+        let clock = EngineClockFixture(),store = EngineRunStore(),world = EngineWorldFixture(),model = EngineModelFixture()
+        let plans = PlanFixture(fail:false),tools = ToolResultFixture(fail:false),answers = AnswerFixture(fail:true),completions = CompletionFixture(fail:false)
+        let request = try Self.request(clock:clock,seconds:1)
+        let engine = try Self.engine(clock:clock,store:store,model:model,world:world,completions:completions,plans:plans,toolResults:tools,answers:answers)
+        do { _ = try await engine.execute(request);XCTFail("Archive failure ignored") } catch {}
+        let original = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2)))
+        XCTAssertEqual(original.state,.responding)
+        try await Task.sleep(for:.milliseconds(1100))
+        do { _ = try await engine.resumeSavedAnswer(request,expectedVersion:original.version);XCTFail("Expired answer resumed") }
+        catch let failure as ReadRunFailure { XCTAssertEqual(failure.code,.deadlineExceeded) }
+        let after = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2)))
+        XCTAssertEqual(after.state,.timedOut);XCTAssertEqual(after.budget,original.budget)
+        let models = await model.requests.count,reads = await world.calls,saved = await completions.saved
+        XCTAssertEqual(models,2);XCTAssertEqual(reads,1);XCTAssertNil(saved)
+    }
+    func testSavedAnswerRejectsCorruptOrMissingResponseBeforeClaim() async throws {
+        for field in ["actor","request","budget","text","missing","version"] {
+            let clock = EngineClockFixture(),store = EngineRunStore(),world = EngineWorldFixture(),model = EngineModelFixture(cost:5)
+            let plans = PlanFixture(fail:false),tools = ToolResultFixture(fail:false),answers = AnswerFixture(fail:true),completions = CompletionFixture(fail:false)
+            let request = try Self.request(clock:clock,cost:10)
+            let engine = try Self.engine(clock:clock,store:store,model:model,world:world,completions:completions,plans:plans,toolResults:tools,answers:answers)
+            do { _ = try await engine.execute(request);XCTFail("Archive failure ignored") } catch {}
+            let original = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2)))
+            try await answers.corrupt(field)
+            do { _ = try await engine.resumeSavedAnswer(request,expectedVersion:original.version-(field == "version" ? 1 : 0));XCTFail("Corrupt answer used") }
+            catch let failure as ReadRunFailure { XCTAssertEqual(failure.code,.recoveryRequired) }
+            let after = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2)))
+            XCTAssertEqual(after,original)
+            let calls = await model.requests.count,reads = await world.calls,saved = await completions.saved
+            XCTAssertEqual(calls,2);XCTAssertEqual(reads,1);XCTAssertNil(saved)
+        }
     }
     func testAnswerArchiveRetainsRoutingCostAndLostAcknowledgementStopsCompletion() async throws {
         for fail in [false,true] {

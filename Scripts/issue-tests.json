@@ -838,5 +838,35 @@
       "model_free_server_recovery",
       "second_server_replay"
     ]
+  },
+  "SQD-028-SAVED-ANSWER-CRASH": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-saved-answer-crash"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "saved_answer_worker_sigkill",
+      "saved_answer_continuation",
+      "model_free_server_recovery",
+      "second_server_replay"
+    ]
+  },
+  "SQD-028-SAVED-COMPLETION-CRASH": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-saved-completion-crash"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "saved_completion_worker_sigkill",
+      "saved_completion_continuation",
+      "model_free_server_recovery",
+      "second_server_replay"
+    ]
   }
 }
