@@ -137,6 +137,8 @@ jobs:
       - name: Verify durable idempotency and action outbox
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-007
+      - name: Durable run checkpoint recovery
+        run: bash Scripts/test-issue.sh SQD-028-DURABLE
       - name: Verify durable approval decisions and expiry
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-009-PERSISTENCE
