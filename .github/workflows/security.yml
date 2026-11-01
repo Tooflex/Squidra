@@ -40,3 +40,16 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-035-SWIFT-SAST-CONTRACTS
       - name: Analyze every tracked production Swift file
         run: bash Scripts/test-issue.sh SQD-035-SWIFT-SAST
+
+  secrets:
+    name: Tracked secret scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify secret scanner negative fixtures
+        run: bash Scripts/test-issue.sh SQD-035-SECRET-CONTRACTS
+      - name: Scan tracked files without exposing matches
+        run: bash Scripts/test-issue.sh SQD-035-SECRETS

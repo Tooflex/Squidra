@@ -47,7 +47,7 @@ triggers and require the `Dependency analysis` status in the actual repository
 ruleset after a real runner execution. A workflow file does not change a ruleset.
 Existing Bootstrap contracts, database integration and offline evaluations remain
 in place, also paused. The targeted Swift SAST gate below is integrated locally;
-lint and secret scanning still need integration before #35 is complete. Do not
+lint and final hosted checks remain before #35 is complete. Do not
 treat either component as completing #35 or reactivate CI early.
 
 ## Swift static analysis
@@ -77,5 +77,41 @@ any prior success report at `.build/security/swift-sast.json`.
 The manual-only Security workflow includes `Swift static analysis`. This job
 must receive an actual hosted execution and required-status configuration when
 CI is finally restored. Local qualification does not establish hosted success.
-Lint and secret scanning remain outstanding; these rules do not substitute for
-either gate or close #35 on their own.
+These rules do not substitute for lint or the separate secret gate below and
+do not close #35 on their own.
+
+## Tracked secret detection
+
+Run `SQD-035-SECRET-CONTRACTS` then `SQD-035-SECRETS` through the issue runner.
+Gitleaks 8.30.1 is pinned by its multi-architecture image digest and runs with
+no network, a read-only root, no capabilities and bounded CPU/memory/time.
+Only snapshots of Git-tracked files are supplied. Local keys, ignored build
+artifacts and Git history are never mounted. Unsupported linked objects,
+missing reports, scanner failures and inconsistent exit codes fail the gate.
+
+The checked-in configuration explicitly extends the pinned built-in rules.
+Repository-local override files, ignore fingerprints and inline allow comments
+cannot disable scanning. No broad file/path exemption is introduced. Four
+reviewed false positives are recorded in `secret-false-positives.json`: three
+Swift key-length guards and one synthetic governance-test canary. Each exception
+requires the exact rule, path, line AND SHA-256 of the entire file. Any edit to
+that file invalidates its review. Unexpected findings in an unchanged file still
+block. The report distinguishes these reviewed candidates from unresolved ones.
+
+Gitleaks redacts 100% of values. The wrapper captures its raw streams and exports
+only rule/path/line, counts, time and snapshot hash; it never prints matches,
+secrets, entropy or source text. Temporary reports are deleted. An actual
+unregistered token-shaped fixture must be detected despite inline/config/ignore
+suppression attempts, and its value must not appear in the wrapper result.
+Sequential placeholder tokens can be excluded by built-in detector rules; the
+negative fixture therefore uses realistic entropy without being a credential.
+
+This is current tracked-content detection using Gitleaks' built-in patterns and
+allowlists. It is not a Git-history audit or proof that every encoded, binary,
+archived or unknown-format secret can be detected. File/total snapshot bounds
+fail instead of silently dropping oversized files. `.build/security/secrets.json`
+is replaced with an explicit failure on errors, so stale success is not reported.
+
+The manual-only job `Tracked secret scan` needs a real hosted run and actual
+required-status registration at final CI restoration. Lint remains to integrate;
+CI restoration and issue #35 completion are still pending.

@@ -1369,5 +1369,25 @@
     "tests": [
       "swift_sast_contracts"
     ]
+  },
+  "SQD-035-SECRETS": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/ci/secrets.py"
+    ],
+    "tests": [
+      "tracked_secret_scan"
+    ]
+  },
+  "SQD-035-SECRET-CONTRACTS": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/ci/test_secrets.py"
+    ],
+    "tests": [
+      "secret_scan_contracts"
+    ]
   }
 }

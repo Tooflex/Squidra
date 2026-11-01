@@ -1,0 +1,3 @@
+title = "Squidra tracked-file secret detection"
+[extend]
+useDefault = true
