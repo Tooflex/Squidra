@@ -184,6 +184,46 @@ final class RunWorkerSQLTests: XCTestCase, @unchecked Sendable {
             XCTAssertEqual(status.phase,.cancelled)
         }
     }
+    func testTargetedCancellationDuringClaimNeverDispatchesAndPreservesAdmission() async throws {
+        try await Self.withDatabase { client,_,actor in
+            let events = PostgresRunEventStore(client:client,actorID:actor),base = PostgresRunPublicationStore(client:client,actorID:actor)
+            let publication = PublicationFixture(base,.pausedClaim),executor = ExecutionFixture(.gated),request = try Self.request(actor)
+            let coordinator = try PublishedReadRunCoordinator(actorID:actor,executor:executor,events:events,publication:publication,clock:Self.clock)
+            let submitter = Task { try await coordinator.submit(request,threadID:UUID()) }
+            try await Self.wait { await publication.claimsCommitted == 1 }
+            do { _ = try await coordinator.requestCancellation(actorID:UUID(),runID:request.runID);XCTFail("Foreign cancellation") }
+            catch { XCTAssertEqual(error as? ReadRunSubmissionError,.invalidRequest) }
+            let accepted = try await coordinator.requestCancellation(actorID:actor,runID:request.runID)
+            XCTAssertTrue(accepted)
+            await publication.release()
+            do { _ = try await submitter.value;XCTFail("Cancelled claim dispatched") }
+            catch { XCTAssertEqual(error as? ReadRunSubmissionError,.cancelled) }
+            let status = try await base.status(actorID:actor,runID:request.runID,deadline:.now.advanced(by:.seconds(4)))
+            XCTAssertEqual(status.phase,.cancelled)
+            let calls = await executor.calls,accepting = await coordinator.isAccepting
+            XCTAssertEqual(calls,0);XCTAssertTrue(accepting)
+            let repeated = try await coordinator.requestCancellation(actorID:actor,runID:request.runID)
+            XCTAssertFalse(repeated)
+            await coordinator.shutdown()
+        }
+    }
+    func testTargetedCancellationReachesWorkerAndDurableTerminalState() async throws {
+        try await Self.withDatabase { client,other,actor in
+            let events = PostgresRunEventStore(client:client,actorID:actor),publication = PostgresRunPublicationStore(client:client,actorID:actor)
+            let executor = ExecutionFixture(.blocked),request = try Self.request(actor)
+            let coordinator = try PublishedReadRunCoordinator(actorID:actor,executor:executor,events:events,publication:publication,clock:Self.clock)
+            let binding = try await coordinator.submit(request,threadID:UUID())
+            try await Self.wait { await executor.calls == 1 }
+            let accepted = try await coordinator.requestCancellation(actorID:actor,runID:request.runID)
+            XCTAssertTrue(accepted)
+            let status = try await Self.phase(.cancelled,PostgresRunPublicationStore(client:other,actorID:actor),binding)
+            XCTAssertTrue(status.stream.isTerminal)
+            try await Self.wait { await coordinator.activeCount == 0 }
+            let cancellations = await executor.cancellations,accepting = await coordinator.isAccepting
+            XCTAssertEqual(cancellations,1);XCTAssertTrue(accepting)
+            await coordinator.shutdown()
+        }
+    }
     func testDeadlineShutdownCancellationAndForeignGroundingHaveFixedOutcomes() async throws {
         try await Self.withDatabase { client,other,actor in
             let events = PostgresRunEventStore(client:client,actorID:actor),publication = PostgresRunPublicationStore(client:client,actorID:actor),readback = PostgresRunPublicationStore(client:other,actorID:actor)
