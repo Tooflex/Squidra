@@ -1,0 +1,31 @@
+{
+  "rules": [
+    {
+      "id": "swift-insecure-md5",
+      "languages": [
+        "swift"
+      ],
+      "severity": "ERROR",
+      "message": "Use a modern cryptographic hash for security-sensitive operations.",
+      "pattern": "Insecure.MD5.hash(...)"
+    },
+    {
+      "id": "swift-insecure-sha1",
+      "languages": [
+        "swift"
+      ],
+      "severity": "ERROR",
+      "message": "Use a modern cryptographic hash for security-sensitive operations.",
+      "pattern": "Insecure.SHA1.hash(...)"
+    },
+    {
+      "id": "swift-trust-exceptions",
+      "languages": [
+        "swift"
+      ],
+      "severity": "ERROR",
+      "message": "Do not bypass certificate trust validation.",
+      "pattern": "SecTrustSetExceptions(...)"
+    }
+  ]
+}

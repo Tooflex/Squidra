@@ -1349,5 +1349,25 @@
     "tests": [
       "dependency_gate_contracts"
     ]
+  },
+  "SQD-035-SWIFT-SAST": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/ci/swift_sast.py"
+    ],
+    "tests": [
+      "swift_sast"
+    ]
+  },
+  "SQD-035-SWIFT-SAST-CONTRACTS": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/ci/test_swift_sast.py"
+    ],
+    "tests": [
+      "swift_sast_contracts"
+    ]
   }
 }
