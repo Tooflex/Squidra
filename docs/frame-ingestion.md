@@ -137,3 +137,35 @@ the host frame context for an exact internal retry.
 authenticated import/provenance readback, negative consent/identity/shape/PNG/size/
 unknown-image cases with no journal writes, and the default absent route.
 It is an HTTP/PostgreSQL check, not a browser, SAM, live-model or Linux qualification.
+
+## Read-host scope for imported entities
+
+An explicitly injected `ReadHostConfiguration` can opt into
+`allowSyntheticImportedEntities`. This requires the synthetic import profile;
+without it composition fails. The default is false, and the normal CLI still
+has no configured language model. This option does not enable cloud inference.
+
+When opted in, a selected entity is resolved from immutable actor-linked
+`perception.frame_imported` events in the configured camera, scene and coordinate
+frame. The detection must explicitly name that entity in the versioned journal
+payload. The scene itself, an unrelated existing entity, and another actor's or
+camera's detections do not receive a grant. Labels are host-authored; model text
+and client-supplied labels cannot add entities. Existing explicitly configured
+entities retain their original semantics.
+
+Admission, tool execution policy and incomplete-run recovery use the same lookup.
+Each request still has one selected planning entity and only `world:read`; no
+`world:all` or write permission is introduced. Membership queries use bound SQL,
+the existing entity-array index, a bounded result and deadline/cancellation.
+The lookup is rebuilt from PostgreSQL after process restart rather than relying
+on a mutable in-memory authorization list. Changing host scope changes subsequent
+admission/execution/recovery permission; completed output remains governed by the
+existing actor-bound replay policy.
+
+`SQD-020-HTTP` covers the real import followed by run admission and an actual
+ReadRunEngine execution using an explicitly injected scripted test model. Its
+answer cites the imported source event and preserves the exact observation time.
+Fresh application compositions resolve the same imported entity again. The tests
+also cover opt-out, missing profile, unrelated IDs, foreign actor/camera/scene/
+coordinate frame, global target and write-scope rejection. This is not yet a
+browser qualification of the complete question flow or a live Meta/SAM call.
