@@ -18,7 +18,11 @@ public struct TracedLanguageModel: LanguageModel {
                result.modelID == descriptor.id, result.modelVersion == descriptor.modelVersion,
                result.outputTokens >= 0, result.outputTokens <= request.maximumOutputTokens,
                result.costMicroUSD >= 0, result.costMicroUSD <= descriptor.maximumCostMicroUSD,
-               let usage = try? TraceUsage(outputTokens:result.outputTokens,costMicroUSD:result.costMicroUSD) {
+               result.costBasis.validates(amount:result.costMicroUSD,rateID:result.costRateID),
+               result.costBasis != .localZero || descriptor.location == .local,
+               let usage = try? TraceUsage(outputTokens:result.outputTokens,
+                   costMicroUSD:result.costBasis == .providerReported || result.costBasis == .localZero ? result.costMicroUSD : nil,
+                   estimatedCostMicroUSD:result.costBasis == .publishedRateEstimate ? result.costMicroUSD : nil) {
                 await session.recordUsage(usage)
             }
             return result

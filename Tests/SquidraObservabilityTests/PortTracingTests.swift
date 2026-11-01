@@ -11,10 +11,11 @@ private actor TraceModelFixture: LanguageModel {
     enum Mode: Sendable { case normal, malformed, failed, slow }
     nonisolated let descriptor = ModelDescriptor(id:"fixture.trace-model",modelVersion:"1",location:.local,capabilities:[.text],maximumCostMicroUSD:10)
     let mode: Mode
+    let costBasis: ModelCostBasis
     private(set) var calls = 0
     private(set) var lastRequestID: UUID?
     private(set) var cancelled = false
-    init(_ mode: Mode = .normal) { self.mode = mode }
+    init(_ mode: Mode = .normal, costBasis: ModelCostBasis = .providerReported) { self.mode = mode;self.costBasis = costBasis }
     func generate(_ request: ModelRequest) async throws -> ModelResponse {
         calls += 1;lastRequestID = request.id
         if mode == .failed { throw NSError(domain:"SECRET_provider_error",code:1) }
@@ -22,7 +23,7 @@ private actor TraceModelFixture: LanguageModel {
             do { try await ContinuousClock().sleep(for:.seconds(30)) } catch { cancelled = true;throw error }
         }
         return ModelResponse(schemaVersion:"1",requestID:mode == .malformed ? UUID() : request.id,
-            modelID:descriptor.id,modelVersion:descriptor.modelVersion,text:"SECRET_model_output",outputTokens:5,costMicroUSD:3)
+            modelID:descriptor.id,modelVersion:descriptor.modelVersion,text:"SECRET_model_output",outputTokens:5,costMicroUSD:3,costBasis:costBasis,costRateID:costBasis == .publishedRateEstimate ? "schedule-1" : nil)
     }
 }
 private actor TraceToolFixture: ToolExecutor {
@@ -100,6 +101,20 @@ final class PortTracingTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(span.attributes["squidra.output_tokens"],"5");XCTAssertEqual(span.attributes["squidra.cost_micro_usd"],"3")
         XCTAssertEqual(span.parentSpanID,snapshot.spans.first { $0.stage == .planning }?.spanID)
         try Self.assertPrivate(snapshot)
+    }
+    func testEstimatedAndUnspecifiedCostsNeverBecomeReportedTraceCharges() async throws {
+        for basis: ModelCostBasis in [.publishedRateEstimate,.unspecified] {
+            let recorder = try Self.recorder(),model = TraceModelFixture(costBasis:basis),router = try Self.router(model)
+            let request = try Self.request(),correlation = try TraceCorrelation(runID:UUID())
+            _ = try await recorder.withTrace(correlation) { _ in try await router.generate(request) }
+            let snapshot = await recorder.snapshot(),span = try XCTUnwrap(snapshot.spans.first { $0.stage == .model })
+            XCTAssertNil(span.attributes["squidra.cost_micro_usd"])
+            XCTAssertEqual(span.attributes["squidra.estimated_cost_micro_usd"],basis == .publishedRateEstimate ? "3" : nil)
+            XCTAssertEqual(span.attributes["squidra.output_tokens"],"5")
+            try Self.assertPrivate(snapshot)
+        }
+        XCTAssertThrowsError(try TraceUsage(costMicroUSD:1,estimatedCostMicroUSD:1))
+        XCTAssertThrowsError(try TraceUsage(estimatedCostMicroUSD:-1))
     }
     func testConcurrentActualRouterCallsKeepRequestAndRunCorrelationSeparate() async throws {
         let recorder = try Self.recorder(),model = TraceModelFixture(),router = try Self.router(model)

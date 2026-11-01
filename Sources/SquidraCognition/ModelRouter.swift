@@ -123,7 +123,9 @@ public struct ModelRouter: Sendable {
                   response.modelID == descriptor.id, response.modelVersion == descriptor.modelVersion,
                   !response.text.isEmpty, response.text.utf8.count <= Self.maximumContentBytes,
                   response.outputTokens > 0, response.outputTokens <= request.maximumOutputTokens,
-                  response.costMicroUSD >= 0, response.costMicroUSD <= descriptor.maximumCostMicroUSD else {
+                  response.costMicroUSD >= 0, response.costMicroUSD <= descriptor.maximumCostMicroUSD,
+                  response.costBasis.validates(amount:response.costMicroUSD,rateID:response.costRateID),
+                  response.costBasis != .localZero || descriptor.location == .local else {
                 throw ModelRoutingError.invalidResponse
             }
             return RoutedModelResponse(response: response, attemptedModelIDs: attempted,

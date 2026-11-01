@@ -380,11 +380,18 @@ crash hooks or new migration are added by this continuation.
 The live engine now also persists `ReadRunAnswerStore` after the model response
 passes `GroundedAnswerValidator`, before saving the published grounded answer or
 finishing the iteration. `ReadAnswerArchive` retains response request/model IDs,
-model version, exact response text, output tokens, actual cost, attempted models
+model version, exact response text, output tokens, monetary amount and its evidence, attempted models
 and the reserved upper bound. Its versioned codec bounds text to 32 KiB and the
 whole archive to 64 KiB, rejects unknown/noncanonical fields, NULs and impossible
 cost metadata, and reconstructs only an ordinary untrusted model response.
 Decoding does not replace evidence validation or mint a GroundedAnswer.
+
+Plan and answer archive writers now emit version 2 with `costBasis` and an
+optional `costRateID`. Version 1 remains readable with unspecified monetary
+provenance; it is never promoted to a provider-reported charge. Rate estimates
+remain estimates after restart. Version 2 is not readable by older binaries:
+retain these archives for a compatible reader when rolling back, without
+rewriting them or replaying an already completed provider attempt.
 
 Migration `runtime/009_read_run_answers.sql` binds the immutable archive to the
 actor/run, saved task and saved read result. Insertion requires the exact

@@ -1099,5 +1099,13 @@
   "T11-META-TRANSPORT": {
     "kind": "xctest",
     "filter": "^SquidraMetaTests\\.MetaHTTPTransportTests/"
+  },
+  "T11-META-COST": {
+    "kind": "xctest",
+    "filter": "^SquidraMetaTests\\.MetaTextPricingTests/"
+  },
+  "SQD-003-COST": {
+    "kind": "xctest",
+    "filter": "^SquidraCognitionTests\\.ModelCostTests/"
   }
 }

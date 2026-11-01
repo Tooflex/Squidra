@@ -212,3 +212,40 @@ The user's selected deployment for both language models and SAM 3.1 is hosted
 API access. Both credentials will be supplied later. SAM still requires its own
 segmentation request/decoder contract and qualification; this text-response
 transport alone does not implement SAM or enable image upload.
+
+
+## Monetary evidence and dated text estimates
+
+`ModelResponse.costMicroUSD` is an amount whose provenance is explicit:
+`provider_reported`, `local_zero`, `published_rate_estimate` or `unspecified`.
+Unannotated adapters and historical archives remain unspecified. Local-zero
+requires zero and a local descriptor; an estimate requires a bounded tariff ID.
+Routing still reserves the descriptor's qualified per-attempt upper bound,
+including failed attempts. A response estimate never reduces that reservation
+or establishes qualification by itself.
+
+Plan and answer archives now write version 2 with this evidence. Version 1 is
+still accepted as unspecified, never relabeled reported. Unknown fields,
+unsupported versions, missing v2 evidence and inconsistent metadata are rejected.
+Older binaries cannot read v2 archives: rollback requires preserving those runs
+for a compatible reader, not editing archives or replaying paid attempts.
+Private model traces emit estimates under `squidra.estimated_cost_micro_usd`;
+reported amounts and explicit local zero retain `squidra.cost_micro_usd`.
+Unspecified monetary amounts are omitted from traces, while validated output
+token counts remain available. Arbitrary rate IDs are not exported to telemetry.
+
+`MetaTextPricing` freezes the Standard text rates rechecked on 2026-11-01 as
+`meta-standard-text-2026-11-01`. It calculates with integer nano-USD and rounds
+the total upward once to micro-USD. Cached tokens use the cached rate; absent
+cache detail is explicitly marked unknown and estimated at the full input rate.
+Reasoning tokens already belong to output tokens and are not added again. Input,
+output, cache and total counters must satisfy the same bounds as the text client.
+This is a text-only estimate, excluding account-specific terms, taxes, media,
+tools/search and unknown charges on failed calls. It neither discovers changed
+prices nor proves a safe live reservation. Current source:
+[Meta pricing](https://dev.meta.ai/docs/pricing-rate-limits).
+
+Offline checks: `T11-META-COST` covers exact arithmetic, cache uncertainty and
+invalid counters; `SQD-003-COST` covers routing and both archive versions.
+No API key is read by these components. The planned server credential variable
+is `MODEL_API_KEY`; environment-based cloud activation remains unimplemented.

@@ -9,7 +9,7 @@ internal final class PrivateMemoryExporter: SpanExporter, Sendable {
     private let maximumSpans: Int
     init(maximumSpans: Int) { self.maximumSpans = maximumSpans }
     private static let idKeys: Set<String> = ["squidra.trace_id","squidra.run_id","squidra.task_id","squidra.request_id","squidra.event_id","squidra.ledger_id"]
-    private static let countKeys: Set<String> = ["squidra.input_tokens","squidra.output_tokens","squidra.cost_micro_usd","squidra.world_sequence"]
+    private static let countKeys: Set<String> = ["squidra.input_tokens","squidra.output_tokens","squidra.cost_micro_usd","squidra.estimated_cost_micro_usd","squidra.world_sequence"]
     func export(spans: [SpanData], explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
         for span in spans {
             guard let stage = TraceStage(rawValue:span.name), span.hasEnded else { drop();continue }

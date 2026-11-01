@@ -64,14 +64,18 @@ public struct ModelResponse: Sendable {
     public let modelVersion: String
     public let text: String
     public let outputTokens: Int
-    /// Provider-reported cost for this attempt, not the entire run.
+    /// Monetary amount for this attempt, not the entire run; consult costBasis.
     public let costMicroUSD: Int64
+    public let costBasis: ModelCostBasis
+    public let costRateID: String?
 
     public init(schemaVersion: String = "1", requestID: UUID, modelID: String, modelVersion: String,
-                text: String, outputTokens: Int, costMicroUSD: Int64) {
+                text: String, outputTokens: Int, costMicroUSD: Int64,
+                costBasis: ModelCostBasis = .unspecified, costRateID: String? = nil) {
         self.schemaVersion = schemaVersion; self.requestID = requestID; self.modelID = modelID
         self.modelVersion = modelVersion; self.text = text; self.outputTokens = outputTokens
         self.costMicroUSD = costMicroUSD
+        self.costBasis = costBasis; self.costRateID = costRateID
     }
 }
 

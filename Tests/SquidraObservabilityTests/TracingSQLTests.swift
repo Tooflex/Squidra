@@ -22,7 +22,7 @@ private struct SQLTraceLanguageFixture: LanguageModel {
     let descriptor = ModelDescriptor(id:"fixture.sql-trace",modelVersion:"1",location:.local,capabilities:[.text],maximumCostMicroUSD:10)
     func generate(_ request: ModelRequest) throws -> ModelResponse {
         ModelResponse(schemaVersion:"1",requestID:request.id,modelID:descriptor.id,modelVersion:descriptor.modelVersion,
-            text:"SECRET_fixture_model_response",outputTokens:3,costMicroUSD:2)
+            text:"SECRET_fixture_model_response",outputTokens:3,costMicroUSD:2,costBasis:.providerReported)
     }
 }
 

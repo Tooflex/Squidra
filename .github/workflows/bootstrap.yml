@@ -93,6 +93,8 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-031-COMPONENTS
       - name: Run model routing tests
         run: bash Scripts/test-issue.sh SQD-003
+      - name: Model cost evidence and archive compatibility
+        run: bash Scripts/test-issue.sh SQD-003-COST
       - name: Verify pinned AG-UI producer and bounded SSE replay contracts
         run: bash Scripts/test-issue.sh T05-CONTRACTS
       - name: Verify documented provider matrix and authored offline fixtures
@@ -101,6 +103,8 @@ jobs:
         run: bash Scripts/test-issue.sh T11-META-RESPONSES
       - name: Meta HTTPS bounded transport
         run: bash Scripts/test-issue.sh T11-META-TRANSPORT
+      - name: Meta text price estimates
+        run: bash Scripts/test-issue.sh T11-META-COST
       - name: Verify consent-bound offline frame imports
         run: bash Scripts/test-issue.sh SQD-020-OFFLINE
       - name: Verify bounded entity association and ambiguous identity handling

@@ -14,6 +14,6 @@ public struct DeterministicLanguageModel: LanguageModel {
         try Task.checkCancellation()
         return ModelResponse(requestID: request.id, modelID: descriptor.id,
                              modelVersion: descriptor.modelVersion, text: "offline-fixture",
-                             outputTokens: 1, costMicroUSD: 0)
+                             outputTokens: 1, costMicroUSD: 0, costBasis: .localZero)
     }
 }
