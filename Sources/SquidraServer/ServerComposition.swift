@@ -48,10 +48,12 @@ enum ServerComposition {
                 let tasks = PostgresReadRunTaskStore(client:client,actorID:configuration.boundary.actorID)
                 let allowed = Set(readHost.entities.map(\.id))
                 continuationStep = {
-                    for candidate in try await ownershipStore.previousRuns(deadline:.now.advanced(by:.seconds(4))) {
+                    for candidate in try await ownershipStore.previousRuns(continuableOnly:true,deadline:.now.advanced(by:.seconds(4))) {
                         guard let task = try await tasks.load(runID:candidate.runID,deadline:.now.advanced(by:.seconds(4))) else { continue }
-                        let snapshot = try await runtime.load(actorID:candidate.actorID,runID:candidate.runID,deadline:.now.advanced(by:.seconds(4)))
-                        guard !snapshot.state.isTerminal else { continue }
+                        let snapshot: RunSnapshot?
+                        do { snapshot = try await runtime.load(actorID:candidate.actorID,runID:candidate.runID,deadline:.now.advanced(by:.seconds(4))) }
+                        catch RunStoreError.notFound { snapshot = nil }
+                        guard snapshot?.state.isTerminal != true else { continue }
                         do {
                             if try await coordinator.recover(task,claim:{
                                 try await publication.takeOver(runID:candidate.runID,ownership:localOwnership,deadline:.now.advanced(by:.seconds(4)))
@@ -60,6 +62,9 @@ enum ServerComposition {
                                 try await recorder.withTrace(correlation) { session in
                                     if let usage = try? TraceUsage(requestID:request.requestID) { await session.recordUsage(usage) }
                                     guard !request.planningScope.allowGlobalChanges,request.planningScope.entities.allSatisfy({ allowed.contains($0.id) }) else { throw ReadRunFailureCode.recoveryRequired }
+                                    // The engine persists its initial runtime before any model/read call.
+                                    // Missing runtime after a proved stopped admission is first execution.
+                                    guard let snapshot else { _ = try await engine.executeAnswer(request);return }
                                     switch snapshot.state {
                                     case .created,.validating,.contextLoading: _ = try await engine.resumeBeforePlanning(request,expectedVersion:snapshot.version)
                                     case .planning: _ = try await engine.resumeSavedPlan(request,expectedVersion:snapshot.version)
