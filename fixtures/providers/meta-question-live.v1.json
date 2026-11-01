@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-11-01T19:59:08.781Z",
+  "model": "muse-spark-1.3",
+  "source": "authored_synthetic",
+  "question": "Quelle \u00e9tait la position de cette entit\u00e9 au 2026-11-01T19:59:09.111128Z, selon les informations connues au 2026-11-01T19:59:09.155175Z ? Cite les preuves et pr\u00e9cise si la position est observ\u00e9e ou inf\u00e9r\u00e9e.",
+  "receipt": {
+    "basis": "inferred",
+    "cameraId": "8269EA64-44A9-4029-B415-1197166903B8",
+    "coordinateFrameId": "AC9906FE-532C-4602-9EAF-DAE9777D3DCC",
+    "deployment": "synthetic",
+    "entities": [
+      {
+        "id": "3B51B2C3-2967-421B-87CA-C844F6B2241A",
+        "localId": "red",
+        "sourceEventId": "5767A37F-3F6A-413F-8A4F-9EFBB7C7F655"
+      },
+      {
+        "id": "81CD303D-06B0-4B5F-A65B-4EC584151C15",
+        "localId": "blue",
+        "sourceEventId": "45320F2C-F7BB-49C1-A3E3-E7A0BFC3A5CC"
+      }
+    ],
+    "frameId": "95DBFBB1-713D-4EE5-8A50-2BFC9829D2BF",
+    "imageSHA256": "41e0529cc7f8e5df0fd2a1d3e3265244739d50e9355aa5a0596db021d6835bb1",
+    "knownAt": "2026-11-01T19:59:09.155175Z",
+    "locationId": "1805A769-9B3A-4666-853B-EABC70E93A95",
+    "mediaRetained": false,
+    "modelId": "fixture.vision",
+    "modelVersion": "1.0.0",
+    "observationEventId": "95DBFBB1-713D-4EE5-8A50-2BFC9829D2BF",
+    "observedAt": "2026-11-01T19:59:09.111128Z",
+    "schemaVersion": "1",
+    "validityMilliseconds": 1000
+  },
+  "run": {
+    "events": "/api/v1/runs/d59679f3-9cb2-4b3c-9936-ede148983357/events",
+    "requestId": "b829eaa6-6e3c-4f76-bc41-5376c3f27870",
+    "runId": "d59679f3-9cb2-4b3c-9936-ede148983357",
+    "schemaVersion": "1",
+    "status": "/api/v1/runs/d59679f3-9cb2-4b3c-9936-ede148983357",
+    "threadId": "3718347e-6abf-4576-9785-62f72951c40e",
+    "traceId": "1b56e196-517e-499b-acb4-ef1edf7a5ed2"
+  },
+  "uiStatus": "Run termin\u00e9. R\u00e9ponse et citations re\u00e7ues.",
+  "uiError": "",
+  "runStatus": {
+    "expiresAt": "2026-11-01T20:59:09.305261Z",
+    "leaseExpired": false,
+    "minimumRetainedSequence": "1",
+    "nextSequence": "7",
+    "outputReady": true,
+    "protocolVersion": "1.0",
+    "publicationPhase": "succeeded",
+    "requestId": "b829eaa6-6e3c-4f76-bc41-5376c3f27870",
+    "runId": "d59679f3-9cb2-4b3c-9936-ede148983357",
+    "runtime": {
+      "activeMilliseconds": "5168",
+      "calls": 1,
+      "state": "COMPLETED",
+      "steps": 1,
+      "traceId": "1b56e196-517e-499b-acb4-ef1edf7a5ed2",
+      "version": "12"
+    },
+    "schemaVersion": "1",
+    "terminal": true,
+    "threadId": "3718347e-6abf-4576-9785-62f72951c40e"
+  },
+  "eventTypes": [
+    "RUN_STARTED",
+    "CUSTOM",
+    "TEXT_MESSAGE_START",
+    "TEXT_MESSAGE_CONTENT",
+    "TEXT_MESSAGE_END",
+    "RUN_FINISHED"
+  ],
+  "answer": {
+    "text": "Evidence for valid time 2026-11-01T19:59:09.111128Z, known at 2026-11-01T19:59:09.155175Z.\nInferred location evidence for 81cd303d-06b0-4b5f-a65b-4ec584151c15: 1805a769-9b3a-4666-853b-eabc70e93a95 in frame ac9906fe-532c-4602-9eaf-dae9777d3dcc; minimum source confidence 0.875, latest cited observation 2026-11-01T19:59:09.111128Z, oldest cited age 5.354 seconds. Citations: 45320f2c-f7bb-49c1-a3e3-e7a0bfc3a5cc.",
+    "claims": [
+      {
+        "kind": "location",
+        "basis": "inferred",
+        "frameId": "AC9906FE-532C-4602-9EAF-DAE9777D3DCC",
+        "subjectId": "81CD303D-06B0-4B5F-A65B-4EC584151C15",
+        "locationId": "1805A769-9B3A-4666-853B-EABC70E93A95",
+        "citationIds": [
+          "45320F2C-F7BB-49C1-A3E3-E7A0BFC3A5CC"
+        ],
+        "minimumSourceConfidence": 0.875
+      }
+    ],
+    "intent": "historical",
+    "status": "grounded",
+    "actorId": "BF71DFB1-93B5-418D-AE47-803C3F99831E",
+    "evidence": [
+      {
+        "id": "45320F2C-F7BB-49C1-A3E3-E7A0BFC3A5CC",
+        "basis": "inferred",
+        "source": "synthetic-frame:41e0529cc7f8e5df0fd2a1d3e3265244739d50e9355aa5a0596db021d6835bb1",
+        "frameId": "AC9906FE-532C-4602-9EAF-DAE9777D3DCC",
+        "timeZone": "Etc/UTC",
+        "freshness": "fresh",
+        "subjectId": "81CD303D-06B0-4B5F-A65B-4EC584151C15",
+        "confidence": 0.875,
+        "locationId": "1805A769-9B3A-4666-853B-EABC70E93A95",
+        "observedAt": "2026-11-01T19:59:09.111128Z",
+        "recordedAt": "2026-11-01T19:59:09.155175Z",
+        "schemaVersion": "1",
+        "observationAgeSeconds": 5.353605031967163
+      }
+    ],
+    "requestId": "B829EAA6-6E3C-4F76-BC41-5376C3F27870",
+    "uncertainty": [
+      "inferredEvidence"
+    ],
+    "schemaVersion": "1"
+  },
+  "modelUsage": [
+    {
+      "outcome": "ok",
+      "outputTokens": "348",
+      "estimatedCostMicroUSD": "2327"
+    },
+    {
+      "outcome": "ok",
+      "outputTokens": "776",
+      "estimatedCostMicroUSD": "4500"
+    }
+  ],
+  "reservedEURCentsBefore": 4000,
+  "reservedEURCentsAfter": 6000,
+  "harnessOutcome": "failed",
+  "outcome": "grounded_answer_verified",
+  "limitation": "Live harness failed only at its uppercase DOM selector after verifying the grounded answer. Selector corrected and tested offline; no new paid replay performed.",
+  "estimatedCostMicroUSD": 6827,
+  "costBasis": "published_rate_estimate"
+}
