@@ -38,12 +38,13 @@ let package = Package(
     ],
     targets: [
         .target(name: "SquidraDomain"),
+        .target(name: "CSquidraPlatform"),
         .target(name: "SquidraSandbox", dependencies: [.product(name: "Crypto", package: "swift-crypto")]),
         .testTarget(name: "SquidraSandboxTests", dependencies: ["SquidraSandbox"]),
     ] + applicationModules.map { name in
         .target(name: name, dependencies: [.byName(name: "SquidraDomain")] +
             (name == "SquidraCognition" ? [.byName(name: "SquidraWorld"), .byName(name: "SquidraTools"), .byName(name: "SquidraMemory")] : []) +
-            (name == "SquidraAgentRuntime" ? [.byName(name: "SquidraSecurity"), .byName(name: "SquidraCognition"), .byName(name: "SquidraTools")] : []) +
+            (name == "SquidraAgentRuntime" ? [.byName(name: "CSquidraPlatform"), .byName(name: "SquidraSecurity"), .byName(name: "SquidraCognition"), .byName(name: "SquidraTools")] : []) +
             (name == "SquidraProtocols" ? [.byName(name: "SquidraCognition")] : []) +
             (name == "SquidraPerception" ? [.byName(name: "SquidraWorld"), .byName(name: "SquidraSpatial"), .product(name: "Crypto", package: "swift-crypto")] : []) +
             (name == "SquidraObservability" ? [.byName(name: "SquidraCognition"), .byName(name: "SquidraWorld"), .byName(name: "SquidraTools"), .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"), .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"), .product(name: "NIOConcurrencyHelpers", package: "swift-nio")] : []) +
@@ -76,7 +77,7 @@ let package = Package(
         .testTarget(name: "SquidraRetentionTests", dependencies: ["SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio")], exclude: ["backup_restore.py", "media.py"]),
         .testTarget(name: "SquidraPostgresSwiftTests", dependencies: ["SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
         .testTarget(name: "SquidraServerTests", dependencies: ["SquidraMeta", "SquidraMemory", "SquidraPerception", "SquidraSpatial", "SquidraServer", "SquidraObservability", "SquidraWorld", "SquidraProtocols", "SquidraDomain", "SquidraSecurity", "SquidraTools", "SquidraPostgres", .product(name: "HummingbirdTesting", package: "hummingbird"), "SquidraTemporal", "SquidraAgentRuntime", "SquidraCognition", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")], exclude: ["server_process.py"]),
-        .testTarget(name: "SquidraAgentRuntimeTests", dependencies: ["SquidraDomain", "SquidraAgentRuntime", "SquidraCognition", "SquidraWorld", "SquidraTools", "SquidraSecurity", "SquidraTemporal", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
+        .testTarget(name: "SquidraAgentRuntimeTests", dependencies: ["CSquidraPlatform", "SquidraDomain", "SquidraAgentRuntime", "SquidraCognition", "SquidraWorld", "SquidraTools", "SquidraSecurity", "SquidraTemporal", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
         .testTarget(name: "SquidraWorldTests", dependencies: ["SquidraDomain", "SquidraWorld", "SquidraPostgres", .product(name: "Crypto", package: "swift-crypto"), .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")], exclude: ["Fixtures"]),
         .testTarget(name: "SquidraSecurityTests", dependencies: ["SquidraSecurity", "SquidraTools", "SquidraDomain", "SquidraTemporal", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
         .testTarget(name: "SquidraToolsTests", dependencies: ["SquidraMemory", "SquidraDomain", "SquidraWorld", "SquidraSecurity", "SquidraTools", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
