@@ -138,7 +138,8 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
     }
     func testLiveOwnedCheckpointContinuationAndFailClosedBoundaries() async throws {
         try await RunHTTPTestSupport.withClients { client,_ in
-            for mode in ["early","missing-plan","revoked-scope","cancel"] {
+            for mode in ["admitted","early","missing-plan","revoked-scope","cancel"] {
+                let succeeds = mode == "early" || mode == "admitted"
                 let (fixture,model,_,_) = try await RunHTTPTestSupport.realHarness(client:client,pauseOnModelCall:mode == "cancel" ? 1 : nil)
                 let clock = try SystemClock(timeZone:IANATimeZone(identifier:"Etc/UTC")),at = try clock.now()
                 let request = try ReadRunRequest(actorID:fixture.actor,question:"Resume the historical fixture",
@@ -156,11 +157,15 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                 try await PostgresReadRunOwnershipStore(client:client,ownership:old).register(runID:request.runID,deadline:.now.advanced(by:.seconds(4)))
                 _ = try await publication.claim(binding,maximumExecutionSeconds:60,at:at,deadline:.now.advanced(by:.seconds(4)))
                 let runtime = PostgresRunStore(client:client)
-                let controller = try await RunController.create(actorID:fixture.actor,id:request.runID,traceID:request.traceID,budget:request.budget,store:runtime,clock:clock)
-                _ = try await controller.transition(to:.validating)
-                _ = try await controller.transition(to:.contextLoading)
-                if mode == "missing-plan" { _ = try await controller.transition(to:.planning) }
-                let original = try await controller.snapshot()
+                let original: RunSnapshot?
+                if mode == "admitted" { original = nil }
+                else {
+                    let controller = try await RunController.create(actorID:fixture.actor,id:request.runID,traceID:request.traceID,budget:request.budget,store:runtime,clock:clock)
+                    _ = try await controller.transition(to:.validating)
+                    _ = try await controller.transition(to:.contextLoading)
+                    if mode == "missing-plan" { _ = try await controller.transition(to:.planning) }
+                    original = try await controller.snapshot()
+                }
                 old.releaseAfterJoiningWorkers()
                 let owner = try LocalRunOwnership.acquire(directory:directory,actorID:fixture.actor)
                 defer { owner.releaseAfterJoiningWorkers() }
@@ -172,20 +177,22 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                             headers:[.authorization:"Bearer "+fixture.token],body:nil)
                         XCTAssertEqual(cancelled.status,.accepted)
                     }
-                    let expected:RunPublicationPhase = mode == "early" ? .succeeded : (mode == "cancel" ? .cancelled : .recoveryRequired)
+                    let expected:RunPublicationPhase = succeeds ? .succeeded : (mode == "cancel" ? .cancelled : .recoveryRequired)
                     try await RunHTTPTestSupport.wait {
                         (try? await publication.status(actorID:fixture.actor,runID:request.runID,deadline:.now.advanced(by:.seconds(4))))?.phase == expected
                     }
                     let final = try await runtime.load(actorID:fixture.actor,runID:request.runID,deadline:.now.advanced(by:.seconds(4)))
-                    XCTAssertEqual(final.id,original.id);XCTAssertEqual(final.traceID,original.traceID);XCTAssertEqual(final.budget,original.budget)
+                    XCTAssertEqual(final.id,request.runID);XCTAssertEqual(final.traceID,request.traceID)
+                    if let original { XCTAssertEqual(final.budget,original.budget) }
+                    else { XCTAssertLessThanOrEqual(final.budget.activeMilliseconds,request.budget.activeMilliseconds) }
                     if let deadline = final.deadlineSecondsSince1970 {
-                        XCTAssertLessThanOrEqual(deadline,try XCTUnwrap(original.deadlineSecondsSince1970))
+                        XCTAssertLessThanOrEqual(deadline,try XCTUnwrap(original?.deadlineSecondsSince1970))
                     } else { XCTAssertTrue(final.state.isTerminal) }
-                    XCTAssertGreaterThanOrEqual(final.activeMilliseconds,original.activeMilliseconds)
-                    if mode == "early" { XCTAssertEqual(final.state,.completed);XCTAssertEqual(final.calls,1);XCTAssertEqual(final.steps,1) }
+                    XCTAssertGreaterThanOrEqual(final.activeMilliseconds,original?.activeMilliseconds ?? 0)
+                    if succeeds { XCTAssertEqual(final.state,.completed);XCTAssertEqual(final.calls,1);XCTAssertEqual(final.steps,1) }
                     if mode == "cancel" { XCTAssertEqual(final.state,.cancelled) }
                     let calls = await model.calls
-                    XCTAssertEqual(calls,mode == "early" ? 2 : (mode == "cancel" ? 1 : 0))
+                    XCTAssertEqual(calls,succeeds ? 2 : (mode == "cancel" ? 1 : 0))
                     let trace = try await http.executeRequest(uri:"/api/v1/runs/"+request.runID.uuidString+"/trace",method:.get,
                         headers:[.authorization:"Bearer "+fixture.token],body:nil)
                     XCTAssertEqual(trace.status,.ok)

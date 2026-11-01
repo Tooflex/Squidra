@@ -645,3 +645,28 @@ correlation. Actual model and tool calls inherit it; archived work is not report
 as new calls. The live continuation test checks one run span, the expected model
 span count and original trace ID in all four scenarios, with no saved question
 text in the HTTP trace response.
+
+## Candidate progress and admission before the first checkpoint
+
+Continuation selection applies eligibility before its bounded limit: the stream
+must still have execution time left, must not already be claimed by this process,
+and must not have a terminal runtime. Thus eight expired, already claimed or
+terminal rows cannot hide a later eligible run. Completed selection requires the
+completion archive and its runtime version relationship before limiting rows.
+The unfiltered candidate API remains available for inspection; completed and
+continuable filters cannot be requested together.
+
+A registered admission can be interrupted after its publication claim but before
+the engine creates its initial runtime. The live host handles `RunStoreError.notFound`
+explicitly for this case. Under the proved stopped owner and transferred publication
+claim, it starts the original task with the original IDs and remaining request/
+publication deadline. This is first execution: the engine commits its initial
+runtime before any model or read call. Other load errors do not authorize execution.
+Current host scope and shared admission/cancellation checks still apply.
+
+T05-WORKERS seeds eleven ordered runs: four exhausted, four already claimed by the
+new owner, a completed runtime without an archive, an eligible admission and a
+completed runtime with its archive. Limit-one selections find the eligible run and
+archive, and a taken-over claim disappears from continuation selection. T05-HTTP
+also covers an admission with no runtime through the live server: two model calls,
+one read, original run/trace IDs, bounded budget and correlated trace.

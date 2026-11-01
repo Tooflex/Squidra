@@ -200,6 +200,60 @@ final class RunWorkerSQLTests: XCTestCase, @unchecked Sendable {
             catch { XCTAssertEqual((error as? PSQLError)?.serverInfo?[.sqlState],"55000") }
         }
     }
+    func testContinuationCandidatesFilterBeforeLimitAndSkipOwnedClaims() async throws {
+        try await Self.withDatabase { client,_,actor in
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("squidra-candidates-"+UUID().uuidString)
+            try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:false,attributes:[.posixPermissions:0o700])
+            defer { try? FileManager.default.removeItem(at:directory) }
+            let old = try LocalRunOwnership.acquire(directory:directory,actorID:actor)
+            defer { old.releaseAfterJoiningWorkers() }
+            let owners = PostgresReadRunOwnershipStore(client:client,ownership:old)
+            let events = PostgresRunEventStore(client:client,actorID:actor),publication = PostgresRunPublicationStore(client:client,actorID:actor)
+            var ids:[UUID] = []
+            for index in 0..<11 {
+                let sample = try Self.request(actor),id = try XCTUnwrap(UUID(uuidString:String(format:"00000000-0000-4000-8000-%012d",index+1)))
+                ids.append(id)
+                let request = ReadRunRequest(actorID:actor,runID:id,traceID:sample.traceID,requestID:sample.requestID,question:sample.question,
+                    planningScope:sample.planningScope,effectiveToolScope:sample.effectiveToolScope,intent:sample.intent,modelOptions:sample.modelOptions,budget:sample.budget)
+                let binding = AGUIRunBinding(actorID:actor,runID:id,threadID:UUID(),requestID:request.requestID)
+                _ = try await events.create(binding,retentionSeconds:3600,deadline:.now.advanced(by:.seconds(4)))
+                try await PostgresReadRunTaskStore(client:client,actorID:actor).save(StoredReadRunTask(request:request,threadID:binding.threadID),deadline:.now.advanced(by:.seconds(4)))
+                try await owners.register(runID:id,deadline:.now.advanced(by:.seconds(4)))
+                _ = try await publication.claim(binding,maximumExecutionSeconds:180,at:Self.clock.now(),deadline:.now.advanced(by:.seconds(4)))
+                if index < 4 {
+                    _ = try await client.query("UPDATE run_event_streams SET execution_lease_until=clock_timestamp()+interval '4 seconds' WHERE actor_id=\(actor) AND run_id=\(id)").collect()
+                }
+                if index == 8 || index == 10 {
+                    let controller = try await RunController.create(actorID:actor,id:id,traceID:request.traceID,store:PostgresRunStore(client:client),clock:Self.clock)
+                    _ = try await controller.transition(to:.validating)
+                    _ = try await controller.transition(to:.planning)
+                    _ = try await controller.validatedProposal(semanticDigest:String(repeating:"a",count:64),invocationKey:"candidate-fixture")
+                    _ = try await controller.transition(to:.responding)
+                    if index == 10 {
+                        try await PostgresReadRunCompletionStore(client:client,actorID:actor).save(snapshot:controller.snapshot(),answer:Self.proof(request),deadline:.now.advanced(by:.seconds(4)))
+                    }
+                    _ = try await controller.finishIteration(progress:.validatedResponse)
+                    _ = try await controller.transition(to:.completed,terminalCode:.completed)
+                }
+            }
+            old.releaseAfterJoiningWorkers()
+            let next = try LocalRunOwnership.acquire(directory:directory,actorID:actor)
+            defer { next.releaseAfterJoiningWorkers() }
+            for id in ids[4..<8] { _ = try await publication.takeOver(runID:id,ownership:next,deadline:.now.advanced(by:.seconds(4))) }
+            let resumed = PostgresReadRunOwnershipStore(client:client,ownership:next)
+            let all = try await resumed.previousRuns(deadline:.now.advanced(by:.seconds(4)))
+            XCTAssertEqual(all.map(\.runID),Array(ids.prefix(8)))
+            let eligible = try await resumed.previousRuns(limit:1,continuableOnly:true,deadline:.now.advanced(by:.seconds(4)))
+            XCTAssertEqual(eligible.map(\.runID),[ids[9]])
+            let completed = try await resumed.previousRuns(limit:1,completedOnly:true,deadline:.now.advanced(by:.seconds(4)))
+            XCTAssertEqual(completed.map(\.runID),[ids[10]])
+            _ = try await publication.takeOver(runID:ids[9],ownership:next,deadline:.now.advanced(by:.seconds(4)))
+            let repeated = try await resumed.previousRuns(continuableOnly:true,deadline:.now.advanced(by:.seconds(4)))
+            XCTAssertTrue(repeated.isEmpty)
+            do { _ = try await resumed.previousRuns(completedOnly:true,continuableOnly:true,deadline:.now.advanced(by:.seconds(4)));XCTFail("Ambiguous candidate mode accepted") }
+            catch { XCTAssertEqual(error as? ReadRunTaskError,.invalidState) }
+        }
+    }
     func testCallerCancellationCapacityReplayAndUncertainCompletionNeverRepeatExecution() async throws {
         try await Self.withDatabase { client,other,actor in
             let events = PostgresRunEventStore(client:client,actorID:actor),readback = PostgresRunPublicationStore(client:other,actorID:actor)
