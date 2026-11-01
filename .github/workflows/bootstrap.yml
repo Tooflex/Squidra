@@ -61,6 +61,8 @@ jobs:
         run: bash Scripts/test-issue.sh T06-REVIEW
       - name: Exact command approval browser
         run: bash Scripts/test-issue.sh T06-APPROVALS
+      - name: Approval browser against normal server and PostgreSQL
+        run: bash Scripts/test-issue.sh T06-APPROVALS-LIVE
       - name: Temporal browser checks
         run: bash Scripts/test-issue.sh SQD-023
       - name: Temporal browser against normal server and PostgreSQL
