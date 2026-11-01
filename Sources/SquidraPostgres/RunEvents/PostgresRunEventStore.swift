@@ -43,6 +43,13 @@ public struct PostgresRunEventStore: RunEventStore {
                                events: [AGUIEvent], authorization: PublicationAuthorization, terminalPhase: RunPublicationPhase?) async throws -> AGUIRunStreamInfo {
         guard binding.actorID == actorID,(1...16).contains(events.count),events.allSatisfy({ $0.binding == binding }),
               events.reduce(0,{ $0+$1.json.count }) <= 262_144 else { throw RunEventStoreError.invalidRequest }
+        return try await appendDocumentsLocked(connection,binding:binding,expectedNextSequence:expectedNextSequence,
+            documents:events.map { ($0.kind.rawValue,$0.json) },authorization:authorization,terminalPhase:terminalPhase)
+    }
+    // Only typed producers or the checked durable-completion path below can
+    // reach this byte-level append. There is no public raw producer factory.
+    private func appendDocumentsLocked(_ connection: PostgresConnection,binding: AGUIRunBinding,expectedNextSequence: Int64,
+        documents: [(kind:String,json:Data)],authorization: PublicationAuthorization,terminalPhase: RunPublicationPhase?) async throws -> AGUIRunStreamInfo {
         guard let metadata = try await select(connection,runID:binding.runID,write:true) else { throw RunEventStoreError.notFound }
         guard !metadata.expired else { throw RunEventStoreError.expired }
         guard metadata.info.binding == binding,metadata.info.nextSequence == expectedNextSequence,!metadata.info.isTerminal else { throw RunEventStoreError.conflict }
@@ -59,7 +66,7 @@ public struct PostgresRunEventStore: RunEventStore {
         var validator = restored.validator,bytes = metadata.info.retainedBytes
         var prepared: [(sequence:Int64,kind:String,text:String)] = []
         var batchBytes = 0
-        for event in events {
+        for event in documents {
             let rows = try await BoundedPostgresQuery.rows(connection,"SELECT \(String(decoding:event.json,as:UTF8.self))::jsonb::text")
             guard let row = rows.first else { throw RunEventStoreError.invalidRequest }
             let text = try row.decode(String.self),data = Data(text.utf8)
@@ -67,7 +74,7 @@ public struct PostgresRunEventStore: RunEventStore {
             do { try validator.accept(data,sequence:sequence) } catch { throw RunEventStoreError.invalidRequest }
             bytes += Int64(data.count);batchBytes += data.count
             guard bytes <= AGUIRunStreamInfo.maximumRetainedBytes,batchBytes <= 262_144 else { throw RunEventStoreError.limitExceeded }
-            prepared.append((sequence,event.kind.rawValue,text))
+            prepared.append((sequence,event.kind,text))
         }
         for event in prepared {
             _ = try await BoundedPostgresQuery.rows(connection,"INSERT INTO run_events(actor_id,run_id,sequence,event_type,payload) VALUES(\(actorID),\(binding.runID),\(event.sequence),\(event.kind),\(event.text)::jsonb)")
@@ -85,6 +92,50 @@ public struct PostgresRunEventStore: RunEventStore {
         }
         return try AGUIRunStreamInfo(binding:binding,nextSequence:validator.nextSequence,minimumRetainedSequence:metadata.info.minimumRetainedSequence,
             retainedBytes:bytes,isTerminal:validator.isTerminal,retentionSeconds:metadata.info.retentionSeconds,expiresAt:metadata.info.expiresAt)
+    }
+    /// Reads an archive only from the database, checks terminal runtime and task
+    /// identity, then publishes the existing grounded value without execution.
+    internal func recoverArchivedCompletion(_ c: PostgresConnection,binding: AGUIRunBinding,at: UTCInstant) async throws -> AGUIRunStreamInfo? {
+        let rows = try await BoundedPostgresQuery.rows(c,"""
+            SELECT a.answer,t.task::text FROM read_run_completions a
+            JOIN agent_runs r ON r.actor_id=a.actor_id AND r.id=a.run_id
+            JOIN read_run_tasks t ON t.actor_id=a.actor_id AND t.run_id=a.run_id
+            WHERE a.actor_id=\(actorID) AND a.run_id=\(binding.runID) AND a.request_id=\(binding.requestID)
+                AND t.request_id=a.request_id AND t.thread_id=\(binding.threadID)
+                AND r.state='COMPLETED' AND r.version>a.responding_version
+            FOR SHARE OF r
+            """)
+        guard let row = rows.first else { return nil }
+        let (data,taskText) = try row.decode((Data,String).self),task = try ReadRunTaskCodec.decode(taskText)
+        _ = try JSONDocument(data,maximumBytes:65_536)
+        guard task.request.actorID == actorID,task.request.runID == binding.runID,task.threadID == binding.threadID,
+              task.request.requestID == binding.requestID,
+              let answer = try JSONSerialization.jsonObject(with:data) as? [String:Any],
+              answer["schemaVersion"] as? String == "1",
+              (answer["actorId"] as? String).flatMap(UUID.init(uuidString:)) == actorID,
+              (answer["requestId"] as? String).flatMap(UUID.init(uuidString:)) == binding.requestID,
+              answer["intent"] as? String == task.request.intent.rawValue,
+              let text = answer["text"] as? String,let claims = answer["claims"] as? [[String:Any]],
+              let evidence = answer["evidence"] as? [[String:Any]] else { throw RunEventStoreError.corruptRecord }
+        let subjects = Set(task.request.planningScope.entities.map(\.id))
+        guard task.request.planningScope.allowGlobalChanges || (claims+evidence).allSatisfy({
+            ($0["subjectId"] as? String).flatMap(UUID.init(uuidString:)).map(subjects.contains) == true
+        }) else { throw RunEventStoreError.corruptRecord }
+        let messageID = binding.runID.uuidString.lowercased(),timestamp = Int64((at.secondsSince1970*1000).rounded(.down))
+        let fields: [(AGUIEventKind,[String:Any])] = [
+            (.groundedAnswer,["name":"squidra.grounded_answer.v1","value":answer]),
+            (.textStart,["messageId":messageID,"role":"assistant"]),
+            (.textContent,["messageId":messageID,"delta":text]),
+            (.textEnd,["messageId":messageID]),
+            (.runFinished,["threadId":binding.threadID.uuidString.lowercased(),"runId":binding.runID.uuidString.lowercased(),"outcome":["type":"success"]])
+        ]
+        let documents = try fields.map { kind,fields -> (kind:String,json:Data) in
+            var value = fields;value["type"] = kind.rawValue;value["timestamp"] = timestamp
+            let bytes = try JSONSerialization.data(withJSONObject:value,options:[.sortedKeys,.withoutEscapingSlashes])
+            guard bytes.count <= AGUIEvent.maximumBytes else { throw RunEventStoreError.limitExceeded }
+            return (kind.rawValue,bytes)
+        }
+        return try await appendDocumentsLocked(c,binding:binding,expectedNextSequence:2,documents:documents,authorization:.expiredLease,terminalPhase:.succeeded)
     }
     public func page(actorID: UUID, runID: UUID, cursor: String?, limit: Int, deadline: ContinuousClock.Instant) async throws -> AGUIRunEventPage {
         guard actorID == self.actorID else { throw RunEventStoreError.notFound }

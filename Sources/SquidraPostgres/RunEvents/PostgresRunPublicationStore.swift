@@ -87,11 +87,33 @@ public struct PostgresRunPublicationStore: RunPublicationStore {
             return RunPublicationStatus(phase:state.phase,stream:metadata.info,leaseExpired:state.phase == .running && state.leaseValid == false)
         }
     }
+    /// Bounded background publication only. Never starts a model/runtime/tool.
+    public func recoverNextCompleted(at: UTCInstant,deadline: ContinuousClock.Instant) async throws -> Bool {
+        try await events.transaction(deadline) { c in
+            let rows = try await BoundedPostgresQuery.rows(c,"""
+                SELECT s.run_id,s.thread_id,s.request_id FROM run_event_streams s
+                JOIN agent_runs r ON r.actor_id=s.actor_id AND r.id=s.run_id
+                JOIN read_run_completions a ON a.actor_id=s.actor_id AND a.run_id=s.run_id
+                WHERE s.actor_id=\(events.actorID) AND s.publication_phase='running'
+                    AND s.execution_lease_until<=clock_timestamp() AND s.expires_at>clock_timestamp()
+                    AND r.state='COMPLETED' AND r.version>a.responding_version
+                ORDER BY s.execution_lease_until,s.run_id LIMIT 1 FOR UPDATE OF s SKIP LOCKED
+                """)
+            guard let row = rows.first else { return false }
+            let (run,thread,request) = try row.decode((UUID,UUID,UUID).self)
+            let binding = AGUIRunBinding(actorID:events.actorID,runID:run,threadID:thread,requestID:request)
+            guard try await events.recoverArchivedCompletion(c,binding:binding,at:at) != nil else { throw RunEventStoreError.corruptRecord }
+            return true
+        }
+    }
     public func recoverExpired(actorID: UUID, runID: UUID, at: UTCInstant, deadline: ContinuousClock.Instant) async throws -> RunPublicationStatus {
         guard actorID == events.actorID else { throw RunEventStoreError.notFound }
         return try await events.transaction(deadline) { connection in
             guard let metadata = try await events.select(connection,runID:runID,write:true) else { throw RunEventStoreError.notFound }
             guard !metadata.expired else { throw RunEventStoreError.expired }
+            if let stream = try await events.recoverArchivedCompletion(connection,binding:metadata.info.binding,at:at) {
+                return RunPublicationStatus(phase:.succeeded,stream:stream,leaseExpired:false)
+            }
             let stream = try await events.appendLocked(connection,binding:metadata.info.binding,expectedNextSequence:2,
                 events:[AGUIEvent.failed(binding:metadata.info.binding,at:at,code:.recoveryRequired)],authorization:.expiredLease,terminalPhase:.recoveryRequired)
             return RunPublicationStatus(phase:.recoveryRequired,stream:stream,leaseExpired:false)
