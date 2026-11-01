@@ -1441,5 +1441,23 @@
       "demo_cleanup"
     ],
     "requires_database": true
+  },
+  "T08-FAKE-MODEL": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/demo.sh",
+      "--profile=offline-fake-model"
+    ],
+    "tests": [
+      "historical_knowledge_correction",
+      "unique_movement_notification",
+      "fresh_process_reproduction",
+      "unknown_and_actor_isolation",
+      "demo_cleanup",
+      "fake_model_grounded_questions",
+      "fake_model_rejects_denial_and_fabrication"
+    ],
+    "requires_database": true
   }
 }

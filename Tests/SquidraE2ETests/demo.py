@@ -8,9 +8,14 @@ from pathlib import Path
 import secrets
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 import uuid
+
+profile=sys.argv[1] if len(sys.argv)==2 else '--profile=offline-replay'
+if len(sys.argv)>2 or profile not in ['--profile=offline-replay','--profile=offline-fake-model']:raise SystemExit('Unsupported demo profile')
+fake=profile=='--profile=offline-fake-model'
 
 root=Path(__file__).resolve().parents[2]
 engine=os.environ.get('SQUIDRA_CONTAINER_ENGINE','docker')
@@ -48,7 +53,7 @@ try:
         run(['bash','Scripts/dev-db.sh','migrate'],cwd=root,env=dict(os.environ,SQUIDRA_DB_CONTAINER=name,SQUIDRA_CONTAINER_ENGINE=engine))
         env={'PATH':os.environ['PATH'],'HOME':temporary,'SQUIDRA_DEMO_FIXTURE':'1','SQUIDRA_TEST_DB_PORT':port,'SQUIDRA_TEST_DB_PASSWORD':password}
         receipt=temp/'identity.json';report=out/'evidence.json';scenario=root/'fixtures/demo/scenario.json'
-        for mode in ['seed','verify','verify']:
+        for mode in ['seed','verify','verify']+(['fake'] if fake else []):
             result=run([executable,mode,str(scenario),str(receipt),str(report)],cwd=root,env=env)
             if result.stdout.decode().splitlines().count('HISTORICAL_DEMO_VERIFIED')!=1:raise RuntimeError('Incomplete demo process')
         evidence=json.loads(report.read_text())
@@ -61,7 +66,24 @@ try:
         print('SQUIDRA_TEST_PASS:unique_movement_notification')
         print('SQUIDRA_TEST_PASS:fresh_process_reproduction')
         print('SQUIDRA_TEST_PASS:unknown_and_actor_isolation')
-        manifest={'checked_at_utc':datetime.now(timezone.utc).isoformat(),'source_commit':run(['git','rev-parse','HEAD'],cwd=root).stdout.decode().strip(),'source_dirty':bool(run(['git','status','--porcelain'],cwd=root).stdout.strip()),'evidence_sha256':hashlib.sha256(report.read_bytes()).hexdigest(),'scope':'authored fixture; PostgreSQL production projection/watch APIs; no LLM','fresh_process_verifications':2}
+        if fake:
+            scripted=json.loads((out/'fake-model.json').read_text())
+            assert scripted['fakeModelExecuted'] is True and scripted['realModelExecuted'] is False and scripted['providerCalls']==0
+            cases={item['case']:item for item in scripted['cases']}
+            assert len(scripted['cases'])==len(cases)==6
+            assert set(cases)=={'mondayEarly','mondayCorrected','tuesday','unknown','fabricatedCitation','denied'}
+            for case_name in ['mondayEarly','mondayCorrected','tuesday']:
+                actual=cases[case_name]['answer']['evidence'][0];expected=evidence[case_name]
+                assert actual['id'].lower()==expected['sourceEventID'].lower()
+                assert actual['source']==expected['sourceID'] and actual['confidence']==expected['confidence']
+                assert actual['observedAt']==expected['observedAt'] and actual['recordedAt']==expected['recordedAt']
+                assert cases[case_name]['worldReads']==1 and cases[case_name]['modelCalls']==2
+            assert cases['unknown']['answer']['status']=='unknown' and not cases['unknown']['answer']['evidence']
+            assert cases['denied']['failure']=='denied' and cases['denied']['worldReads']==0
+            assert cases['fabricatedCitation']['failure']=='invalidAnswer' and cases['fabricatedCitation']['worldReads']==1
+            print('SQUIDRA_TEST_PASS:fake_model_grounded_questions')
+            print('SQUIDRA_TEST_PASS:fake_model_rejects_denial_and_fabrication')
+        manifest={'checked_at_utc':datetime.now(timezone.utc).isoformat(),'source_commit':run(['git','rev-parse','HEAD'],cwd=root).stdout.decode().strip(),'source_dirty':bool(run(['git','status','--porcelain'],cwd=root).stdout.strip()),'evidence_sha256':hashlib.sha256(report.read_bytes()).hexdigest(),'scope':'authored fixture; PostgreSQL production projection/watch APIs; no real model','fresh_process_verifications':2,'profile':profile,'fake_model_sha256':hashlib.sha256((out/'fake-model.json').read_bytes()).hexdigest() if fake else None}
         (out/'verification.json').write_text(json.dumps(manifest,indent=2)+'\n')
 finally:
     if identity:
