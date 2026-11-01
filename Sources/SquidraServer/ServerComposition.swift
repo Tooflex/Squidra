@@ -37,7 +37,7 @@ enum ServerComposition {
                 policy:ServerWorldReadPolicy(actorID:configuration.boundary.actorID,entities:readHost.entities))
             let engine = try ReadRunEngine(router:router,gateway:gateway,store:runtime,clock:clock,freshness:readHost.freshness)
             let coordinator = try PublishedReadRunCoordinator(actorID:configuration.boundary.actorID,executor:TracedReadExecutor(base:engine,recorder:recorder),
-                events:events,publication:publication,clock:clock)
+                events:events,publication:publication,clock:clock,tasks:PostgresReadRunTaskStore(client:client,actorID:configuration.boundary.actorID))
             submission = try RunRoutes.Submission(coordinator:coordinator,clock:clock,entities:readHost.entities,budget:readHost.budget)
         } else { submission = nil }
         return application(configuration: configuration, readiness: { try await readiness.check() }, client: client,

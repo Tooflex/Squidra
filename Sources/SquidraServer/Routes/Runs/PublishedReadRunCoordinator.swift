@@ -14,6 +14,7 @@ public actor PublishedReadRunCoordinator {
     private let executor: any ReadRunAnswerExecuting
     private let events: any RunEventStore
     private let publication: any RunPublicationStore
+    private let tasks: (any ReadRunTaskStore)?
     private let clock: any SquidraDomain.Clock
     private let maximumConcurrentRuns: Int, retentionSeconds: Int
     private var accepting = true
@@ -22,9 +23,9 @@ public actor PublishedReadRunCoordinator {
     private var workers: [UUID:Task<Void,Never>] = [:]
     private var shutdownWaiters: [CheckedContinuation<Void,Never>] = []
     public init(actorID: UUID, executor: any ReadRunAnswerExecuting, events: any RunEventStore, publication: any RunPublicationStore,
-                clock: any SquidraDomain.Clock, maximumConcurrentRuns: Int = 4, retentionSeconds: Int = 3600) throws {
+                clock: any SquidraDomain.Clock, tasks: (any ReadRunTaskStore)? = nil, maximumConcurrentRuns: Int = 4, retentionSeconds: Int = 3600) throws {
         guard (1...8).contains(maximumConcurrentRuns),(186...604_800).contains(retentionSeconds) else { throw ReadRunSubmissionError.invalidRequest }
-        self.actorID = actorID;self.executor = executor;self.events = events;self.publication = publication;self.clock = clock
+        self.actorID = actorID;self.executor = executor;self.events = events;self.publication = publication;self.clock = clock;self.tasks = tasks
         self.maximumConcurrentRuns = maximumConcurrentRuns;self.retentionSeconds = retentionSeconds
     }
     public var activeCount: Int { reservations.count }
@@ -49,6 +50,7 @@ public actor PublishedReadRunCoordinator {
         do {
             let created = try await events.create(binding,retentionSeconds:retentionSeconds,deadline:.now.advanced(by:.seconds(4)))
             guard created.binding == binding else { throw RunEventStoreError.corruptRecord }
+            try await tasks?.save(StoredReadRunTask(request:request,threadID:threadID),deadline:.now.advanced(by:.seconds(4)))
             claim = try await publication.claim(binding,maximumExecutionSeconds:executionSeconds,at:clock.now(),deadline:.now.advanced(by:.seconds(4)))
         } catch RunEventStoreError.conflict { throw ReadRunSubmissionError.conflict }
         catch { throw ReadRunSubmissionError.recoveryRequired }
