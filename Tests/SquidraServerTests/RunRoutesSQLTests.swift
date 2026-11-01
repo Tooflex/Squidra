@@ -12,6 +12,7 @@ import SquidraWorld
 import SquidraObservability
 import SquidraPostgres
 import SquidraProtocols
+import SquidraTools
 import XCTest
 @testable import SquidraServer
 
@@ -194,6 +195,27 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                     .restore(planArchive.archive,scope:ReadPlanningScope(entities:[PlanningEntity(id:fixture.entity,label:"Allowed fixture entity")]),maximumCostMicroUSD:0,maximumOutputTokens:512)
                 XCTAssertEqual(restored.proposal.target,"entity:"+fixture.entity.uuidString.lowercased())
                 XCTAssertEqual(restored.routing.reservedCostUpperBoundMicroUSD,0)
+
+                let storedTool = try await PostgresReadRunToolResultStore(client:client,actorID:fixture.actor).load(runID:acceptedID,deadline:.now.advanced(by:.seconds(4)))
+                let toolArchive = try XCTUnwrap(storedTool)
+                XCTAssertEqual(toolArchive.requestID,completion.requestID)
+                XCTAssertLessThan(planArchive.planningVersion,toolArchive.executionVersion)
+                XCTAssertLessThan(toolArchive.executionVersion,completion.respondingVersion)
+                XCTAssertEqual(toolArchive.toolIdentifier,restored.proposal.tool.identifier)
+                let command = try ActionCommand(actorID:fixture.actor,runID:acceptedID,tool:restored.proposal.tool,
+                    idempotencyKey:"read:"+acceptedID.uuidString.lowercased(),target:restored.proposal.target,arguments:restored.proposal.arguments,scope:["world:read"])
+                XCTAssertEqual(toolArchive.commandFingerprint,command.fingerprintHex)
+                let catalog = try ToolCatalog(definitions:[WorldLocationTool.definition(),WorldChangesTool.definition()])
+                let untrusted = try catalog.validateOutput(toolArchive.payload,for:restored.proposal.tool)
+                let restoredEvidence = try WorldReadEvidenceDecoder().decode(untrusted,proposal:restored.proposal,actorID:fixture.actor,intent:.historical,
+                    clock:RunHTTPTestSupport.clock,policy:AnswerFreshnessPolicy(maximumObservationAgeSeconds:60,minimumCurrentConfidence:Confidence(0.5)))
+                XCTAssertFalse(restoredEvidence.entityNotFound)
+                let foreignTool = try await PostgresReadRunToolResultStore(client:client,actorID:UUID()).load(runID:acceptedID,deadline:.now.advanced(by:.seconds(4)))
+                XCTAssertNil(foreignTool)
+                do {
+                    _ = try await client.query("UPDATE read_run_tool_results SET payload=payload WHERE actor_id=\(fixture.actor) AND run_id=\(acceptedID)").collect()
+                    XCTFail("Tool archive update succeeded")
+                } catch { /* Immutable archive is enforced by PostgreSQL. */ }
 
                 let foreignCompletion = try await PostgresReadRunCompletionStore(client:client,actorID:UUID()).load(runID:acceptedID,deadline:.now.advanced(by:.seconds(4)))
                 XCTAssertNil(foreignCompletion)
