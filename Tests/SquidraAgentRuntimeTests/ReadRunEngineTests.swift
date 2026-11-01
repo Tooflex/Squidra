@@ -19,9 +19,10 @@ private struct EngineClockFixture: SquidraDomain.Clock {
 }
 private actor EngineRunStore: RunStore {
     let ambiguousReservation: Bool
+    private var ambiguousPlanningClaim: Bool
     private(set) var values: [UUID:RunSnapshot] = [:]
     private(set) var history: [RunState] = []
-    init(ambiguousReservation: Bool = false) { self.ambiguousReservation = ambiguousReservation }
+    init(ambiguousReservation: Bool = false,ambiguousPlanningClaim: Bool = false) { self.ambiguousReservation = ambiguousReservation;self.ambiguousPlanningClaim = ambiguousPlanningClaim }
     func create(_ snapshot: RunSnapshot, deadline: ContinuousClock.Instant) throws {
         try Task.checkCancellation()
         guard values[snapshot.id] == nil else { throw RunStoreError.conflict }
@@ -34,6 +35,7 @@ private actor EngineRunStore: RunStore {
         try Task.checkCancellation()
         guard let old = values[snapshot.id], old.version == expectedVersion, !old.state.isTerminal else { throw RunStoreError.conflict }
         try snapshot.validate(); values[snapshot.id] = snapshot; history.append(snapshot.state)
+        if ambiguousPlanningClaim && old.state == .planning && snapshot.state == .planning { ambiguousPlanningClaim = false;throw RunStoreError.unavailable }
         if ambiguousReservation && snapshot.state == .executingTool && snapshot.calls == 1 { throw RunStoreError.unavailable }
     }
 }
@@ -63,7 +65,7 @@ private actor EngineWorldFixture: WorldStateQuery, WorldChangesQuerying {
     }
 }
 private actor EngineModelFixture: LanguageModel {
-    enum Mode: Sendable { case normal, changes, unknown, invalidPlan, invalidCitation, slowPlan, slowAnswer }
+    enum Mode: Sendable { case normal, answerOnly, changes, unknown, invalidPlan, invalidCitation, slowPlan, slowAnswer }
     nonisolated let descriptor: ModelDescriptor
     let mode: Mode
     private(set) var requests: [ModelRequest] = []
@@ -73,7 +75,7 @@ private actor EngineModelFixture: LanguageModel {
     }
     func generate(_ request: ModelRequest) async throws -> ModelResponse {
         requests.append(request)
-        let planning = requests.count == 1
+        let planning = requests.count == 1 && mode != .answerOnly
         if (planning && mode == .slowPlan) || (!planning && mode == .slowAnswer) { try await Task.sleep(for:.seconds(30)) }
         let text: String
         if planning {
@@ -110,6 +112,21 @@ private actor CompletionFixture: ReadRunCompletionStore {
     func load(runID: UUID,deadline: ContinuousClock.Instant) -> StoredReadRunCompletion? { saved }
 }
 
+private actor PlanFixture: ReadRunPlanStore {
+    private(set) var saved: StoredReadRunPlan?
+    func save(snapshot: RunSnapshot,requestID: UUID,plan: PlannedRead,deadline: ContinuousClock.Instant) throws {
+        saved = StoredReadRunPlan(actorID:snapshot.actorID,runID:snapshot.id,requestID:requestID,planningVersion:snapshot.version,archive:try ReadPlanArchive.encode(plan))
+        throw ReadRunTaskError.unavailable // durable commit followed by lost acknowledgement
+    }
+    func load(runID: UUID,deadline: ContinuousClock.Instant) -> StoredReadRunPlan? { saved }
+    func corrupt() throws {
+        guard let old = saved else { return }
+        var value = try JSONSerialization.jsonObject(with:old.archive) as! [String:Any]
+        value["reserved"] = 0
+        saved = StoredReadRunPlan(actorID:old.actorID,runID:old.runID,requestID:old.requestID,planningVersion:old.planningVersion,archive:try JSONSerialization.data(withJSONObject:value))
+    }
+}
+
 // SAFETY: stateless suite; models, query counters and stores are actors.
 final class ReadRunEngineTests: XCTestCase, @unchecked Sendable {
     private static let actor = EngineWorldFixture.id(2)
@@ -119,13 +136,13 @@ final class ReadRunEngineTests: XCTestCase, @unchecked Sendable {
             modelOptions:ReadPlanningOptions(maximumCostMicroUSD:cost,deadline:UTCInstant(secondsSince1970:clock.now().secondsSince1970+seconds)),budget:budget)
     }
     private static func engine(clock: EngineClockFixture, store: EngineRunStore, model: EngineModelFixture, world: EngineWorldFixture, deny: Bool = false,
-                               memory: MemoryContextProvider? = nil, completions: (any ReadRunCompletionStore)? = nil) throws -> ReadRunEngine {
+                               memory: MemoryContextProvider? = nil, completions: (any ReadRunCompletionStore)? = nil,plans: (any ReadRunPlanStore)? = nil) throws -> ReadRunEngine {
         let registrations = try [WorldLocationTool(world:world).registration(),WorldChangesTool(world:world).registration()]
         let permissions = registrations.map { HostActionPermission(actorID:actor,tool:$0.definition.id,capability:$0.definition.capability,
             targets:["entity:"+EngineWorldFixture.entity.uuidString.lowercased()],scope:["world:read"],expiresAt:.now.advanced(by:.seconds(60))) }
         let policy: any PolicyEngine = deny ? DenyAllActionPolicy() : HostActionPolicy(permissions:permissions)
         return try ReadRunEngine(router:ModelRouter(models:[model],clock:clock),gateway:ActionGateway(tools:registrations,policy:policy),store:store,
-            clock:clock,freshness:AnswerFreshnessPolicy(maximumObservationAgeSeconds:2000,minimumCurrentConfidence:Confidence(0.5)),memory:memory,completions:completions)
+            clock:clock,freshness:AnswerFreshnessPolicy(maximumObservationAgeSeconds:2000,minimumCurrentConfidence:Confidence(0.5)),memory:memory,completions:completions,plans:plans)
     }
     func testCompletionArchivePrecedesTerminalAndAmbiguousWritePreservesCheckpoint() async throws {
         for fail in [false,true] {
@@ -186,6 +203,47 @@ final class ReadRunEngineTests: XCTestCase, @unchecked Sendable {
             let saved = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2)))
             XCTAssertEqual(saved.state,expired ? .timedOut : .planning)
         }
+    }
+    func testSavedPlanResumesWithoutPlanningAgainAndKeepsReservedCost() async throws {
+        for answerCost in [Int64(5),6] {
+            let clock = EngineClockFixture(),store = EngineRunStore(ambiguousPlanningClaim:answerCost == 5),world = EngineWorldFixture(),archive = PlanFixture()
+            let planningModel = EngineModelFixture(cost:5),request = try Self.request(clock:clock,cost:10)
+            do { _ = try await Self.engine(clock:clock,store:store,model:planningModel,world:world,plans:archive).execute(request);XCTFail("Ambiguous plan archive succeeded") }
+            catch let failure as ReadRunFailure { XCTAssertEqual(failure.code,.recoveryRequired) }
+            let checkpoint = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2)))
+            XCTAssertEqual(checkpoint.state,.planning);XCTAssertEqual(checkpoint.steps,0);XCTAssertEqual(checkpoint.calls,0)
+            let answerModel = EngineModelFixture(.answerOnly,cost:answerCost)
+            let engine = try Self.engine(clock:clock,store:store,model:answerModel,world:world,plans:archive)
+            var version = checkpoint.version
+            if answerCost == 5 {
+                do { _ = try await engine.resumeSavedPlan(request,expectedVersion:version);XCTFail("Lost claim acknowledgement ignored") }
+                catch let failure as ReadRunFailure { XCTAssertEqual(failure.code,.recoveryRequired) }
+                version = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2))).version
+            }
+            do {
+                let result = try await engine.resumeSavedPlan(request,expectedVersion:version)
+                XCTAssertEqual(answerCost,5);XCTAssertEqual(result.snapshot.state,.completed)
+                XCTAssertEqual(result.reservedModelCostUpperBoundMicroUSD,10)
+                XCTAssertEqual(result.planningRouting.reservedCostUpperBoundMicroUSD,5)
+                XCTAssertEqual(result.snapshot.calls,1);XCTAssertEqual(result.snapshot.steps,1)
+            } catch let failure as ReadRunFailure { XCTAssertEqual(answerCost,6);XCTAssertEqual(failure.code,.budgetExceeded) }
+            let plans = await planningModel.requests,answers = await answerModel.requests,calls = await world.calls
+            XCTAssertEqual(plans.count,1);XCTAssertEqual(answers.count,answerCost == 5 ? 1 : 0);XCTAssertEqual(calls,1)
+        }
+    }
+    func testCorruptPlanCostCannotAuthorizeContinuation() async throws {
+        let clock = EngineClockFixture(),store = EngineRunStore(),world = EngineWorldFixture(),archive = PlanFixture()
+        let model = EngineModelFixture(cost:5),request = try Self.request(clock:clock,cost:10)
+        let engine = try Self.engine(clock:clock,store:store,model:model,world:world,plans:archive)
+        do { _ = try await engine.execute(request);XCTFail("Archive failure ignored") } catch {}
+        let old = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2)))
+        try await archive.corrupt()
+        do { _ = try await engine.resumeSavedPlan(request,expectedVersion:old.version);XCTFail("Corrupt plan used") }
+        catch let failure as ReadRunFailure { XCTAssertEqual(failure.code,.recoveryRequired) }
+        let count = await model.requests.count,calls = await world.calls
+        XCTAssertEqual(count,1);XCTAssertEqual(calls,0)
+        let unchanged = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2)))
+        XCTAssertEqual(unchanged.version,old.version)
     }
     func testOneStepOneCallCompletesOnlyAfterGroundedValidation() async throws {
         let clock = EngineClockFixture(), store = EngineRunStore(), model = EngineModelFixture(), world = EngineWorldFixture()

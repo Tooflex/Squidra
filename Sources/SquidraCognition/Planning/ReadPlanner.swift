@@ -92,6 +92,11 @@ public struct ReadPlanner: Sendable {
         try Task.checkCancellation()
         return try PlannedRead(proposal:validate(routing.response.text,scope:scope),routing:routing)
     }
+    public func restore(_ archive: Data,scope: ReadPlanningScope,maximumCostMicroUSD: Int64,maximumOutputTokens: Int) throws -> PlannedRead {
+        let routing = try ReadPlanArchive.routing(archive)
+        guard routing.reservedCostUpperBoundMicroUSD <= maximumCostMicroUSD,routing.response.outputTokens <= maximumOutputTokens else { throw ReadPlanningError.invalidProposal }
+        return try PlannedRead(proposal:validate(routing.response.text,scope:scope),routing:routing)
+    }
     private func validate(_ text: String, scope: ReadPlanningScope) throws -> ReadProposal {
         guard text.utf8.count <= 16_384 else { throw ReadPlanningError.invalidProposal }
         let bytes = Data(text.utf8)

@@ -236,3 +236,30 @@ fixture remains available separately.
 This exposes and qualifies a real early continuation, but does not yet wire it to
 automatic server ownership recovery. Persisted planning/tool artifacts, uncertain
 model/effect handling and remaining application activation still block SQD-028.
+
+
+## Saved planning continuation
+
+The live engine archives a validated plan while the checkpoint is still PLANNING,
+before reserving a proposal or issuing any tool permit. Migration
+`runtime/007_read_run_plans.sql` binds this immutable, bounded archive to the
+actor/run, original task request and exact planning checkpoint version. Identical
+save retries remain valid after later progress; replacement conflicts. Private
+model text and routing metadata are never exposed in status or SSE.
+
+`ReadRunEngine.resumeSavedPlan` reloads this archive and revalidates its versioned
+schema, entity scope, proposal, token limit and reserved model cost. It preserves
+the original planning reservation when computing the answer budget and never
+calls the planning model again. Current gateway policy still authorizes the read.
+The caller must prove the previous worker stopped and provide the original task
+and exact current checkpoint version. Only PLANNING with zero steps/calls and no
+iteration or invocation can continue. Downtime is charged and CAS fences stale
+controllers. If the recovery claim commits but loses its acknowledgement, reload
+of the newer checkpoint permits another claim against the same older archive.
+
+T14-RUN verifies one planning/read/answer sequence, retained cost, rejection of
+corrupt reservation data and retry after a lost claim acknowledgement. T05-HTTP
+checks archive persistence and revalidation through the live PostgreSQL engine.
+This is an explicit host API; automatic execution recovery, post-proposal/tool
+continuation and actual process-kill coverage at this boundary remain outstanding.
+SQD-028 remains open.
