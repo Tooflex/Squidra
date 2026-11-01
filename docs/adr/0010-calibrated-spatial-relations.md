@@ -1,6 +1,6 @@
 # ADR-010: Conservative relations from calibrated 3D evidence
 
-Status: Proposed; adoption follows the authorized PR merge.
+Status: Accepted through the authorized implementation merges.
 Sources: SRS §§7.3, 14 SQD-022; SDD §7. No physical sensor or model qualification is claimed.
 
 ## Decision
@@ -67,7 +67,40 @@ actor/frame isolation; half-open validity; unchanged provenance/unknown confiden
 and invalid numeric contracts. These synthetic rules tests do not measure the
 SRS scene-accuracy target or qualify an external vision model.
 
-SQD-021 association, perception composition and broader spatial scene qualification
-remain prerequisites for completing parent SQD-022. No sensor, package upgrade,
-SQL migration, asynchronous I/O or application activation is added here. Rollback
-removes this isolated evaluator and its suite; there is no persisted state.
+## Perception composition and complete acceptance gate
+
+`SceneRelationExtractor` composes a validated `ImportedFrame`, its exact
+`EntityResolution`, and host-supplied depth evidence for each local detection.
+Actor, camera, image frame, timestamps, model identity and image hash must match.
+The evidence context must match the imported frame; the host is responsible for
+registering depth to that coordinate frame. No transform or mask-to-metre estimate
+is inferred. Each observation ID is unique and its half-open validity must include
+the image observation time. Missing, duplicated or foreign evidence fails the
+whole scene. Geometry is never supplied by a language-model tool proposal.
+
+Only `.matched` associations become confirmed inputs to the geometric evaluator.
+New and ambiguous candidates remain explicit abstentions. The returned report
+keeps the full entity resolution, synthetic deployment flag, image hash, source
+observations and all ordered pair results, including abstentions. Relations alone
+must not be exported without this containing provenance. Association scores remain
+heuristics, not identity probabilities or user approval.
+
+Scenes contain at most 32 detections (992 ordered pairs). Oversized scenes fail
+rather than silently truncating; cancellation produces no partial report. An empty
+scene returns an empty report, not negative facts. Ordering follows the validated
+imported detections. The report is an inferred observation result, not a world
+journal write, a grounded answer or an authorization grant. A UI or persistence
+adapter remains a separate consumer; no physical sensor is activated here.
+
+`bash Scripts/test-issue.sh SQD-022` runs the geometric contracts and complete
+controlled scenes through the real consent-bound PNG importer, continuity resolver
+and relation extractor. Two authored frames establish identity before testing
+`inside`, `on_top_of` and symmetric `next_to`. Negative cases cover candidate
+identity, absent depth/calibration/frame, 2D masks, foreign/stale evidence, expired
+validity, bounds and cancellation. The original six signed-axis and uncertainty
+regressions remain in this gate. These are synthetic scene checks, not a measured
+vision accuracy benchmark (SQD-031) or sensor qualification (SQD-024).
+
+There is no SQL migration or new external dependency. Rollback removes this
+composition and restores the previous geometric-only gate; no persisted state
+requires repair.

@@ -637,5 +637,9 @@
       "owned_worker_lifecycle",
       "authenticated_http_transport"
     ]
+  },
+  "SQD-022": {
+    "kind": "xctest",
+    "filter": "^SquidraSpatialTests\\.(CalibratedRelationTests|ResolvedSceneTests)/"
   }
 }
