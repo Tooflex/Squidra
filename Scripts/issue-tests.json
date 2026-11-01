@@ -1016,5 +1016,16 @@
   "SQD-029-UNIT": {
     "kind": "xctest",
     "filter": "^SquidraMemoryTests\\.(FactConsolidationTests|ConsolidationImportTests)/"
+  },
+  "T06-APPROVALS": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/test-web-review.py",
+      "approvals"
+    ],
+    "tests": [
+      "typed_web_approvals"
+    ]
   }
 }

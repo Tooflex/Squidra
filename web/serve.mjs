@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 const files = new Map([['/', ['index.html', 'text/html; charset=utf-8']], ['/app.js', ['app.js', 'text/javascript; charset=utf-8']], ['/style.css', ['style.css', 'text/css; charset=utf-8']]]);
 files.set('/timeline', ['timeline/index.html', 'text/html; charset=utf-8']);
 files.set('/timeline/app.js', ['timeline/app.js', 'text/javascript; charset=utf-8']);
+files.set('/approvals', ['approvals/index.html', 'text/html; charset=utf-8']);
+files.set('/approvals/app.js', ['approvals/app.js', 'text/javascript; charset=utf-8']);
 const server = http.createServer(async (request, response) => {
   const entry = files.get(request.url);
   const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
