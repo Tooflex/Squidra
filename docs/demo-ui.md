@@ -267,11 +267,12 @@ freshness. Citation links open and focus native evidence details using the
 keyboard. Content is rendered as text, never HTML. These client checks are
 presentation checks; they do not replace the server's authorization and grounding.
 
-`bash Scripts/test-issue.sh T06-QUESTIONS` requires all ten Chromium scenarios:
+`bash Scripts/test-issue.sh T06-QUESTIONS` requires all eleven Chromium scenarios:
 paged answers and keyboard citations, absent capability, partial/unknown states,
 read interruption/resume, invalid bindings/citations/order, error/cancellation/
 retention, duplicate and uncertain admission, origin/logout isolation, bounded
-heartbeats and change claims, UTF-8/body limits and revoked authentication. The
+heartbeats and change claims, UTF-8/body limits and revoked authentication,
+and uppercase evidence IDs with lowercase DOM anchors. The
 responses are mocked for these client tests. They do not yet prove the complete
 import → free-text model planning → answer workflow against a configured host.
 That integrated qualification and manual screen-reader evaluation remain open.
