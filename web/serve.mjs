@@ -7,6 +7,9 @@ files.set('/approvals', ['approvals/index.html', 'text/html; charset=utf-8']);
 files.set('/approvals/app.js', ['approvals/app.js', 'text/javascript; charset=utf-8']);
 files.set('/import', ['import/index.html', 'text/html; charset=utf-8']);
 files.set('/import/app.js', ['import/app.js', 'text/javascript; charset=utf-8']);
+files.set('/questions', ['questions/index.html', 'text/html; charset=utf-8']);
+files.set('/questions/app.js', ['questions/app.js', 'text/javascript; charset=utf-8']);
+files.set('/questions/protocol.js', ['questions/protocol.js', 'text/javascript; charset=utf-8']);
 const server = http.createServer(async (request, response) => {
   const entry = files.get(request.url);
   const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
