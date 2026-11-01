@@ -10,6 +10,7 @@ import SquidraDomain
 import SquidraSecurity
 import SquidraTemporal
 import SquidraTools
+import SquidraMemory
 import PostgresNIO
 
 /// Composition owns dependencies per application. No global runtime or store.
@@ -85,6 +86,7 @@ enum ServerComposition {
         } else { submission = nil;continuationStep = nil }
         return application(configuration: configuration, readiness: { try await readiness.check() }, client: client,
             approvals:approvals,ledger:PostgresActionLedger(client:client),worldReads:worldReads,
+            consolidation:PostgresConsolidationStore(client:client,actorID:configuration.boundary.actorID),
             runs:try! RunRoutes.Dependencies(actorID:configuration.boundary.actorID,
                 events:events,publication:publication,runtime:runtime,submission:submission,traces:recorder),
             beforeServing:{
@@ -112,7 +114,7 @@ enum ServerComposition {
     static func application(configuration: ServerConfiguration,
                             readiness: @escaping @Sendable () async throws -> DatabaseReadiness,
                             client: PostgresClient? = nil, approvals: ApprovalCoordinator? = nil, ledger: (any ActionLedgerStore)? = nil,
-                            worldReads: WorldReadRoutes? = nil, runs: RunRoutes.Dependencies? = nil,
+                            worldReads: WorldReadRoutes? = nil, consolidation: (any ConsolidationStore)? = nil, runs: RunRoutes.Dependencies? = nil,
                             beforeServing: (@Sendable () async throws -> Void)? = nil,
                             localOwnership: LocalRunOwnership? = nil,
                             publicationStep: (@Sendable () async throws -> Bool)? = nil,
@@ -131,6 +133,7 @@ enum ServerComposition {
             }
         }
         if let approvals,let ledger { ApprovalRoutes.mount(router,approvals:approvals,ledger:ledger) }
+        if let consolidation { ConsolidationRoutes.mount(router,store:consolidation) }
         worldReads?.mount(router)
         RunRoutes.mount(router,dependencies:runs)
         var app = Application(responder: HTTPBoundary(inner: router.buildResponder(), configuration: configuration.boundary),

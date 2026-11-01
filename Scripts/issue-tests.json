@@ -939,5 +939,21 @@
       "client_loopback_boundary",
       "durable_consolidation"
     ]
+  },
+  "SQD-029-HTTP-SWIFT": {
+    "kind": "xctest",
+    "filter": "^SquidraServerTests\\.ConsolidationRouteTests/"
+  },
+  "SQD-029-HTTP": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-consolidation-http"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "consolidation_http"
+    ]
   }
 }

@@ -28,8 +28,10 @@ A host-authenticated reviewer can approve or reject only the exact pending
 proposal version. Review metadata is retained. Conflicts cannot be waived by
 review; new contradicting evidence marks even an approved proposal conflicted
 and prevents future exports. The review call is a trusted application boundary,
-not a public authentication mechanism or a tool permission. A future HTTP/agent
-integration must connect it to the existing exact-command approval gateway.
+not a public authentication mechanism or a tool permission. The HTTP review
+below supplies the owner authentication boundary. Any downstream tool use must
+still pass the existing exact-command approval gateway; a fact review grants no
+external action permission.
 
 Promotion produces a `privateOnly` MemoryRecord retaining the original source
 IDs and validity period. It is not world-tool evidence and cannot enter the
@@ -85,3 +87,47 @@ This qualifies persistence and client reload, not process SIGKILL, live extracti
 HTTP approval authentication or application scheduling. Those integrations remain
 open in #29; the earlier reference adapter's lack of persistence is addressed by
 this explicit journal/store pair.
+
+## Authenticated server review
+
+The normal server now mounts these actor-bound routes behind its existing bearer
+boundary and origin checks. Responses use JSON and `Cache-Control: no-store`.
+
+- `GET /api/v1/consolidations/:journal` lists at most 256 proposal summaries with
+  journal version, proposal versions, subject, predicate, criticality and state.
+- `GET /api/v1/consolidations/:journal/proposals/:proposal` previews the exact
+  value, UTC valid interval, original texts, quotations, source IDs, contradictions
+  and any persisted reviewer/time. Evidence is untrusted data, not HTML or proof
+  of semantic truth. A UI must render it as text. Responses are capped at 1 MiB.
+- `POST /api/v1/consolidations/:journal/proposals/:proposal/decision` accepts a
+  closed JSON body of four strings, at most 1024 bytes, with exactly one
+  `application/json` Content-Type:
+
+```json
+{"schemaVersion":"1","journalVersion":"1","proposalVersion":"0","decision":"approved"}
+```
+
+`decision` is `approved` or `rejected`. Versions are canonical decimal strings
+between 0 and 512. The actor/reviewer and decision time come from the authenticated
+host, never from request fields. The selected proposal's contents are immutable;
+matching both journal and proposal versions binds the review to the exact preview.
+Any changed journal, stale proposal, existing decision or conflict returns 409.
+Conflicts cannot be overridden. Unknown or foreign resources return 404, malformed
+input returns 400, and storage failure returns 503 without a successful review
+response. A 200 response is emitted only after saving the archive. If a response
+is lost, fetch the preview to inspect its durable decision; do not change a key
+or silently retry a different decision. A retry with old versions returns 409.
+
+The same owner bearer currently authorizes private review, as it does existing
+approval decisions. This is explicit owner validation of private memory; it does
+not mint an ActionGateway permit or approve a world mutation/external tool.
+A server restart reloads the durable review. An API response records its returned
+journal version and must not be treated as a perpetual permission after later
+contradicting evidence arrives.
+
+`SQD-029-HTTP` exercises normal `ServerComposition.live` over loopback with real
+PostgreSQL: preview/evidence, approval and rejection, a second server instance,
+foreign actors, no authentication, closed/duplicate/escaped bodies, stale versions,
+contradictions and a failing-store fixture. It does not claim a browser UI, a
+multi-principal approval model, archive import, or live model extraction. Journals
+are still provisioned by the host through the archive/store API.
