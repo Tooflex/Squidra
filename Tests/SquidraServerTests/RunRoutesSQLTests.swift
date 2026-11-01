@@ -210,6 +210,21 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                 let restoredEvidence = try WorldReadEvidenceDecoder().decode(untrusted,proposal:restored.proposal,actorID:fixture.actor,intent:.historical,
                     clock:RunHTTPTestSupport.clock,policy:AnswerFreshnessPolicy(maximumObservationAgeSeconds:60,minimumCurrentConfidence:Confidence(0.5)))
                 XCTAssertFalse(restoredEvidence.entityNotFound)
+                let savedAnswer = try await PostgresReadRunAnswerStore(client:client,actorID:fixture.actor).load(runID:acceptedID,deadline:.now.advanced(by:.seconds(4)))
+                let answerArchive = try XCTUnwrap(savedAnswer),routing = try ReadAnswerArchive.decode(answerArchive.archive)
+                XCTAssertEqual(answerArchive.requestID,completion.requestID)
+                XCTAssertEqual(answerArchive.respondingVersion,completion.respondingVersion)
+                XCTAssertEqual(routing.response.requestID,completion.requestID)
+                XCTAssertEqual(routing.reservedCostUpperBoundMicroUSD,0)
+                let regrounded = try GroundedAnswerValidator().validate(routing.response,expectedRequestID:completion.requestID,context:restoredEvidence.context)
+                XCTAssertEqual(regrounded.actorId,fixture.actor);XCTAssertEqual(regrounded.claims.count,1)
+                let foreignAnswer = try await PostgresReadRunAnswerStore(client:client,actorID:UUID()).load(runID:acceptedID,deadline:.now.advanced(by:.seconds(4)))
+                XCTAssertNil(foreignAnswer)
+                do {
+                    _ = try await client.query("UPDATE read_run_answers SET archive=archive WHERE actor_id=\(fixture.actor) AND run_id=\(acceptedID)").collect()
+                    XCTFail("Answer routing update succeeded")
+                } catch { /* Immutable model archive is enforced by PostgreSQL. */ }
+
                 let foreignTool = try await PostgresReadRunToolResultStore(client:client,actorID:UUID()).load(runID:acceptedID,deadline:.now.advanced(by:.seconds(4)))
                 XCTAssertNil(foreignTool)
                 do {

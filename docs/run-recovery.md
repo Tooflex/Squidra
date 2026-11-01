@@ -355,3 +355,35 @@ an answer-only fixture model, then normal model-free servers recover and replay
 the identical six-event stream. The fixture keeps one step/call and the original
 checkpoint budget with the authored 5+5 microUSD reservations. No production
 crash hooks or new migration are added by this continuation.
+
+## Answer-model archive and cost reservation
+
+The live engine now also persists `ReadRunAnswerStore` after the model response
+passes `GroundedAnswerValidator`, before saving the published grounded answer or
+finishing the iteration. `ReadAnswerArchive` retains response request/model IDs,
+model version, exact response text, output tokens, actual cost, attempted models
+and the reserved upper bound. Its versioned codec bounds text to 32 KiB and the
+whole archive to 64 KiB, rejects unknown/noncanonical fields, NULs and impossible
+cost metadata, and reconstructs only an ordinary untrusted model response.
+Decoding does not replace evidence validation or mint a GroundedAnswer.
+
+Migration `runtime/009_read_run_answers.sql` binds the immutable archive to the
+actor/run, saved task and saved read result. Insertion requires the exact
+RESPONDING version, one step/call and matching task request. Identical save retries
+remain valid after later runtime progress; conflicting metadata/bytes fail.
+Loads are actor scoped and the archive follows the private run-data purge
+lifecycle. Model text is not exposed through status, SSE or tracing.
+
+An archive failure or lost acknowledgement returns recoveryRequired with the
+responding checkpoint intact, two total model calls and one read; no completion
+archive or terminal success is written. Invalid grounded responses are never
+archived. T14-RUN covers this boundary, exact retained model/cost data and rejection
+of malformed archive metadata. T05-HTTP loads the live PostgreSQL archive,
+reconstructs the response, validates it again against the saved read evidence,
+and checks request/version binding, actor isolation and SQL update rejection.
+
+This stores the missing recovery inputs; it does not yet continue RESPONDING.
+Continuation must preserve both planning and answer reservations, validate saved
+scope/evidence, and handle an already-existing grounded completion without
+silently replacing its original observation-age metadata. Automatic host recovery
+and qualification of this later boundary remain pending for SQD-028.
