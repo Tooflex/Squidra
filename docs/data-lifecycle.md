@@ -46,12 +46,12 @@ local database recovery profile only.
 
 ## Remaining T12 work
 
-The current frame import path retains derived observations, not raw uploaded
-image blobs. Short configurable blob retention, explicit unavailable references,
-actor-scoped export, and personal-data tombstones still require implementation
-and a concrete privacy ADR. Backup verification alone does not complete T12.
-The immutable journal must not be silently rewritten. If export or deletion is
-later exposed as a tool, route it through gateway authorization and approval.
+Backup/restore and opt-in media retention are implemented below. Actor-scoped
+structural export is described below too. Comprehensive personal-data erasure,
+its privacy-policy acceptance, and deletion reconciliation after restoration
+remain outstanding. The immutable journal must not be silently rewritten. If
+export or deletion is later exposed as a tool, route it through gateway
+authorization and approval. T12 is not complete yet.
 
 ## Opt-in retained media
 
@@ -89,3 +89,44 @@ available media and an unavailable reference included in its exact ten-table
 restore comparison. The strict gates recorded no skipped or unexecuted tests.
 Hosted CI remains suspended; the new gates are registered for Linux on its
 restoration and in the corresponding local database gate list.
+
+## Actor-scoped structural export
+
+`PostgresStructuralExport(actorID:client:).page(cursor:limit:deadline:)` is a
+trusted-host, read-only API for the explicit `journal-structure` scope. It has
+no HTTP route or model tool. The host supplies the authenticated actor and
+checks authorization. The Codable cursor is a pagination value, not a signed
+authorization token; decoding it does not establish ownership.
+
+Version 1 exports event UUID, sequence, stream UUID/version, observed UTC
+microseconds and payload version, plus associated fact UUIDs, provenance event,
+subject/object/frame UUIDs, validity microseconds and confidence. It deliberately
+omits labels, entity kinds, event type, source strings, arbitrary predicates,
+payload JSON, observation bodies, runtime prompts/checkpoints, raw media and
+provider configuration. It also excludes unreferenced entities, media and
+runtime records. This is a structural evidence export, not a full database
+backup, a full account export or a legal portability claim. Identifiers and
+times may still be personal data: disclose them only to the authorized actor.
+
+Each page selects 1–64 events and at most 128 associated facts. Too many facts
+cause an explicit failure, never silent truncation. The first page records the
+actor's committed journal high-water sequence; subsequent pages reuse it so
+later appends are excluded. All queries and cursors bind to the actor. Qualified
+journal appends serialize per actor, as required by the existing repository.
+Each page uses a read-only repeatable-read transaction; mutable projections
+may change between pages, so this does not claim a multi-page database snapshot.
+Use the administrative backup for a whole-database recovery snapshot instead.
+
+Unknown/empty actors yield an empty page. Invalid limits, foreign or malformed
+cursors and deadlines fail. Every returned scalar comes from an explicit typed
+column allowlist; a free-text canary must never appear in encoded output.
+The export does not modify source records or waive the remaining erasure work.
+
+### Export verification — 1 November 2026
+
+`T12-EXPORT` passed five tests against actual PostgreSQL: actor-scoped output
+without seeded secret canaries or foreign identifiers; unchanged journal bytes;
+pagination with a later append excluded from the captured high-water range;
+invalid decoded/foreign cursor and limit/deadline rejection; failure on 129
+associated facts; empty-actor and 64+1 event page boundaries. No tests were
+skipped. The media gate is also rerun whenever its shared harness changes.
