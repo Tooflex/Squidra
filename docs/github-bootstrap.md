@@ -34,6 +34,15 @@ requests. T00's proposed contracts are isolated in
 
 ## Active controls
 
+On 1 November 2026, the maintainer requested a temporary CI pause and local
+checks. Bootstrap was disabled through the GitHub workflow API and its
+checked-in trigger changed to `workflow_dispatch`. Use
+`python3 Scripts/check-local.py` for the full local gate; see
+[development instructions](development.md#local-checks-while-ci-is-paused).
+The ruleset below was inspected and left unchanged: local reports do not
+fulfil its required hosted status checks. Re-enable CI before merging under
+these rules, or have the maintainer explicitly change the required-check policy.
+
 The repository ruleset `main: pull requests and history protection`
 (ID `26267411`) targets the default branch with no bypass actors:
 

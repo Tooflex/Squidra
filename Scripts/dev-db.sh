@@ -126,6 +126,19 @@ case "${1:-}" in
     binding="$("$container_engine" port "$db_container" 5432/tcp)"
     [[ "$binding" =~ ^127\.0\.0\.1:([0-9]+)$ ]] || { echo 'Client test port is not exclusively loopback' >&2; exit 1; }
     test_port="${BASH_REMATCH[1]}"
+    # A ready container is insufficient when a VM's host port forwarding fails.
+    python3 - "$test_port" <<'PY'
+import socket,sys,time
+deadline=time.monotonic()+10
+while True:
+  try:
+    with socket.create_connection(('127.0.0.1',int(sys.argv[1])),timeout=1):
+      break
+  except OSError:
+    if time.monotonic()>=deadline:
+      sys.exit('Test database is ready inside Docker but its host loopback port is unreachable. Check VM port forwarding; see docs/development.md.')
+    time.sleep(0.1)
+PY
     echo 'SQUIDRA_TEST_PASS:client_loopback_boundary'
     apply_migrations
     if [[ "$1" == test-restart ]]; then
