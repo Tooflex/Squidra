@@ -591,5 +591,24 @@
       "crash_effect",
       "crash_result"
     ]
+  },
+  "T14-HOST": {
+    "kind": "xctest",
+    "filter": "^SquidraServerTests\\.ReadHostConfigurationTests/"
+  },
+  "T14": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/test-read-pipeline.py"
+    ],
+    "tests": [
+      "bounded_planning",
+      "verified_evidence",
+      "bounded_runtime",
+      "offline_host_authority",
+      "database_grounded_answer",
+      "live_read_transport"
+    ]
   }
 }

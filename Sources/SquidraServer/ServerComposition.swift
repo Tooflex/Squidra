@@ -1,6 +1,8 @@
 import Foundation
 import Hummingbird
 import Logging
+import SquidraAgentRuntime
+import SquidraCognition
 import SquidraProtocols
 import SquidraPostgres
 import SquidraDomain
@@ -11,7 +13,7 @@ import PostgresNIO
 
 /// Composition owns dependencies per application. No global runtime or store.
 enum ServerComposition {
-    static func live(configuration: ServerConfiguration) throws -> some ApplicationProtocol {
+    static func live(configuration: ServerConfiguration, readHost: ReadHostConfiguration? = nil) throws -> some ApplicationProtocol {
         let client = configuration.database.makeClient()
         let readiness = PostgresSchemaReadiness(client: client)
         let approvals = ApprovalCoordinator(store:PostgresApprovalStore(client:client),clock:SystemClock(timeZone:try! IANATimeZone(identifier:"Etc/UTC")))
@@ -19,11 +21,24 @@ enum ServerComposition {
         let worldReads = try WorldReadRoutes(actorID:configuration.boundary.actorID,world:world,changes:world)
         let recovery = WorldProjectionRecovery(actorID:configuration.boundary.actorID,
             repository:PostgresWorldRepository(client:client),projector:world)
+        let events = PostgresRunEventStore(client:client,actorID:configuration.boundary.actorID)
+        let publication = PostgresRunPublicationStore(client:client,actorID:configuration.boundary.actorID)
+        let runtime = PostgresRunStore(client:client)
+        let submission:RunRoutes.Submission?
+        if let readHost {
+            let clock = try SystemClock(timeZone:IANATimeZone(identifier:"Etc/UTC"))
+            let router = try ModelRouter(models:readHost.models,clock:clock)
+            let gateway = try ActionGateway(tools:[WorldLocationTool(world:world).registration(),WorldChangesTool(world:world).registration()],
+                policy:ServerWorldReadPolicy(actorID:configuration.boundary.actorID,entities:readHost.entities))
+            let engine = try ReadRunEngine(router:router,gateway:gateway,store:runtime,clock:clock,freshness:readHost.freshness)
+            let coordinator = try PublishedReadRunCoordinator(actorID:configuration.boundary.actorID,executor:engine,
+                events:events,publication:publication,clock:clock)
+            submission = try RunRoutes.Submission(coordinator:coordinator,clock:clock,entities:readHost.entities,budget:readHost.budget)
+        } else { submission = nil }
         return application(configuration: configuration, readiness: { try await readiness.check() }, client: client,
             approvals:approvals,ledger:PostgresActionLedger(client:client),worldReads:worldReads,
             runs:try! RunRoutes.Dependencies(actorID:configuration.boundary.actorID,
-                events:PostgresRunEventStore(client:client,actorID:configuration.boundary.actorID),
-                publication:PostgresRunPublicationStore(client:client,actorID:configuration.boundary.actorID),runtime:PostgresRunStore(client:client)),
+                events:events,publication:publication,runtime:runtime,submission:submission),
             beforeServing:{ _ = try await recovery.recover() })
     }
 

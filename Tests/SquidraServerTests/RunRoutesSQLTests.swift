@@ -4,6 +4,7 @@ import HummingbirdTesting
 import PostgresNIO
 import SquidraAgentRuntime
 import SquidraDomain
+import SquidraCognition
 import SquidraPostgres
 import SquidraProtocols
 import XCTest
@@ -11,6 +12,40 @@ import XCTest
 
 // SAFETY: stateless suite; mutable fixtures are actors, SQL scopes are per scenario.
 final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
+    func testLiveCompositionOwnsReadPipelineAndReportsModelFreeLimitation() async throws {
+        try await RunHTTPTestSupport.withClients { client,_ in
+            let (fixture,model,_,source) = try await RunHTTPTestSupport.realHarness(client:client)
+            let host = try ReadHostConfiguration(models:[model],entities:[PlanningEntity(id:fixture.entity,label:"Allowed fixture entity")])
+            try await ServerComposition.live(configuration:fixture.configuration,readHost:host).test(.live) { http in
+                let capabilities = try await http.executeRequest(uri:"/api/v1/run-capabilities",method:.get,headers:[.authorization:"Bearer "+fixture.token],body:nil)
+                XCTAssertEqual(capabilities.status,.ok)
+                XCTAssertEqual(try RunHTTPTestSupport.object(capabilities.body)["textRuns"] as? Bool,true)
+                let accepted = try await http.executeRequest(uri:"/api/v1/runs",method:.post,headers:[.authorization:"Bearer "+fixture.token,.contentType:"application/json"],body:RunHTTPTestSupport.body(fixture.entity))
+                XCTAssertEqual(accepted.status,.accepted)
+                let path = try XCTUnwrap(accepted.headers[.location])
+                _ = try await RunHTTPTestSupport.completed(http,token:fixture.token,path:path)
+                let events = try await http.executeRequest(uri:path+"/events",method:.get,headers:[.authorization:"Bearer "+fixture.token],body:nil)
+                let frames = try RunHTTPTestSupport.frames(events.body)
+                let answer = try XCTUnwrap(frames[1].1["value"] as? [String:Any])
+                let evidence = try XCTUnwrap(answer["evidence"] as? [[String:Any]])
+                XCTAssertEqual((evidence.first?["id"] as? String).flatMap(UUID.init(uuidString:)),source)
+                let denied = try await http.executeRequest(uri:"/api/v1/runs",method:.post,headers:[.authorization:"Bearer "+fixture.token,.contentType:"application/json"],body:RunHTTPTestSupport.body(UUID()))
+                XCTAssertEqual(denied.status,.forbidden)
+            }
+            try await ServerComposition.live(configuration:fixture.configuration).test(.live) { http in
+                let anonymous = try await http.executeRequest(uri:"/api/v1/run-capabilities",method:.get,headers:[:],body:nil)
+                XCTAssertEqual(anonymous.status,.unauthorized)
+                let capabilities = try await http.executeRequest(uri:"/api/v1/run-capabilities",method:.get,headers:[.authorization:"Bearer "+fixture.token],body:nil)
+                let value = try RunHTTPTestSupport.object(capabilities.body)
+                XCTAssertEqual(value["textRuns"] as? Bool,false)
+                XCTAssertEqual(value["limitation"] as? String,"no_configured_read_host")
+                let unavailable = try await http.executeRequest(uri:"/api/v1/runs",method:.post,headers:[.authorization:"Bearer "+fixture.token,.contentType:"application/json"],body:RunHTTPTestSupport.body(fixture.entity))
+                XCTAssertEqual(unavailable.status,.serviceUnavailable)
+            }
+            let calls = await model.calls;XCTAssertEqual(calls,2)
+            await fixture.coordinator.shutdown()
+        }
+    }
     func testRealEngineHTTPAcceptanceStatusGroundingReplayAndExpiry() async throws {
         try await RunHTTPTestSupport.withClients { client,_ in
             let (fixture,model,reads,source) = try await RunHTTPTestSupport.realHarness(client:client)

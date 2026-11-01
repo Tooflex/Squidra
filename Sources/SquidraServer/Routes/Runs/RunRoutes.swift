@@ -33,8 +33,21 @@ enum RunRoutes {
             self.submission = submission;self.maximumWait = maximumWait
         }
     }
+    private struct Capabilities: Encodable {
+        let schemaVersion = "1"
+        let textRuns: Bool
+        let limitation: String?
+    }
     static let lastEventID = "Last-Event-ID"
     static func mount(_ router: Router<BoundaryContext>, dependencies: Dependencies?) {
+        router.get("/api/v1/run-capabilities") { request,context in
+            guard let dependencies else { throw HTTPError(.serviceUnavailable) }
+            try context.requireActor(dependencies.actorID)
+            guard request.uri.query == nil else { throw HTTPError(.badRequest) }
+            for try await part in request.body { guard part.readableBytes == 0 else { throw HTTPError(.badRequest) } }
+            let enabled = dependencies.submission != nil
+            return try json(.ok,Capabilities(textRuns:enabled,limitation:enabled ? nil : "no_configured_read_host"))
+        }
         router.post("/api/v1/runs") { request,context in
             do {
                 guard let dependencies,let submission = dependencies.submission else { throw HTTPError(.serviceUnavailable) }
