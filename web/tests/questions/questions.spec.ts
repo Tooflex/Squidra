@@ -20,3 +20,15 @@ test('foreign origin and late events after logout cannot leak credentials or rep
 
 test('bounded keepalive reads pause and continue the same run to a change answer',async({page})=>{const a:any=answer();a.claims[0].kind='change';a.claims[0].changeId=id(11);a.claims[0].changeKind='location_changed';const f=await fixture(page,events(a));let reads=0;await page.route('**/events',async route=>{reads++;await route.fulfill({contentType:'text/event-stream',body:reads<=4?': keepalive\n\n':frames(events(a))});});await open(page);await submit(page);await expect(page.getByRole('status')).toContainText('encore en attente');expect(reads).toBe(4);await expect(page.locator('#answer')).toBeEmpty();await page.locator('#continue').click();await expect(page.getByRole('heading',{name:'Réponse avec preuves'})).toBeVisible();await expect(page.locator('#answer')).toContainText('Changement');expect(f.posts).toHaveLength(1);});
 test('UTF-8 limits, oversized event response and revoked authentication fail closed',async({page})=>{const f=await fixture(page);await open(page);await page.locator('#entity').fill(entity);await page.locator('#question').fill('é'.repeat(2049));await page.locator('#submit-question').click();await expect(page.getByRole('alert')).toContainText('4 096 octets');expect(f.posts).toHaveLength(0);await page.route('**/events',route=>route.fulfill({contentType:'text/event-stream',body:'x'.repeat(1100001)}));await submit(page);await expect(page.getByRole('alert')).toContainText('volumineuse');await expect(page.locator('#answer')).toBeEmpty();await page.route('**/events',route=>route.fulfill({status:401,json:{}}));await page.locator('#continue').click();await expect(page.getByRole('alert')).toContainText('Session refusée');await expect(page.locator('#workspace')).toBeHidden();await expect(page.locator('#token')).toHaveValue('');});
+
+
+test('uppercase evidence IDs retain keyboard citation navigation with lowercase DOM anchors',async({page})=>{
+ const a=answer(),proof='ABCDEF00-0000-0000-0000-000000000009';
+ a.evidence[0]!.id=proof;a.claims[0]!.citationIds=[proof];
+ await fixture(page,events(a));await open(page);await submit(page);
+ const link=page.getByRole('link',{name:'Preuve '+proof,exact:true});
+ await link.focus();await page.keyboard.press('Enter');
+ const detail=page.locator('#proof-'+proof.toLowerCase());
+ await expect(detail).toBeFocused();await expect(detail).toHaveAttribute('open','');
+ await page.locator('#logout').click();await expect(page.locator('#answer')).toBeEmpty();
+});

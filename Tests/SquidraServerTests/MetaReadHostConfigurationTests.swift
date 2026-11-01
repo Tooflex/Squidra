@@ -49,7 +49,7 @@ final class MetaReadHostConfigurationTests: XCTestCase, @unchecked Sendable {
         all["SQUIDRA_PROFILE"] = "meta-qualification"
         let configured = try XCTUnwrap(ServerConfiguration(environment:all,clock:clock()).configuredReadHost)
         XCTAssertTrue(configured.models.first is MetaLanguageModel);XCTAssertTrue(configured.cloudConsent)
-        XCTAssertEqual(configured.maximumCostMicroUSD,20_000_000);XCTAssertEqual(configured.maximumOutputTokens,4096)
+        XCTAssertEqual(configured.maximumCostMicroUSD,20_000_000);XCTAssertEqual(configured.maximumOutputTokens,2048)
         XCTAssertEqual(configured.budget.retries,0)
         XCTAssertEqual(configured.entities.first?.id.uuidString.lowercased(),env["SQUIDRA_META_ENTITY_IDS"])
         let configuration = try ServerConfiguration(environment:all,clock:clock())
@@ -96,7 +96,14 @@ final class MetaReadHostConfigurationTests: XCTestCase, @unchecked Sendable {
         let configured = try host(environment(dir),transport:transport),model = try XCTUnwrap(configured.models.first)
         let input = ModelRequest(id:UUID(),messages:[.init(role:.user,content:"Fixture")],cloudConsent:configured.cloudConsent,
             maximumCostMicroUSD:configured.maximumCostMicroUSD,maximumOutputTokens:configured.maximumOutputTokens,deadline:try UTCInstant(secondsSince1970:now+5))
-        _ = try await model.generate(input);_ = try await model.generate(input)
+        let planner = try ReadPlanner(router:ModelRouter(models:configured.models,clock:clock()),clock:clock())
+        do {
+            _ = try await planner.plan(question:"Fixture",scope:ReadPlanningScope(entities:configured.entities),requestID:UUID(),
+                options:ReadPlanningOptions(cloudConsent:configured.cloudConsent,maximumCostMicroUSD:configured.maximumCostMicroUSD,
+                    maximumOutputTokens:configured.maximumOutputTokens,deadline:UTCInstant(secondsSince1970:now+5)))
+            XCTFail("The fake answer is intentionally not a valid plan")
+        } catch { XCTAssertEqual(error as? ReadPlanningError,.invalidProposal) }
+        _ = try await model.generate(input)
         do { _ = try await model.generate(input);XCTFail() } catch { XCTAssertEqual(error as? ModelRoutingError,.budgetExceeded) }
         let calls = await transport.calls;XCTAssertEqual(calls,2)
         let stored = try XCTUnwrap(JSONSerialization.jsonObject(with:Data(contentsOf:path)) as? [String:Any])

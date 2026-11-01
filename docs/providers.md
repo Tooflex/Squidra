@@ -499,7 +499,7 @@ Required additional configuration:
   actor/camera/scene-bound imported-entity scope. Explicit IDs may supplement it.
 
 All existing authentication, origin and local database settings remain required.
-The read host allows 4096 output tokens per call, reserves a conservative ten USD
+The read host allows 2048 output tokens per call (the planner limit), reserves a conservative ten USD
 per model attempt within a twenty-USD run allowance, and disables retries and
 fallback. The separate shared ledger reserves ten EUR for each actual attempt
 and retains the global 100 EUR cap across both language models and SAM. At least
@@ -517,3 +517,43 @@ profile returns to offline behavior without deleting runs or budget history.
 expiry, private-key-file rejection and actual adapter-to-file-budget execution
 with a fake transport and temporary ledger. No real credential or API call is
 used. End-to-end live question quality remains a separate qualification step.
+
+## Browser import-to-question qualification (2026-11-01)
+
+An explicitly authorized run used the normal CLI Meta profile, the real static
+`/import` and `/questions` pages, isolated PostgreSQL and the authored 8×8 fixture.
+The image import remained synthetic; only the public question and its scoped
+world evidence were sent to Spark. No SAM world-ingestion qualification is implied.
+
+The first attempt reserved one additional model call but the harness failed
+before saving its run diagnostic. Its charge and final model outcome remain
+unknown. The second attempt reserved two calls and completed the real planning,
+world read, answer validation and six-event publication flow. The browser rendered
+“Réponse avec preuves”. The answer cited exactly the imported source event,
+retained the image hash source, location and coordinate frame, microsecond
+observation/recording times, inferred basis and confidence 0.875. Runtime reached
+COMPLETED and publication succeeded. The model calls reported 348 and 776 output
+tokens, with a combined dated estimate of USD 0.006827.
+
+That second harness run failed afterward at its keyboard-focus assertion because
+it searched for an uppercase HTML ID while the UI deliberately lowercases proof
+anchors. The selector was corrected and the uppercase-proof keyboard/logout
+case was verified offline. The corrected full live harness was **not** rerun
+merely to recheck that selector; no claim of a fully green live harness exit or
+live screenshot is made. `fixtures/providers/meta-question-live.v1.json` preserves
+this distinction and the sanitized public-data evidence. The first failed attempt
+is not relabeled successful, and neither attempt's reservations are refunded.
+
+The shared ledger now contains **six attempts / 60 EUR reserved out of 100 EUR**.
+Known published-rate estimates across the initial probes and the completed
+question sum to USD 0.010307, excluding the unknown charge of the first failed
+question attempt. This is not invoiced spending. Four ten-EUR reservations remain.
+
+The live harness is deliberately absent from all CI/local-gate mappings. It can
+only be run explicitly with `SQUIDRA_META_QUESTION_LIVE=1` through
+`Scripts/dev-db.sh test-meta-question-live`. It uses the existing repository
+private key file and shared ledger, refuses fewer than two available reservations,
+and never automatically resubmits a question. The normal server, not a wrapper
+holding the ledger lock, reserves each actual call. Logs and temporary processes
+are bounded and owned; the persistent report excludes bearer keys, database
+credentials, provider response IDs and hidden reasoning.

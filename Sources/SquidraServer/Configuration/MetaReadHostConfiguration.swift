@@ -49,7 +49,7 @@ enum MetaReadHostConfiguration {
         let qualification = try MetaTextQualification(model:selected,maximumCostMicroUSD:10_000_000,validUntil:expires)
         let model = MetaLanguageModel(qualification:qualification,transport:transport,budget:budget,clock:clock)
         return try ReadHostConfiguration(models:[model],entities:entities,budget:RunBudget(retries:0),
-            allowSyntheticImportedEntities:allowsImportedEntities,cloudConsent:true,maximumCostMicroUSD:20_000_000,maximumOutputTokens:4096)
+            allowSyntheticImportedEntities:allowsImportedEntities,cloudConsent:true,maximumCostMicroUSD:20_000_000,maximumOutputTokens:2048)
     }
     private static func readKey(_ path: String) throws -> String {
         guard path.hasPrefix("/"),!path.contains("\0"),path.utf8.count <= 4096 else { throw Invalid.credential }
