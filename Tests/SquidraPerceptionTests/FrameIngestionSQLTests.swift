@@ -13,6 +13,20 @@ import SquidraTools
 import SquidraWorld
 import XCTest
 
+private actor PublicationSAMBudget: MetaSAMAttemptBudget {
+    private(set) var calls = 0
+    func reserveSAM(attemptID: UUID, frameID: UUID, deadline: ContinuousClock.Instant) { calls += 1 }
+}
+private actor PublicationSAMTransport: MetaResponsesTransport {
+    let text: String
+    private(set) var calls = 0
+    init(text: String) { self.text = text }
+    func post(_ body: Data, maximumResponseBytes: Int, deadline: ContinuousClock.Instant) throws -> MetaHTTPResponse {
+        calls += 1
+        return MetaHTTPResponse(status:200,contentType:"application/json",body:try JSONSerialization.data(withJSONObject:["object":"response","model":"sam-3.1","status":"completed","output":[["type":"message","role":"assistant","status":"completed","content":[["type":"output_text","text":text]]]]]))
+    }
+}
+
 private actor FrameAnswerFixture: LanguageModel {
     nonisolated let descriptor = ModelDescriptor(id:"fixture.frame-answer",modelVersion:"1",location:.local,capabilities:[.text,.structuredOutput])
     let responses: [String]
@@ -85,6 +99,53 @@ final class FrameIngestionSQLTests: XCTestCase, @unchecked Sendable {
     private static func count(_ client: PostgresClient, actor: UUID) async throws -> Int64 {
         let rows = try await client.query("SELECT count(*)::bigint FROM world_events WHERE actor_id=\(actor)").collect()
         return try rows[0].decode(Int64.self)
+    }
+    func testAdmittedSAMPublicationPreservesCloudProvenanceAndExactReadScope() async throws {
+        try await Self.withClients { client,second in
+            let original = try await Self.scene(client)
+            let capture = try XCTUnwrap(JSONSerialization.jsonObject(with:Data(contentsOf:Self.root.appendingPathComponent("fixtures/providers/sam-image-live.v1.json"))) as? [String:Any])
+            let report = try XCTUnwrap(capture["report"] as? [String:Any]),text = try XCTUnwrap(report["segmentationText"] as? String)
+            let transport = PublicationSAMTransport(text:text),budget = PublicationSAMBudget()
+            let model = try MetaSAMVisionModel(concept:"red square",transport:transport)
+            let policy = try FrameScenePolicy(actorID:original.actorID,cameraID:original.cameraID,locationID:original.locationID,coordinateFrameID:original.coordinateFrameID,cloudIdentity:model.identity)
+            XCTAssertThrowsError(try PostgresFrameIngestion(client:client,model:model,policy:original))
+            XCTAssertThrowsError(try PostgresFrameIngestion(client:client,model:model,policy:policy))
+            let wrongIdentity = try VisionIdentity(modelID:"meta.sam",version:"alias:other",deployment:.cloud)
+            let wrongPolicy = try FrameScenePolicy(actorID:policy.actorID,cameraID:policy.cameraID,locationID:policy.locationID,coordinateFrameID:policy.coordinateFrameID,cloudIdentity:wrongIdentity)
+            XCTAssertThrowsError(try PostgresFrameIngestion(client:client,model:model,policy:wrongPolicy,cloudAdmission:MetaSAMCloudAdmission(budget:budget)))
+            let pipeline = try PostgresFrameIngestion(client:client,model:model,policy:policy,cloudAdmission:MetaSAMCloudAdmission(budget:budget))
+            let bytes = try Data(contentsOf:Self.root.appendingPathComponent("fixtures/providers/sam-red-square.png")),context = try Self.context(policy)
+            do { _ = try await pipeline.ingest(bytes:bytes,mediaType:"image/png",context:context,consent:Self.consent(policy),deadline:.now.advanced(by:.seconds(15)));XCTFail() }
+            catch { XCTAssertEqual(error as? FramePublicationError,.consentRequired) }
+            let before = await transport.calls;XCTAssertEqual(before,0)
+            let consent = FrameImportConsent(actorID:policy.actorID,cameraID:policy.cameraID,permitsLocalProcessing:true,permitsCloudTransfer:true,expiresAt:.now.advanced(by:.seconds(60)))
+            let receipt = try await pipeline.ingest(bytes:bytes,mediaType:"image/png",context:context,consent:consent,deadline:.now.advanced(by:.seconds(15)))
+            XCTAssertEqual(receipt.locations.count,1);XCTAssertEqual(receipt.resolution.identity.deployment,.cloud)
+            let payload = try XCTUnwrap(JSONSerialization.jsonObject(with:receipt.observation.draft.payload.bytes) as? [String:Any])
+            XCTAssertEqual(payload["deployment"] as? String,"cloud");XCTAssertEqual(payload["modelId"] as? String,"meta.sam");XCTAssertEqual(payload["modelVersion"] as? String,"alias:sam-3.1")
+            for forbidden in ["imageBase64","mask","appearance"] { XCTAssertNil(payload[forbidden]) }
+            let subject = try XCTUnwrap(receipt.resolution.assignments.first?.entityID),event = try XCTUnwrap(receipt.locations.first)
+            let snapshot = try await PostgresLocationProjection(actorID:policy.actorID,client:second).state(actorID:policy.actorID,subjectID:subject,validAt:context.timestamps.observedAt,knownAt:event.recordedAt,deadline:.now.advanced(by:.seconds(4)))
+            let fact = try XCTUnwrap(snapshot.facts.first)
+            XCTAssertEqual(fact.basis,.inferred);XCTAssertEqual(fact.sourceEventID,event.draft.id)
+            XCTAssertEqual(fact.sourceID,"cloud-frame:"+receipt.resolution.imageSHA256);XCTAssertEqual(fact.confidence.value,0.8787879347801208)
+            XCTAssertEqual(fact.locationID,policy.locationID);XCTAssertEqual(fact.frameID,policy.coordinateFrameID)
+            let allowed = try await PostgresImportedEntityReadScope(client:second,policy:policy).contains(subject,deadline:.now.advanced(by:.seconds(4)))
+            XCTAssertTrue(allowed)
+            let wrongCamera = try FrameScenePolicy(actorID:policy.actorID,cameraID:UUID(),locationID:policy.locationID,coordinateFrameID:policy.coordinateFrameID,cloudIdentity:model.identity)
+            for deniedPolicy in [original,wrongPolicy,wrongCamera] {
+                let denied = try await PostgresImportedEntityReadScope(client:second,policy:deniedPolicy).contains(subject,deadline:.now.advanced(by:.seconds(4)))
+                XCTAssertFalse(denied)
+            }
+            // Missing confidence never becomes a fabricated journal score.
+            let missing = text.replacingOccurrences(of:";c=[^;|]+",with:"",options:.regularExpression)
+            let noScoreModel = try MetaSAMVisionModel(concept:"red square",transport:PublicationSAMTransport(text:missing))
+            let noScore = try PostgresFrameIngestion(client:client,model:noScoreModel,policy:policy,cloudAdmission:MetaSAMCloudAdmission(budget:budget))
+            do { _ = try await noScore.ingest(bytes:bytes,mediaType:"image/png",context:Self.context(policy,index:1),consent:consent,deadline:.now.advanced(by:.seconds(15)));XCTFail() }
+            catch { XCTAssertEqual(error as? FramePublicationError,.invalidDetections) }
+            let count = try await Self.count(client,actor:policy.actorID),reservations = await budget.calls
+            XCTAssertEqual(count,2);XCTAssertEqual(reservations,2)
+        }
     }
     func testPNGToPersistedInferenceToGroundedAnswerAndReplay() async throws {
         try await Self.withClients { client,second in
