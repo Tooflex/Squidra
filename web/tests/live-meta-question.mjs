@@ -2,11 +2,12 @@
 import {readFile,writeFile} from 'node:fs/promises';
 import {chromium,expect} from '@playwright/test';
 if(process.env.SQUIDRA_META_QUESTION_LIVE!=='1')throw Error('Live opt-in required');
+const sam=process.env.SQUIDRA_SAM_QUESTION_LIVE==='1';
 const manifest=process.env.SQUIDRA_WEB_MANIFEST,reportPath=process.env.SQUIDRA_META_REPORT;
 const m=JSON.parse(await readFile(manifest,'utf8'));
 const fixture=JSON.parse(await readFile(new URL('../../fixtures/providers/vision-synthetic.v1.json',import.meta.url),'utf8'));
 const browser=await chromium.launch();let run,answer;const events=[],errors=[];
-const report={schemaVersion:1,checkedAt:new Date().toISOString(),model:'muse-spark-1.3',outcome:'failed',source:'authored_synthetic'};
+const report={schemaVersion:1,checkedAt:new Date().toISOString(),model:'muse-spark-1.3',outcome:'failed',source:sam?'public_sam_image':'authored_synthetic'};
 process.once('SIGTERM',async()=>{await browser.close();process.exit(1);});
 try {
  const page=await browser.newPage();let posts=0;
@@ -14,11 +15,12 @@ try {
  page.on('request',r=>{if(r.method()==='POST'&&r.url().endsWith('/api/v1/runs'))posts++;});
  async function login(path){await page.goto(process.env.SQUIDRA_WEB_ORIGIN+path);await page.locator('#origin').fill(process.env.SQUIDRA_API_ORIGIN);await page.locator('#token').fill(process.env.SQUIDRA_WEB_TOKEN);await page.getByRole('button',{name:'Se connecter',exact:true}).click();await expect(page.locator('#workspace')).toBeVisible();}
  await login('/import');
- await page.locator('#image').setInputFiles({name:'public-fixture.png',mimeType:'image/png',buffer:Buffer.from(fixture.frames[0].imageBase64,'base64')});
+ await page.locator('#image').setInputFiles({name:'public-fixture.png',mimeType:'image/png',buffer:sam?await readFile(new URL('../../fixtures/providers/sam-red-square.png',import.meta.url)):Buffer.from(fixture.frames[0].imageBase64,'base64')});
  await page.locator('#consent').check();
+ if(sam)await page.locator('#cloud-consent').check();
  const imported=page.waitForResponse(r=>r.url().endsWith('/api/v1/frames/import')&&r.request().method()==='POST');
  await page.locator('#submit-import').click();const receiptResponse=await imported;expect(receiptResponse.status()).toBe(201);
- const receipt=await receiptResponse.json();await writeFile(manifest+'.receipt.json',JSON.stringify(receipt),{mode:0o600});
+ const receipt=await receiptResponse.json();expect(receipt.deployment).toBe(sam?'cloud':'synthetic');expect(receipt.modelId).toBe(sam?'meta.sam':'fixture.vision');expect(receipt.modelVersion).toBe(sam?'alias:sam-3.1':'1.0.0');await writeFile(manifest+'.receipt.json',JSON.stringify(receipt),{mode:0o600});
  const entity=receipt.entities.at(-1),question=`Quelle était la position de cette entité au ${receipt.observedAt}, selon les informations connues au ${receipt.knownAt} ? Cite les preuves et précise si la position est observée ou inférée.`;
  report.question=question;report.receipt=receipt;
  await login('/questions');await expect(page.locator('#entity')).toBeFocused();
@@ -50,8 +52,10 @@ try {
  const same=(a,b)=>a.toLowerCase()===b.toLowerCase();
  const proof=answer.evidence.find(e=>same(e.id,entity.sourceEventId));expect(proof).toBeTruthy();
  expect(same(proof.subjectId,entity.id)&&same(proof.locationId,m.scene)&&same(proof.frameId,m.coordinate)).toBe(true);
- expect(proof.observedAt).toBe(receipt.observedAt);expect(proof.recordedAt).toBe(receipt.knownAt);expect(proof.confidence).toBe(0.875);expect(proof.basis).toBe('inferred');
- expect(proof.source).toBe('synthetic-frame:'+receipt.imageSHA256);
+ expect(proof.observedAt).toBe(receipt.observedAt);expect(proof.recordedAt).toBe(receipt.knownAt);if(sam){expect(proof.confidence).toBeGreaterThanOrEqual(0.5);expect(proof.confidence).toBeLessThanOrEqual(1);}else expect(proof.confidence).toBe(0.875);expect(proof.basis).toBe('inferred');
+ expect(proof.source).toBe((sam?'cloud-frame:':'synthetic-frame:')+receipt.imageSHA256);
+ // Save proof for the independent SQL verifier to compare with actual detection confidence.
+ await writeFile(manifest+'.proof.json',JSON.stringify(proof),{mode:0o600});
  expect(answer.claims.some(c=>c.kind==='location'&&same(c.subjectId,entity.id)&&c.citationIds.some(id=>same(id,entity.sourceEventId)))).toBe(true);
  const link=page.getByRole('link',{name:'Preuve '+proof.id,exact:true});await link.focus();await page.keyboard.press('Enter');await expect(page.locator('#proof-'+proof.id.toLowerCase())).toBeFocused();
  await page.screenshot({path:reportPath+'.png',fullPage:true});
