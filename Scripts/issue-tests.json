@@ -793,5 +793,20 @@
       "model_free_server_recovery",
       "second_server_replay"
     ]
+  },
+  "SQD-028-PREPLANNING-CRASH": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-preplanning-crash"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "preplanning_worker_sigkill",
+      "preplanning_continuation",
+      "model_free_server_recovery",
+      "second_server_replay"
+    ]
   }
 }

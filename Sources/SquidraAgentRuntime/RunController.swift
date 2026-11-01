@@ -25,6 +25,28 @@ public actor RunController {
         return RunController(record: record, store: store, clock: clock, tick: tick)
     }
 
+    /// Host-only continuation after the old worker has stopped. These states
+    /// precede the first model/tool dispatch; later checkpoints are ineligible.
+    static func restoreBeforePlanning(actorID: UUID,id: UUID,traceID: UUID,expectedVersion: Int64,
+        store: any RunStore,clock: any SquidraDomain.Clock) async throws -> RunController {
+        var record = try await store.load(actorID:actorID,runID:id,deadline:.now.advanced(by:.seconds(4)))
+        try record.validate()
+        guard record.actorID == actorID,record.id == id,record.traceID == traceID,record.version == expectedVersion,
+              [.created,.validating,.contextLoading].contains(record.state),record.steps == 0,record.calls == 0,
+              record.iteration == nil,record.invocation == nil,let wallEnd = record.deadlineSecondsSince1970 else { throw RunError.recoveryRequired }
+        let tick = clock.monotonicElapsed(),remaining = (wallEnd - (try clock.now()).secondsSince1970)*1000
+        guard tick >= .zero,remaining.isFinite,remaining <= Double(record.budget.activeMilliseconds-record.activeMilliseconds)+0.001 else { throw RunError.clockRegression }
+        record.activeMilliseconds = record.budget.activeMilliseconds-Int64(max(0,remaining.rounded(.down)))
+        if record.activeMilliseconds >= record.budget.activeMilliseconds {
+            record.state = .timedOut;record.terminalCode = .timedOut;record.substate = nil;record.deadlineSecondsSince1970 = nil
+        }
+        guard record.version < Int64.max else { throw RunError.invalidCheckpoint }
+        record.version += 1
+        try record.validate()
+        try await store.compareAndSet(record,expectedVersion:expectedVersion,deadline:.now.advanced(by:.seconds(4)))
+        return RunController(record:record,store:store,clock:clock,tick:tick)
+    }
+
     /// Explicitly reattach only a durable approval wait. Active crash recovery is
     /// deferred to SQD-028: losing a monotonic anchor must not replenish budgets.
     public static func restoreWaiting(actorID: UUID, id: UUID, store: any RunStore,
