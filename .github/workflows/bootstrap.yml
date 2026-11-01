@@ -99,6 +99,8 @@ jobs:
         run: bash Scripts/test-issue.sh T11-CONTRACTS
       - name: Meta Responses bounded client contract
         run: bash Scripts/test-issue.sh T11-META-RESPONSES
+      - name: Meta HTTPS bounded transport
+        run: bash Scripts/test-issue.sh T11-META-TRANSPORT
       - name: Verify consent-bound offline frame imports
         run: bash Scripts/test-issue.sh SQD-020-OFFLINE
       - name: Verify bounded entity association and ambiguous identity handling

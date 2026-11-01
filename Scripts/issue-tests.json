@@ -1095,5 +1095,9 @@
   "T11-META-RESPONSES": {
     "kind": "xctest",
     "filter": "^SquidraMetaTests\\.MetaResponsesTests/"
+  },
+  "T11-META-TRANSPORT": {
+    "kind": "xctest",
+    "filter": "^SquidraMetaTests\\.MetaHTTPTransportTests/"
   }
 }

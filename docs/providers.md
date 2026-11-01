@@ -165,8 +165,7 @@ There is no retry, polling or fallback.
 The transport is injected and must enforce response limits while receiving,
 refuse redirects and cooperate with cancellation. The client independently
 validates the complete response and joins the deadline/cancellation tasks. This
-component is **not yet registered as a LanguageModel**: a production authenticated
-transport, qualified spending bounds/accounting and explicit server configuration
+component is **not yet registered as a LanguageModel**: qualified spending bounds/accounting and explicit server configuration
 remain necessary. No environment key is read and no network transport is
 implicitly created by this component.
 
@@ -183,3 +182,33 @@ Contract sources re-read on 2026-11-01:
 [structured output](https://dev.meta.ai/docs/structured-output). The protocol
 specifies max_output_tokens as reasoning plus visible output with a minimum of
 16, and uses text.format rather than Chat Completions' response_format.
+
+
+## Explicit HTTPS transport (offline tested)
+
+`MetaHTTPSResponseTransport` accepts a server-side bearer key explicitly and
+posts only to the fixed Meta Responses endpoint. It does not read environment
+variables or activate the server's cloud configuration. Descriptions redact the
+key; invalid bearer characters are rejected. Each request uses an ephemeral
+session without cookies, URL cache or credential storage. Redirects are refused,
+TLS uses system trust, and interactive authentication is rejected.
+
+The delegate bounds successful response bytes as chunks arrive, rejects an
+oversized declared length, and discards non-200 bodies. Caller cancellation and
+the monotonic deadline cancel the URLSession task. Errors expose typed status or
+transport failures without provider bodies, URLs or credential values. No
+application retry is implemented. Foundation may buffer before delegate delivery;
+the byte limit applies to the application accumulator, not all TLS/system memory.
+
+`bash Scripts/test-issue.sh T11-META-TRANSPORT` exercises seven tests using an
+intercepting URLProtocol with fabricated credentials. They cover request headers,
+chunk assembly, error-body discard, declared/chunk overflow, redirect refusal,
+deadline/caller cancellation, invalid input and sanitized network failures.
+Darwin exercises URLProtocol redirects; FoundationNetworking exercises the
+redirect delegate directly because its URLProtocol redirect callback is unsupported. These tests do not
+qualify Linux TLS, real Meta access, account retention, inference or billing.
+
+The user's selected deployment for both language models and SAM 3.1 is hosted
+API access. Both credentials will be supplied later. SAM still requires its own
+segmentation request/decoder contract and qualification; this text-response
+transport alone does not implement SAM or enable image upload.
