@@ -87,6 +87,8 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-018
       - name: Qualify conservative calibrated spatial relations
         run: bash Scripts/test-issue.sh SQD-022
+      - name: Verify calibrated camera LiDAR fixture
+        run: bash Scripts/test-issue.sh SQD-024
       - name: Verify confirmed movement evidence and abstention
         run: bash Scripts/test-issue.sh T07-UNIT
       - name: Measure frozen component benchmark

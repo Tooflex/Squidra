@@ -1,0 +1,21 @@
+{
+  "build": "Swift debug test; fusion only, excludes parsing/rectification/encoding",
+  "calibrationMetricResidualMeters": 0,
+  "calibrationPixelResidual": 0,
+  "coloredPointCount": 4,
+  "coveredPointCount": 4,
+  "fixture": "rectified-rig.v1.json",
+  "hostOS": "Version 27.0.1 (assemblage 26A434)",
+  "maximumCoordinateUncertaintyMeters": 0.008000001999952707,
+  "maximumErrorMeters": 0.003741657386773767,
+  "maximumTimestampSkewSeconds": 0.0019999999999527063,
+  "measuredAt": "2026-11-01T20:45:04Z",
+  "pointCount": 4,
+  "processingNanoseconds": 60084,
+  "provenance": "authored_calibrated_fixture_not_physical_sensor",
+  "rmseMeters": 0.0032787192621508087,
+  "schemaVersion": 1,
+  "thresholdBasis": "fixture checks only; no SRS latency or accuracy threshold asserted",
+  "verificationCommand": "bash Scripts/test-issue.sh SQD-024",
+  "runtime": "Swift 6.4.2 / arm64 macOS debug"
+}
