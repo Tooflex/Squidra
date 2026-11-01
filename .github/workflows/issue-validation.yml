@@ -1,0 +1,31 @@
+name: Issue Validation
+
+# Automatic issue events are enabled when the temporary CI pause ends.
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Issue to validate (no agent is launched)
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Verify validator contracts
+        run: python3 Scripts/validate-issue/test_validate.py
+      - name: Verify current issue and author permissions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+        run: python3 Scripts/validate-issue/validate.py --issue "$ISSUE_NUMBER"

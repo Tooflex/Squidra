@@ -24,12 +24,13 @@ class LocalChecksTests(unittest.TestCase):
         self.assertTrue(issues)
         self.assertEqual(json.loads((root / 'Scripts/local-checks.json').read_text()), issues)
 
-    def exercise(self, args=(), fail=None, empty_status='empty_selection', change_lock=False):
+    def exercise(self, args=(), fail=None, empty_status='empty_selection', change_lock=False,
+                 non_database_command=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'Scripts').mkdir()
             (root / 'Scripts/issue-tests.json').write_text(json.dumps({
-                'T01': {'kind': 'xctest'}, 'T02': {'kind': 'command'}}))
+                'T01': {'kind': 'xctest'}, 'T02': {'kind': 'command', 'requires_database': not non_database_command}}))
             (root / 'Scripts/local-checks.json').write_text('["T01", "T02"]')
             (root / 'Package.resolved').write_text('locked')
             commands = []
@@ -74,6 +75,12 @@ class LocalChecksTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(report['steps'][-1]['exit_code'], 7)
         self.assertEqual(report['not_executed'], ['T01', 'T02'])
+
+    def test_non_database_commands_run_in_unit_mode(self):
+        code, report, _ = self.exercise(['--unit-only'], non_database_command=True)
+        self.assertEqual(code, 0)
+        self.assertEqual(report['omitted'], [])
+        self.assertIn('T02', [step['name'] for step in report['steps']])
 
     def test_integration_retry_explicitly_omits_unit_suites(self):
         code, report, commands = self.exercise(['--integration-only'])

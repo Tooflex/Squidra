@@ -62,8 +62,8 @@ def main():
             run('database-build', ['bash', 'Scripts/dev-db.sh', 'build'])
         run('empty-selection', ['bash', 'Scripts/test-issue.sh', 'T01', '--filter', '^MissingSuite/'], True)
         for issue in selection:
-            if ((args.unit_only and suites[issue]['kind'] == 'command') or
-                    (args.integration_only and suites[issue]['kind'] != 'command')):
+            database = suites[issue].get('requires_database', suites[issue]['kind'] == 'command')
+            if ((args.unit_only and database) or (args.integration_only and not database)):
                 report['omitted'].append(issue)
                 continue
             run(issue, ['bash', 'Scripts/test-issue.sh', issue])
