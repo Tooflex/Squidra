@@ -29,7 +29,7 @@ def execute(identity,log):
     state=json.loads(docker('inspect',identity).stdout)[0]['State']
     if result.returncode or state['Running'] or state['ExitCode']:
         print(output.decode(errors='replace'));raise RuntimeError('Linux package stage failed')
-    return output
+    return result.stdout
 
 # A source commit is a verifiable package identity; never label a dirty snapshot clean.
 if run(['git','status','--porcelain'],cwd=root).stdout.strip():raise SystemExit('Commit the candidate before Linux package qualification')
