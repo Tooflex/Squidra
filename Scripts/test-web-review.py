@@ -11,9 +11,9 @@ web = root / 'web'
 report = web / 'test-results/report.json'
 report.unlink(missing_ok=True)
 mode = sys.argv[1] if len(sys.argv) == 2 else 'review'
-if len(sys.argv) > 2 or mode not in ['review', 'timeline', 'approvals']:
+if len(sys.argv) > 2 or mode not in ['review', 'timeline', 'approvals', 'import']:
     sys.exit('Unknown browser suite')
-selection = {'review': 'tests/review.spec.ts', 'timeline': 'tests/timeline/', 'approvals': 'tests/approvals/'}[mode]
+selection = {'review': 'tests/review.spec.ts', 'timeline': 'tests/timeline/', 'approvals': 'tests/approvals/', 'import': 'tests/import/'}[mode]
 expected = 6
 commands = [['npm', 'ci', '--ignore-scripts'], ['npx', '--no-install', 'playwright', 'install', 'chromium'], ['npm', 'test', '--', selection]]
 if sys.platform.startswith('linux') and os.environ.get('CI') == 'true':

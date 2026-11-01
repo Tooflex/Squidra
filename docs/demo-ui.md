@@ -165,3 +165,40 @@ are removed rather than echoed; fixture/browser phases have bounded waits and
 owned servers are stopped and joined. No production fixture mode, model calls,
 new dependency or schema migration is introduced. Linux and manual screen-reader
 qualification remain separate from these local macOS checks.
+
+## Synthetic frame import
+
+Open `/import` from the review page. Configure the explicit synthetic import
+profile described in [frame-ingestion.md](frame-ingestion.md), including the
+actor-owned scene and coordinate frame. Connect using the local API origin and
+owner token, select the PNG from the frozen provider fixture, and grant local
+processing consent. The client accepts at most 512 KiB and checks the PNG
+signature before sending the closed import body. Full PNG validation and fixture
+recognition remain server responsibilities.
+
+The receipt must match the selected image's SHA-256 and the synthetic/inferred,
+non-retained profile. It displays the observation event, per-entity location
+source events, camera, source image, spatial frame, model identity, and exact
+`observedAt`/`knownAt` strings. These dates retain microseconds: converting them
+through JavaScript Date or a datetime-local field could select the wrong instant
+in the one-second validity interval. Copy the full values when querying the API.
+
+The owner token exists only in page memory. Logout clears file selection and
+receipt and discards late responses. The page blocks duplicate submissions;
+after any sent request, another observation requires an explicit fresh file
+selection and consent. No automatic retry occurs. Interrupted or invalid responses
+are not proof of failure to write: inspect the journal/world before intentionally
+creating another observation. Reloading this page does not recover receipts.
+
+The capability endpoint reports whether a read host exists. The default CLI has
+none, and the page explicitly reports that free-text questions are unavailable.
+This page does not yet submit questions even when a host advertises support.
+It does not substitute a structured temporal lookup for a free-text answer.
+
+`bash Scripts/test-issue.sh T06-IMPORT` runs six typed Chromium scenarios with
+mock API responses: keyboard/provenance/XSS, consent/size/signature, duplicate
+submission/interruption, malformed or mismatched receipt, HTTP failures, and
+origin/logout isolation. The screenshot was inspected locally. These tests do
+not establish integrated browser/PostgreSQL behavior; `SQD-020-HTTP` separately
+covers the real server import and world readback. The full import-to-question-to-
+evidence workflow remains open in #42, as does real provider qualification #47.
