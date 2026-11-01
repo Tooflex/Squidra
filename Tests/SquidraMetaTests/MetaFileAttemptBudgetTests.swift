@@ -37,10 +37,13 @@ final class MetaFileAttemptBudgetTests: XCTestCase, @unchecked Sendable {
         let dir = try directory();var value = initial()
         let old: [String:Any] = ["id":UUID().uuidString.lowercased(),"model":"sam-3.1","reservedEURCents":1000,"status":"failed","report":["outcome":"failed","observed":true]]
         value["attempts"] = [old];try save(value,to:dir)
-        for _ in 0..<9 { try await reserve(budget(dir)) }
+        for index in 0..<9 {
+            if index % 2 == 0 { try await budget(dir).reserveSAM(attemptID:UUID(),frameID:UUID(),deadline:.now.advanced(by:.seconds(3))) }
+            else { try await reserve(budget(dir)) }
+        }
         do { try await reserve(budget(dir));XCTFail() } catch { XCTAssertEqual(error as? ModelRoutingError,.budgetExceeded) }
         let attempts = try XCTUnwrap(load(dir)["attempts"] as? [[String:Any]])
-        XCTAssertEqual(attempts.count,10);XCTAssertEqual(attempts.first? ["id"] as? String,old["id"] as? String)
+        XCTAssertEqual(attempts.count,10);XCTAssertEqual(attempts[1]["model"] as? String,"sam-3.1");XCTAssertEqual(attempts.first? ["id"] as? String,old["id"] as? String)
         XCTAssertEqual((attempts[0]["report"] as? [String:Any])?["observed"] as? Bool,true)
         XCTAssertTrue(attempts.dropFirst().allSatisfy { $0["status"] as? String == "reserved" && $0["report"] is NSNull })
     }

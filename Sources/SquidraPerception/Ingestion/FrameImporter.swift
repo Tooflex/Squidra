@@ -1,26 +1,43 @@
 import Crypto
 import Foundation
 
+/// Trusted host admission: must reserve the cloud attempt before returning,
+/// cooperate with cancellation and never derive authorization from provider data.
+public protocol VisionCloudAdmission: Sendable {
+    func authorize(identity: VisionIdentity, request: VisionRequest) async throws
+}
 public struct FrameImporter: Sendable {
     private let model: any VisionModel
     private let identity: VisionIdentity
-    public init(model: any VisionModel) { self.model = model; self.identity = model.identity }
+    private let cloudAdmission: (any VisionCloudAdmission)?
+    public init(model: any VisionModel, cloudAdmission: (any VisionCloudAdmission)? = nil) {
+        self.model = model; self.identity = model.identity; self.cloudAdmission = cloudAdmission
+    }
     public func ingest(bytes: Data, mediaType: String, context: FrameContext, consent: FrameImportConsent,
                        deadline: ContinuousClock.Instant) async throws -> ImportedFrame {
         try Self.check(deadline)
         try authorize(context, consent: consent)
-        // No cloud transport has qualified retention, wire decoding or a cost
-        // reservation yet (T11). Consent alone cannot activate live inference.
-        guard identity.deployment != .cloud else { throw VisionError.unavailable }
+        // Consent alone does not activate cloud inference. The trusted host must
+        // also supply provider qualification and durable spending admission.
+        guard identity.deployment != .cloud || cloudAdmission != nil else { throw VisionError.unavailable }
         let image = try PNGFrame(bytes: bytes, mediaType: mediaType)
         let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
-        let effectiveDeadline = min(deadline, .now.advanced(by: .seconds(5)), consent.expiresAt)
+        let effectiveDeadline = min(deadline, .now.advanced(by: .seconds(identity.deployment == .cloud ? 30 : 5)), consent.expiresAt)
         try Self.check(effectiveDeadline)
         let request = VisionRequest(context: context, image: image, imageSHA256: digest, deadline: effectiveDeadline)
         let output: VisionOutput
         do {
             output = try await withThrowingTaskGroup(of: VisionOutput.self) { group in
-                group.addTask { try await model.detect(request) }
+                group.addTask {
+                    if identity.deployment == .cloud {
+                        guard let cloudAdmission else { throw VisionError.unavailable }
+                        try await cloudAdmission.authorize(identity:identity,request:request)
+                        try Self.check(effectiveDeadline)
+                        try authorize(context,consent:consent)
+                    }
+                    guard model.identity == identity else { throw VisionError.invalidOutput }
+                    return try await model.detect(request)
+                }
                 group.addTask { try await ContinuousClock().sleep(until: effectiveDeadline); throw VisionError.timeout }
                 defer { group.cancelAll() }
                 guard let value = try await group.next() else { throw VisionError.unavailable }; return value
