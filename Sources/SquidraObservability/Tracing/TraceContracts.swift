@@ -12,15 +12,17 @@ public struct TraceCorrelation: Equatable, Sendable {
     }
 }
 public struct TraceUsage: Sendable {
-    public let inputTokens: Int?, outputTokens: Int?, costMicroUSD: Int64?, worldSequence: Int64?
+    public let inputTokens: Int?, outputTokens: Int?, costMicroUSD: Int64?, estimatedCostMicroUSD: Int64?, worldSequence: Int64?
     public let requestID: UUID?, eventID: UUID?, ledgerID: UUID?
-    public init(inputTokens: Int? = nil, outputTokens: Int? = nil, costMicroUSD: Int64? = nil, worldSequence: Int64? = nil,
+    public init(inputTokens: Int? = nil, outputTokens: Int? = nil, costMicroUSD: Int64? = nil, estimatedCostMicroUSD: Int64? = nil, worldSequence: Int64? = nil,
                 requestID: UUID? = nil, eventID: UUID? = nil, ledgerID: UUID? = nil) throws {
         guard inputTokens.map({ (0...1_000_000_000).contains($0) }) ?? true,
               outputTokens.map({ (0...1_000_000_000).contains($0) }) ?? true,
               costMicroUSD.map({ (0...1_000_000_000_000).contains($0) }) ?? true,
+              estimatedCostMicroUSD.map({ (0...1_000_000_000_000).contains($0) }) ?? true,
+              costMicroUSD == nil || estimatedCostMicroUSD == nil,
               worldSequence.map({ $0 > 0 }) ?? true else { throw PrivateTraceError.invalidUsage }
-        self.inputTokens = inputTokens; self.outputTokens = outputTokens; self.costMicroUSD = costMicroUSD; self.worldSequence = worldSequence
+        self.inputTokens = inputTokens; self.outputTokens = outputTokens; self.costMicroUSD = costMicroUSD; self.estimatedCostMicroUSD = estimatedCostMicroUSD; self.worldSequence = worldSequence
         self.requestID = requestID; self.eventID = eventID; self.ledgerID = ledgerID
     }
 }

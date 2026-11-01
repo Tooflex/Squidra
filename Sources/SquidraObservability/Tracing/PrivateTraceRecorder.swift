@@ -86,7 +86,8 @@ public actor PrivateTraceRecorder {
     internal func recordUsage(traceToken:UUID,spanToken:UUID,usage:TraceUsage) {
         guard let span = traces[traceToken]?.spans[spanToken] else { return }
         for (key,value) in [("squidra.input_tokens",usage.inputTokens),("squidra.output_tokens",usage.outputTokens),
-                            ("squidra.cost_micro_usd",usage.costMicroUSD.map(Int.init)),("squidra.world_sequence",usage.worldSequence.map(Int.init))] {
+                            ("squidra.cost_micro_usd",usage.costMicroUSD.map(Int.init)),
+                            ("squidra.estimated_cost_micro_usd",usage.estimatedCostMicroUSD.map(Int.init)),("squidra.world_sequence",usage.worldSequence.map(Int.init))] {
             if let value { span.setAttribute(key:key,value:value) }
         }
         for (key,value) in [("squidra.request_id",usage.requestID),("squidra.event_id",usage.eventID),("squidra.ledger_id",usage.ledgerID)] {
