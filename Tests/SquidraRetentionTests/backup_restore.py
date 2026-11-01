@@ -55,7 +55,8 @@ try:
         assert fixture.endswith('ROLLBACK;\n')
         sql(fixture[:-len('ROLLBACK;\n')] + 'COMMIT;\n')
         sql("INSERT INTO agent_runs(id,actor_id,state,version,trace_id) VALUES('70000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','COMPLETED',7,'80000000-0000-0000-0000-000000000001');")
-        tables = ['squidra_schema_migrations', 'coordinate_frames', 'world_entities', 'observations', 'world_events', 'world_event_entities', 'spatial_facts', 'projection_versions', 'agent_runs']
+        sql("INSERT INTO retained_media(actor_id,frame_id,captured_us,expires_us,media_type,byte_count,blob) VALUES('00000000-0000-0000-0000-000000000001',gen_random_uuid(),0,1000000,'image/png',2,decode('01ff','hex')); INSERT INTO retained_media(actor_id,frame_id,captured_us,expires_us,media_type,byte_count,blob,unavailable_us,reason) VALUES('00000000-0000-0000-0000-000000000001',gen_random_uuid(),0,1000000,'image/png',2,NULL,1000000,'expired');")
+        tables = ['retained_media', 'squidra_schema_migrations', 'coordinate_frames', 'world_entities', 'observations', 'world_events', 'world_event_entities', 'spatial_facts', 'projection_versions', 'agent_runs']
         def snapshot(db):
             return {table: sql(f"SELECT row_to_json(t)::text FROM {table} t ORDER BY row_to_json(t)::text", db) for table in tables}
         before = snapshot('squidra')

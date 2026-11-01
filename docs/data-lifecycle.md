@@ -52,3 +52,40 @@ actor-scoped export, and personal-data tombstones still require implementation
 and a concrete privacy ADR. Backup verification alone does not complete T12.
 The immutable journal must not be silently rewritten. If export or deletion is
 later exposed as a tool, route it through gateway authorization and approval.
+
+## Opt-in retained media
+
+`PostgresMediaRetention(actorID:client:)` adds an explicit trusted-host API.
+It is not wired into existing imports, HTTP routes, or model tools. The host
+must obtain actor identity from authentication, validate image content before
+storage, supply trusted UTC microseconds, and schedule `purge` calls. The store
+treats bounded bytes as opaque; an `image/png` label is not a decoder result.
+
+`MediaRetentionPolicy(seconds:)` defaults to 60 seconds and accepts 1–3600.
+`retain` accepts 1–65536 bytes and PNG/JPEG labels, refuses more than 128 live
+blobs per actor, and permits only exact idempotent retries. `load` returns nil
+for an unknown or foreign reference, and explicit `expired`/`erased` with no
+bytes for an unavailable one. At the expiry boundary bytes are withheld even
+before purge; a purge invocation transactionally clears at most 128 due blobs.
+`erase` clears one authorized actor/frame blob early. Database triggers reject
+reference deletion, metadata changes, or resurrection after unavailability.
+Transaction cancellation/deadline handling uses the existing bounded PostgreSQL
+repository, with deadlines no farther than five seconds. Caller cancellation
+and uncertain outcomes require reading the reference before retrying.
+
+These operations do not alter immutable journal events or erase personal data
+elsewhere. SQL removal is not physical erasure from WAL, storage, or historical
+backups. Review the explicitly proposed [privacy ADR](adr/0011-data-lifecycle.md)
+for remaining decisions. The full T12 acceptance is still outstanding.
+
+### Retained-media verification — 1 November 2026
+
+`T12-MEDIA` passed five Swift tests against actual PostgreSQL: policy bounds,
+exact byte round trip, actor isolation, half-open expiry, transactional purge,
+erasure, immutable-reference constraints, conflicting retries, two concurrent
+admissions for one remaining slot, capacity release, maximum 64 KiB payload,
+and deadline/time-bound rejection. `T12-BACKUP` then passed all five checks with
+available media and an unavailable reference included in its exact ten-table
+restore comparison. The strict gates recorded no skipped or unexecuted tests.
+Hosted CI remains suspended; the new gates are registered for Linux on its
+restoration and in the corresponding local database gate list.
