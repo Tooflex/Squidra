@@ -18,19 +18,23 @@ actor HTTPReadModelFixture: LanguageModel {
     nonisolated let descriptor = ModelDescriptor(id:"fixture.http-read",modelVersion:"1",location:.local,capabilities:[.text,.structuredOutput])
     let responses:[String]
     private(set) var calls = 0
-    init(plan:String,answer:String) { responses = [plan,answer] }
-    func generate(_ request:ModelRequest) throws -> ModelResponse {
+    let pauseOnCall:Int?
+    init(plan:String,answer:String,pauseOnCall:Int? = nil) { responses = [plan,answer];self.pauseOnCall = pauseOnCall }
+    func generate(_ request:ModelRequest) async throws -> ModelResponse {
         guard calls < responses.count else { throw ModelProviderError.unavailable }
         let value = responses[calls];calls += 1
+        if calls == pauseOnCall { try await Task.sleep(for:.seconds(30)) }
         return ModelResponse(requestID:request.id,modelID:descriptor.id,modelVersion:descriptor.modelVersion,text:value,outputTokens:128,costMicroUSD:0)
     }
 }
 actor HTTPWorldReadCounter: WorldStateQuery {
     let projection:PostgresLocationProjection
     private(set) var calls = 0
-    init(_ projection:PostgresLocationProjection) { self.projection = projection }
+    let pause:Bool
+    init(_ projection:PostgresLocationProjection,pause:Bool = false) { self.projection = projection;self.pause = pause }
     func state(actorID:UUID,subjectID:UUID,validAt:UTCInstant,knownAt:UTCInstant,deadline:ContinuousClock.Instant) async throws -> WorldStateSnapshot {
         calls += 1
+        if pause { try await Task.sleep(for:.seconds(30)) }
         return try await projection.state(actorID:actorID,subjectID:subjectID,validAt:validAt,knownAt:knownAt,deadline:deadline)
     }
 }
@@ -92,7 +96,7 @@ enum RunHTTPTestSupport {
         return try RunHTTPHarness(actor:actor,entity:entity,configuration:configuration(actor:actor,token:token),client:client,token:token,
             events:events,publication:publication,coordinator:coordinator,replay:HTTPReplayCounter(events))
     }
-    static func realHarness(client:PostgresClient) async throws -> (RunHTTPHarness,HTTPReadModelFixture,HTTPWorldReadCounter,UUID) {
+    static func realHarness(client:PostgresClient,pauseOnModelCall:Int? = nil,pauseOnRead:Bool = false) async throws -> (RunHTTPHarness,HTTPReadModelFixture,HTTPWorldReadCounter,UUID) {
         let actor = UUID(),subject = UUID(),place = UUID(),frame = UUID(),t0:Int64 = 1_700_000_000_000_000
         for entity in [subject,place] { _ = try await client.query("INSERT INTO world_entities(id,actor_id,kind) VALUES(\(entity),\(actor),'fixture')").collect() }
         _ = try await client.query("INSERT INTO coordinate_frames(id,actor_id,name,dimensions,units) VALUES(\(frame),\(actor),'http-fixture',3,'metres')").collect()
@@ -107,7 +111,7 @@ enum RunHTTPTestSupport {
         let plan = String(decoding:try JSONSerialization.data(withJSONObject:["schemaVersion":"1","tool":"world.get_entity_location@1.0.0","arguments":arguments]),as:UTF8.self)
         let answer = String(decoding:try JSONSerialization.data(withJSONObject:["schemaVersion":"1","claims":[["kind":"location","subjectId":subject.uuidString,
             "locationId":place.uuidString,"frameId":frame.uuidString,"citations":[draft.id.uuidString]]]]),as:UTF8.self)
-        let model = HTTPReadModelFixture(plan:plan,answer:answer),counter = HTTPWorldReadCounter(projection)
+        let model = HTTPReadModelFixture(plan:plan,answer:answer,pauseOnCall:pauseOnModelCall),counter = HTTPWorldReadCounter(projection,pause:pauseOnRead)
         let registration = try WorldLocationTool(world:counter).registration()
         let permission = HostActionPermission(actorID:actor,tool:registration.definition.id,capability:registration.definition.capability,
             targets:["entity:"+subject.uuidString.lowercased()],scope:["world:read"],expiresAt:.now.advanced(by:.seconds(120)))
