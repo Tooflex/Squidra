@@ -49,6 +49,8 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-004
       - name: Verify scoped private memory context
         run: bash Scripts/test-issue.sh SQD-027
+      - name: Verify bounded fact consolidation
+        run: bash Scripts/test-issue.sh SQD-029
       - name: Run T01 Domain tests
         run: bash Scripts/test-issue.sh T01
       - name: Run bounded JSON document tests

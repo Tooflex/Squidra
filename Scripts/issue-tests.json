@@ -919,5 +919,9 @@
       "recovery_automatic_host",
       "recovery_http_status"
     ]
+  },
+  "SQD-029": {
+    "kind": "xctest",
+    "filter": "^SquidraMemoryTests\\.FactConsolidationTests/"
   }
 }
