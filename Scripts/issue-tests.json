@@ -641,5 +641,9 @@
   "SQD-022": {
     "kind": "xctest",
     "filter": "^SquidraSpatialTests\\.(CalibratedRelationTests|ResolvedSceneTests)/"
+  },
+  "T07-UNIT": {
+    "kind": "xctest",
+    "filter": "^SquidraPerceptionTests\\.ConfirmedMovementTests/"
   }
 }
