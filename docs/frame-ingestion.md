@@ -238,3 +238,20 @@ applies to Squidra only; Meta retention depends on account terms. Scene membersh
 remains inferred, without pixel-to-world calibration. Offline configuration,
 captured-provider HTTP/SQL and browser tests do not establish a new live-provider
 qualification or incur a paid API call.
+
+## SQD-020 acceptance evidence
+
+| Requirement | Implementation and evidence |
+| --- | --- |
+| Bounded image type, size and consent | `PNGFrame`, `FrameImporter`, SAM admission and HTTP closed inputs; negative type/size/consent/actor/deadline tests |
+| Normalized detections | Native one-bit mask decoding, half-open pixel boxes, scores and mask checks; captured SAM raster/reference vectors and real public PNG run |
+| Host frame/camera identifiers | `FrameContext` binding and output equality checks; HTTP cannot choose actor/frame/camera; actual SQL lineage checks |
+| Model version | Exact identity binding and `alias:sam-3.1` provenance; hosted alias is explicitly not an immutable weight revision |
+| Offline fake plus verified real adapter | Authored synthetic contract remains separate from captured provider data and the normal server's opt-in SAM adapter |
+| Explicit unavailable/error behavior | Missing admission/budget denial, provider transport failures, invalid output and bounded cancellation tests; HTTP errors never become fixture success |
+| Executed checks | `SQD-020` aggregate covers offline, SAM wire/native/admission, SQL and HTTP suites; PR251 records a successful real SAM → Meta → browser/SQL run |
+
+The feature evidence is on the current macOS development host. Linux deployment
+qualification belongs to the remaining platform/release checks; neither this
+acceptance nor a hosted alias asserts broad scene accuracy, account-wide zero
+retention or calibrated world coordinates.
