@@ -509,5 +509,16 @@
       "client_loopback_boundary",
       "durable_frame_grounded_answers"
     ]
+  },
+  "SQD-032": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/validate-issue/test_validate.py"
+    ],
+    "tests": [
+      "issue_validation_contracts"
+    ],
+    "requires_database": false
   }
 }

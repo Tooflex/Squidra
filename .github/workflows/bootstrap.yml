@@ -43,6 +43,8 @@ jobs:
         run: python3 Scripts/test_local_checks.py
       - name: Build pinned dependencies and modules
         run: swift build --force-resolved-versions
+      - name: Verify structured issue validation
+        run: bash Scripts/test-issue.sh SQD-032
       - name: Run T01 Domain tests
         run: bash Scripts/test-issue.sh T01
       - name: Run bounded JSON document tests
