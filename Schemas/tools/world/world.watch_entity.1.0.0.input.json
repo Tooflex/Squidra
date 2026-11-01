@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:squidra:tool:world.watch_entity@1.0.0:input",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "maxLength": 1,
+      "const": "1"
+    },
+    "entityId": {
+      "type": "string",
+      "maxLength": 36,
+      "format": "uuid"
+    },
+    "filter": {
+      "type": "string",
+      "maxLength": 18,
+      "const": "confirmed_movement"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "entityId",
+    "filter"
+  ],
+  "additionalProperties": false
+}

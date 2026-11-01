@@ -161,7 +161,7 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-015
       - name: Verify world read tools against real PostgreSQL
         if: runner.os == 'Linux'
-        run: bash Scripts/test-issue.sh T13-READS
+        run: bash Scripts/test-issue.sh T13
       - name: Verify durable grounded read runs against PostgreSQL
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh T14-SQL

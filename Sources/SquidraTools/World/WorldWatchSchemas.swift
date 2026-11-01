@@ -1,0 +1,98 @@
+import Foundation
+
+public enum WorldWatchSchemas {
+    public static let inputSchema = Data(#"""
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:squidra:tool:world.watch_entity@1.0.0:input",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "maxLength": 1,
+      "const": "1"
+    },
+    "entityId": {
+      "type": "string",
+      "maxLength": 36,
+      "format": "uuid"
+    },
+    "filter": {
+      "type": "string",
+      "maxLength": 18,
+      "const": "confirmed_movement"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "entityId",
+    "filter"
+  ],
+  "additionalProperties": false
+}
+"""#.utf8)
+    public static let outputSchema = Data(#"""
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:squidra:tool:world.watch_entity@1.0.0:output",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "maxLength": 1,
+      "const": "1"
+    },
+    "actorId": {
+      "type": "string",
+      "maxLength": 36,
+      "format": "uuid"
+    },
+    "entityId": {
+      "type": "string",
+      "maxLength": 36,
+      "format": "uuid"
+    },
+    "intentionId": {
+      "type": "string",
+      "maxLength": 36,
+      "format": "uuid"
+    },
+    "status": {
+      "type": "string",
+      "maxLength": 9,
+      "enum": [
+        "active",
+        "cancelled",
+        "fulfilled"
+      ]
+    },
+    "filter": {
+      "type": "string",
+      "maxLength": 18,
+      "const": "confirmed_movement"
+    },
+    "channel": {
+      "type": "string",
+      "maxLength": 8,
+      "const": "internal"
+    },
+    "afterSequence": {
+      "type": "string",
+      "maxLength": 19,
+      "minLength": 1
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "actorId",
+    "entityId",
+    "intentionId",
+    "status",
+    "filter",
+    "channel",
+    "afterSequence"
+  ],
+  "additionalProperties": false
+}
+"""#.utf8)
+}
