@@ -154,6 +154,16 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                     XCTAssertEqual(try RunHTTPTestSupport.object(lateCancellation.body)["publicationPhase"] as? String,"succeeded")
                     let modelCalls = await model.calls,readCalls = await reads.calls
                     XCTAssertEqual(modelCalls,2);XCTAssertEqual(readCalls,1)
+                    _ = try await client.query("DELETE FROM run_events WHERE run_id=\(run) AND sequence=1").collect()
+                    _ = try await client.query("UPDATE run_event_streams SET minimum_retained_sequence=2 WHERE run_id=\(run)").collect()
+                    for cursor in [nil,frames[0].0] as [String?] {
+                        var headers:HTTPFields = [.authorization:"Bearer "+fixture.token]
+                        if let cursor { headers[.init("Last-Event-ID")!] = cursor }
+                        let truncated = try await http.executeRequest(uri:eventPath,method:.get,headers:headers,body:nil)
+                        XCTAssertEqual(truncated.status,.gone)
+                        XCTAssertEqual(try RunHTTPTestSupport.object(truncated.body)["code"] as? String,"EXPIRED")
+                        XCTAssertFalse(String(buffer:truncated.body).contains("RUN_ERROR"))
+                    }
                     _ = try await client.query("UPDATE run_event_streams SET created_at=clock_timestamp()-interval '3 hours',execution_lease_until=clock_timestamp()-interval '2 hours',expires_at=clock_timestamp()-interval '1 hour' WHERE run_id=\(run)").collect()
                     for uri in [path,eventPath] {
                         let expired = try await http.executeRequest(uri:uri,method:.get,headers:[.authorization:"Bearer "+fixture.token],body:nil)

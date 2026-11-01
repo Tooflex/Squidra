@@ -57,14 +57,14 @@ AG-UI timestamps are host-created integer milliseconds. Evidence keeps its own
 original RFC 3339 observation/record/occurrence times and IANA zone. A timestamp
 never supplies event ordering: the persisted run-local sequence does.
 
-## SSE and planned API extension
+## SSE and API extension
 
 SSE emits one compact JSON data line and a canonical base64url cursor in its id
 field. CR/LF inside JSON text stay escaped; multiline storage bytes are rejected.
 Keepalive comments carry no event ID and do not advance replay position.
 Source: [HTML SSE parsing](https://html.spec.whatwg.org/multipage/server-sent-events.html#parsing-an-event-stream).
 
-T05 plans POST /api/v1/runs returning 202, actor-scoped status reads and a separate
+T05 implements POST /api/v1/runs returning 202, actor-scoped status reads and a separate
 GET event stream. This is a Squidra transport extension. The standard AG-UI
 HttpAgent POST-stream path is not automatically compatible; a client transport
 adapter is required. AG-UI's default binding defines no Last-Event-ID resumption;
@@ -77,8 +77,8 @@ Authorize actor/run ownership before consulting retention bounds. Cursors encode
 actor, run and the last consumed sequence as exact strings; they are pagination
 positions, not secrets or grants, and are not cryptographically signed. Reject
 noncanonical, future and foreign-scope values. A cursor older than retained
-history gives cursorOutsideRetention; the future HTTP adapter maps this to an
-explicit expiration response (planned 410). A fresh read cannot silently begin
+history gives cursorOutsideRetention; the HTTP adapter maps this to an
+explicit 410/EXPIRED response. A fresh read cannot silently begin
 mid-history. Reconnect only replays persisted events and never dispatches an
 action or starts another run.
 
@@ -275,8 +275,9 @@ ordering/resume, cursor/retention errors, no extra model/read on reconnect,
 preflight, actual loopback client cancellation and joined shutdown with an active
 worker. These fixtures do not measure live model quality, tokens or cloud cost.
 There is no new migration, raw prompt persistence or automatic restart/recovery.
-Parent T05 still needs host/provider activation, worker-owned tracing and wider
-process-restart qualification.
+Host-injected local model composition and worker-owned tracing are implemented
+and qualified by T14/SQD-030. Named-provider qualification and interrupted-task
+continuation remain separate work under T11/SQD-028.
 
 ## Explicit cancellation
 
@@ -310,3 +311,32 @@ A subsequent identical command returns reconciliation-required instead of
 re-executing an unknown effect. Only independent provider/target confirmation may
 resolve it through the existing ledger reconciliation port. SQD-008 tests both
 cancellation and deadline expiry with a cancellation-aware ledger fixture.
+
+## Complete T05 acceptance gate
+
+`bash Scripts/test-issue.sh T05` runs official contract fixtures, PostgreSQL event
+replay, atomic publication, owned workers and authenticated live HTTP transport.
+Each child runner must select and complete tests; failures or partial execution
+propagate to the aggregate. All child suites are also in the full local gate.
+
+The contract suite checks the immutable upstream schema/license hashes, 16 event
+fixtures and six accepted/rejected stream fixtures. SQL suites check actor scope,
+canonical resume positions, stable ordering across connections, atomic terminal
+publication, opaque ownership, bounded storage and expired claims. Worker/HTTP
+suites check POST202 after claim, actor-owned status, exact grounded SSE replay,
+disconnection/reconnection without model/tool repetition, cancellation, shutdown,
+retention expiry and trace correlation. Model execution uses controlled fixtures
+through the real runtime, gateway and PostgreSQL; provider quality is separate.
+
+Retention preserves a complete bounded stream until expiry. If a privileged purge
+advances minimum_retained_sequence past the run start, the current producer
+validator cannot reconstruct a full stream from the suffix. It returns explicit
+410/EXPIRED even for a cursor inside that suffix, rather than serving incomplete
+history or a generic storage failure. Deleting an event without updating retention
+metadata remains corruption. The HTTP regression physically removes the prefix,
+advances the retention floor, and checks both fresh and resumed requests return
+EXPIRED with no fabricated RUN_ERROR or repeated execution.
+
+The transport remains Squidra's POST202/finite GET-SSE extension, with an explicit
+client adapter required for standard AG-UI HttpAgent interoperability. This gate
+does not claim transparent compatibility with upstream POST-SSE consumers.
