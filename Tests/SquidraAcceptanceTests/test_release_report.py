@@ -61,4 +61,3 @@ if __name__ == '__main__':
         print('SQUIDRA_TEST_PASS:release_report_contracts')
     else:
         raise SystemExit(1)
-
