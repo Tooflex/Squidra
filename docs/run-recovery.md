@@ -551,3 +551,32 @@ refusal, copied/current/released ownership refusal, HTTP/SSE archive equality an
 replay across two server lifetimes. Automatic local startup continuation is still
 to be wired with a lifecycle that joins recovery and execution before releasing
 the ownership handle.
+
+## Automatic completed publication and joined ownership lifetime
+
+When `ServerComposition.live` receives explicit local ownership, its recovery
+loop selects at most eight previous-owner completed runs and publishes an archive
+without waiting for lease expiry. Selection filters completed runs before applying
+the limit, so interrupted nonterminal runs cannot hide eligible completions.
+The existing expired-lease recovery remains available after the owned pass.
+Model-free composition can now accept the lock for this publication-only path.
+
+`ReadWorkerService` owns both the recovery loop and optional submission
+coordinator. Graceful shutdown, task cancellation and recovery errors join the
+recovery child task, then shut down and join the coordinator, and only then release
+the local handle. The database service stays alive during that cleanup. Servers
+without local ownership or a submission coordinator retain the separate
+publication-only service.
+
+T05-HTTP exercises automatic owned recovery before lease expiry through live
+model-free composition, subsequent SSE replay and lock release on graceful stop.
+A cancellation test holds recovery cleanup beyond cancellation and verifies the
+lock stays held until that cleanup joins. Existing worker shutdown and cancellation
+checks remain in the same suite. Directory provisioning from CLI and automatic
+continuation of nonterminal checkpoints still remain to complete SQD-028.
+
+Concurrent startup binding uses untargeted `ON CONFLICT DO NOTHING`, followed by
+an exact domain/file comparison. Both the actor primary key and the composite
+foreign-key target are unique; targeting only the primary key can let concurrent
+identical inserts fail on the other index. T05-WORKERS exercises two clients
+binding the same held owner, and retains the copied-domain rejection checks.

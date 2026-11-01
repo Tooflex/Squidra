@@ -35,7 +35,7 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
     }
     func testLiveServerRecoversCompletedArchiveWithoutModelOrDuplicatePublication() async throws {
         try await RunHTTPTestSupport.withClients { client,second in
-            for mode in 0...3 {
+            for mode in 0...4 {
             let concurrent = mode == 0,owned = mode >= 2
             let actor = UUID(),entity = UUID(),clock = try RunHTTPTestSupport.clock
             let config = try RunHTTPTestSupport.configuration(actor:actor,token:String(repeating:"b",count:64))
@@ -82,7 +82,7 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
             let incomplete = try await publication.recoverCompleted(runID:request.runID,ownership:nextOwner,at:at,deadline:.now.advanced(by:.seconds(4)))
             XCTAssertFalse(incomplete)
             // Expiry alone cannot turn an unfinished runtime into a success.
-            if mode != 2 {
+            if mode < 2 || mode == 3 {
             _ = try await client.query("UPDATE run_event_streams SET created_at=clock_timestamp()-interval '2 hours',execution_lease_until=clock_timestamp()-interval '1 hour' WHERE run_id=\(request.runID)").collect()
             }
             let unfinished = try await publication.recoverNextCompleted(at:clock.now(),deadline:.now.advanced(by:.seconds(4)))
@@ -91,7 +91,7 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
             _ = try await controller.transition(to:.completed,terminalCode:.completed)
             let foreign = try await PostgresRunPublicationStore(client:second,actorID:UUID()).recoverNextCompleted(at:clock.now(),deadline:.now.advanced(by:.seconds(4)))
             XCTAssertFalse(foreign)
-            if owned {
+            if owned && mode != 4 {
                 let before = try await runtime.load(actorID:actor,runID:request.runID,deadline:.now.advanced(by:.seconds(4)))
                 async let one = publication.recoverCompleted(runID:request.runID,ownership:nextOwner,at:at,deadline:.now.advanced(by:.seconds(4)))
                 async let two = PostgresRunPublicationStore(client:second,actorID:actor).recoverCompleted(runID:request.runID,ownership:nextOwner,at:at,deadline:.now.advanced(by:.seconds(4)))
@@ -109,7 +109,7 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                 let winners = try await [one,two]
                 XCTAssertEqual(winners.filter { $0 }.count,1)
             }
-            try await ServerComposition.live(configuration:config).test(.live) { http in
+            try await ServerComposition.live(configuration:config,localOwnership:mode == 4 ? nextOwner : nil).test(.live) { http in
                 try await RunHTTPTestSupport.wait {
                     (try? await publication.status(actorID:actor,runID:request.runID,deadline:.now.advanced(by:.seconds(4))))?.phase == .succeeded
                 }
@@ -121,6 +121,7 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                 let value = try XCTUnwrap(frames[1].1["value"] as? NSDictionary)
                 XCTAssertEqual(value,try JSONSerialization.jsonObject(with:JSONEncoder().encode(answer)) as? NSDictionary)
             }
+            if mode == 4 { XCTAssertFalse(nextOwner.isHeld) }
             // Stale old publication ownership cannot overwrite recovered output.
             do { _ = try await publication.finish(claim,outcome:.cancelled,at:clock.now(),deadline:.now.advanced(by:.seconds(4)));XCTFail("Old owner published") }
             catch { XCTAssertEqual(error as? RunEventStoreError,.conflict) }
@@ -133,6 +134,39 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
             }
             }
         }
+    }
+    private actor RecoveryJoinProbe {
+        var started = false,heldDuringCleanup = false
+        func start() { started = true }
+        func cleaned(_ held:Bool) { heldDuringCleanup = held }
+    }
+    func testRecoveryCancellationJoinsBeforeReleasingLocalOwnership() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("squidra-recovery-join-"+UUID().uuidString)
+        try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:false,attributes:[.posixPermissions:0o700])
+        defer { try? FileManager.default.removeItem(at:directory) }
+        let owner = try LocalRunOwnership.acquire(directory:directory,actorID:UUID()),probe = RecoveryJoinProbe()
+        defer { owner.releaseAfterJoiningWorkers() }
+        let worker = Task {
+            try await ReadWorkerService(coordinator:nil,ownership:owner,recovery:{
+                await probe.start()
+                do { try await Task.sleep(for:.seconds(30)) }
+                catch {
+                    // Joined cleanup deliberately survives the caller's cancellation.
+                    let held = await Task.detached {
+                        try? await Task.sleep(for:.milliseconds(50))
+                        return owner.isHeld
+                    }.value
+                    await probe.cleaned(held)
+                    throw error
+                }
+                return false
+            }).run()
+        }
+        try await RunHTTPTestSupport.wait { await probe.started }
+        worker.cancel()
+        _ = try await worker.value
+        let held = await probe.heldDuringCleanup
+        XCTAssertTrue(held);XCTAssertFalse(owner.isHeld)
     }
     func testDurableTaskRoundTripConflictAndActorScope() async throws {
         try await RunHTTPTestSupport.withClients { client,second in

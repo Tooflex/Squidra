@@ -14,7 +14,7 @@ public struct PostgresReadRunOwnershipStore: ReadRunOwnershipStore {
     }
     private func bind(_ c: PostgresConnection) async throws {
         let actor = ownership.actorID,domain = ownership.domainID,file = ownership.fileID
-        _ = try await BoundedPostgresQuery.rows(c,"INSERT INTO read_run_local_domains(actor_id,domain_id,file_id) VALUES(\(actor),\(domain),\(file)) ON CONFLICT(actor_id) DO NOTHING")
+        _ = try await BoundedPostgresQuery.rows(c,"INSERT INTO read_run_local_domains(actor_id,domain_id,file_id) VALUES(\(actor),\(domain),\(file)) ON CONFLICT DO NOTHING")
         let rows = try await BoundedPostgresQuery.rows(c,"SELECT domain_id,file_id FROM read_run_local_domains WHERE actor_id=\(actor)")
         guard let row = rows.first else { throw ReadRunTaskError.conflict }
         let (storedDomain,storedFile) = try row.decode((UUID,String).self)
@@ -43,7 +43,7 @@ public struct PostgresReadRunOwnershipStore: ReadRunOwnershipStore {
         guard ownership.isHeld else { throw ReadRunTaskError.invalidState }
     }
     /// Bounded candidates only; selection is not a publication or dispatch claim.
-    public func previousRuns(limit: Int = 8,deadline: ContinuousClock.Instant) async throws -> [StoredReadRunOwner] {
+    public func previousRuns(limit: Int = 8,completedOnly: Bool = false,deadline: ContinuousClock.Instant) async throws -> [StoredReadRunOwner] {
         guard ownership.isHeld,(1...8).contains(limit) else { throw ReadRunTaskError.invalidState }
         let actor = ownership.actorID,domain = ownership.domainID,file = ownership.fileID,owner = ownership.ownerID
         let selected = try await bounded(deadline) { c in
@@ -53,6 +53,7 @@ public struct PostgresReadRunOwnershipStore: ReadRunOwnershipStore {
                 JOIN run_event_streams s ON s.actor_id=o.actor_id AND s.run_id=o.run_id
                 WHERE o.actor_id=\(actor) AND o.domain_id=\(domain) AND o.file_id=\(file) AND o.owner_id<>\(owner)
                     AND s.publication_phase='running' AND s.expires_at>clock_timestamp()
+                    AND (NOT \(completedOnly) OR EXISTS (SELECT 1 FROM agent_runs r WHERE r.actor_id=o.actor_id AND r.id=o.run_id AND r.state='COMPLETED'))
                 ORDER BY o.run_id LIMIT \(limit)
                 """)
             return try rows.map { row in
