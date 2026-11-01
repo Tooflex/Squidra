@@ -3,15 +3,17 @@ import PostgresNIO
 
 public enum ImportedEntityReadScopeError: Error, Equatable, Sendable { case timeout, cancelled, unavailable }
 
-/// Host opt-in to read detected entities from one synthetic camera/scene/frame.
+/// Host opt-in to read detected entities from one camera/scene/frame and publication profile.
 /// Membership comes from immutable, actor-linked observations, never client labels
 /// or a mutable association cache. A scene's own entity ID is not a detection grant.
 public struct PostgresImportedEntityReadScope: Sendable {
     private let client: PostgresClient
-    public let policy: SyntheticScenePolicy
-    public init(client: PostgresClient, policy: SyntheticScenePolicy) { self.client = client; self.policy = policy }
+    public let policy: FrameScenePolicy
+    public init(client: PostgresClient, policy: FrameScenePolicy) { self.client = client; self.policy = policy }
     public func contains(_ entityID: UUID, deadline: ContinuousClock.Instant) async throws -> Bool {
         guard entityID != policy.locationID else { return false }
+        let expectedID = policy.cloudIdentity?.modelID ?? "",expectedVersion = policy.cloudIdentity?.version ?? ""
+        let synthetic = policy.cloudIdentity == nil
         let now = ContinuousClock.now
         guard deadline > now, deadline <= now.advanced(by:.seconds(5)) else { throw ImportedEntityReadScopeError.timeout }
         do {
@@ -28,7 +30,8 @@ public struct PostgresImportedEntityReadScope: Sendable {
                                       AND e.entity_ids @> ARRAY[\(entityID)]::uuid[]
                                       AND e.event_type='perception.frame_imported' AND e.payload_version=1
                                       AND e.payload->>'journalSchemaVersion'='1'
-                                      AND e.payload->'data'->>'schemaVersion'='1' AND e.payload->'data'->>'deployment'='synthetic'
+                                      AND e.payload->'data'->>'schemaVersion'='1' AND e.payload->'data'->>'deployment'=\(policy.deployment.rawValue)
+                                      AND (\(synthetic) OR (e.payload->'data'->>'modelId'=\(expectedID) AND e.payload->'data'->>'modelVersion'=\(expectedVersion)))
                                       AND lower(e.payload->'data'->>'cameraId')=\(policy.cameraID.uuidString.lowercased())
                                       AND lower(e.payload->'data'->>'locationId')=\(policy.locationID.uuidString.lowercased())
                                       AND lower(e.payload->'data'->>'coordinateFrameId')=\(policy.coordinateFrameID.uuidString.lowercased())

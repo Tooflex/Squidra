@@ -587,3 +587,19 @@ unknown identity, deadline and joined caller cancellation. Shared file-budget
 tests now mix text and SAM reservations through exhaustion. All use temporary
 state or fake budgets; no additional paid inference or real ledger mutation is
 performed. PostgreSQL/HTTP cloud publication remains a separate integration step.
+
+## Cloud observation publication preparation
+
+The PostgreSQL ingestion library now accepts an explicitly selected cloud
+identity with mandatory admission and per-frame transfer consent. Captured SAM
+output has passed through native decoding, entity association, immutable journal
+publication and projection in local SQL tests. Stored provenance is cloud, with
+source `cloud-frame:<image-sha256>` and the actual model alias; it is never
+relabeled synthetic. Scene membership remains inferred under the host camera
+policy, not a calibrated pixel-to-world transform. Missing scores are rejected
+before publication. Imported-entity read scopes also match cloud model identity.
+
+The normal HTTP import/UI remains synthetic-only until its explicit cloud
+configuration and consent flow are connected. These SQL tests use the existing
+public capture and fake transport/budget; reservations remain six attempts / 60
+EUR. See [frame ingestion](frame-ingestion.md#admitted-cloud-publication).

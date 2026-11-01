@@ -172,3 +172,34 @@ Fresh application compositions resolve the same imported entity again. The tests
 also cover opt-out, missing profile, unrelated IDs, foreign actor/camera/scene/
 coordinate frame, global target and write-scope rejection. This is not yet a
 browser qualification of the complete question flow or a live Meta/SAM call.
+
+## Admitted cloud publication
+
+`FrameScenePolicy` generalizes the host's camera-to-scene assertion;
+`SyntheticScenePolicy` remains a source-compatible alias with synthetic defaults.
+An explicit `cloudIdentity` must be a cloud deployment. PostgreSQL ingestion
+requires the model to match that exact identity and requires a
+`VisionCloudAdmission`; per-frame cloud-transfer consent is checked before
+inference and again before publication. A cloud model with the default synthetic
+policy is rejected. No HTTP cloud activation is implied by this library API.
+
+Cloud observations persist `deployment=cloud`, the actual model ID/version and a
+`cloud-frame:<image-sha256>` source. Synthetic observations retain their existing
+values. Both produce **inferred scene membership** under the host assertion;
+image coordinates do not become calibrated world coordinates. The existing
+one-second validity bound, atomic observation/location batch, immutable source
+links and projection recovery remain unchanged. Raw image, mask and appearance
+bytes are not added to the journal. Missing detection confidence remains a
+publication error rather than an invented score or a partial frame.
+
+`PostgresImportedEntityReadScope` matches the policy deployment. Cloud policies
+add exact model-ID/version matching to the existing actor, camera, location and
+coordinate-frame checks. Cloud evidence cannot enter a synthetic read scope or a
+scope for another model alias. Permission still comes from immutable observation
+membership, not a provider label or a mutable tracking cache.
+
+The local SQL suite replays captured SAM output through the real native adapter,
+importer, association store, journal and projection using fake transport/budget.
+It verifies cloud provenance, exact source confidence, denied transfer consent,
+missing admission, wrong identity/read scopes and no writes for unknown scores.
+No external API call, budget-ledger mutation or schema migration is involved.
