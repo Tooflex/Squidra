@@ -1,0 +1,9 @@
+SAM one_bit mask codec attribution
+
+Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
+
+Sources/SquidraMeta/Vision/SAMOneBitMask.swift adapts the one_bit/base85/range-coder portions of meta-sam-parser 0.1.0 (_mask_codec.py) to bounded, cancellable Swift. The original and this adaptation are subject to the accompanying SAM License. This notice does not relicense unrelated Squidra code.
+
+Upstream: https://github.com/meta-models/meta-sam
+Wheel SHA-256: eca156907911c56cef3a350ffc81c34b7e70655e5fa3ccdddb77042c541a0152
+Changes: Swift integer wrapping, resource quotas, monotonic deadlines/cancellation, one_bit-only profile and typed failures. No lossless decoder is included.
