@@ -623,5 +623,19 @@
       "durable_source_correlation",
       "live_worker_tracing"
     ]
+  },
+  "T05": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/test-run-api.py"
+    ],
+    "tests": [
+      "official_agui_contracts",
+      "durable_scoped_replay",
+      "atomic_publication",
+      "owned_worker_lifecycle",
+      "authenticated_http_transport"
+    ]
   }
 }

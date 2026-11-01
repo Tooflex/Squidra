@@ -145,7 +145,10 @@ public struct PostgresRunEventStore: RunEventStore {
         let info = metadata.info
         // Partial physical pruning needs a qualified snapshot/rebase mechanism;
         // until that exists, intact retained history is mandatory.
-        guard info.minimumRetainedSequence == 1 else { throw RunEventStoreError.corruptRecord }
+        // The producer validator needs the run start and complete prefix.
+        // Retention may remove it, but a suffix must never be replayed as a
+        // complete stream or reported as an unrelated storage failure.
+        guard info.minimumRetainedSequence == 1 else { throw RunEventStoreError.expired }
         let rows = try await BoundedPostgresQuery.rows(connection,"SELECT sequence,event_type,payload::text FROM run_events WHERE actor_id=\(actorID) AND run_id=\(info.binding.runID) ORDER BY sequence LIMIT 129")
         guard rows.count <= 128,Int64(rows.count) == info.nextSequence-1 else { throw RunEventStoreError.corruptRecord }
         var validator = AGUIStreamValidator(binding:info.binding),records:[AGUIReplayRecord] = [],bytes:Int64 = 0
