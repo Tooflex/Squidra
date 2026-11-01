@@ -1485,7 +1485,38 @@
       "crash_recovery",
       "annotated_evaluations",
       "historical_demo",
-      "security_gates"
+      "security_gates",
+      "latency_contracts",
+      "offline_latency"
+    ],
+    "requires_database": true
+  },
+  "T09-LATENCY-CONTRACTS": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Tests/SquidraAcceptanceTests/test_latency_metrics.py"
+    ],
+    "tests": [
+      "latency_metric_contracts"
+    ],
+    "requires_database": false
+  },
+  "T09-LATENCY": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/demo.sh",
+      "--profile=offline-latency"
+    ],
+    "tests": [
+      "historical_knowledge_correction",
+      "unique_movement_notification",
+      "fresh_process_reproduction",
+      "unknown_and_actor_isolation",
+      "demo_cleanup",
+      "runtime_latency_samples",
+      "tool_free_model_port_samples"
     ],
     "requires_database": true
   }

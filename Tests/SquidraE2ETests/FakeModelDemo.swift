@@ -97,3 +97,65 @@ extension DemoFixture {
         try JSONSerialization.data(withJSONObject:report,options:[.sortedKeys,.prettyPrinted]).write(to:path,options:.atomic)
     }
 }
+
+private actor ToolFreeTextFixture: LanguageModel {
+    nonisolated let descriptor=ModelDescriptor(id:"fixture.tool-free-latency",modelVersion:"1",location:.local,capabilities:[.text],maximumCostMicroUSD:0)
+    private(set) var calls=0
+    func generate(_ request:ModelRequest) async throws -> ModelResponse {
+        calls += 1
+        return ModelResponse(requestID:request.id,modelID:descriptor.id,modelVersion:descriptor.modelVersion,text:"fixture-ok",outputTokens:4,costMicroUSD:0)
+    }
+}
+
+extension DemoFixture {
+    static func latencyDemo(client:PostgresClient,identity:Identity,scenario:Scenario,path:URL) async throws {
+        func milliseconds(_ elapsed:Duration) -> Double {
+            let value=elapsed.components
+            return Double(value.seconds)*1000+Double(value.attoseconds)/1e15
+        }
+        let clock=SystemClock(timeZone:try IANATimeZone(identifier:"Etc/UTC"))
+        let store=PostgresRunStore(client:client)
+        let projection=PostgresLocationProjection(actorID:identity.actor,client:client)
+        var runtime:[[String:Any]]=[],modelOnly:[[String:Any]]=[]
+        for index in 0..<33 {
+            let model=HistoricalScriptedModel(subject:identity.subject,frame:identity.frame,location:identity.desk,citation:identity.events[0],validAt:scenario.monday,knownAt:scenario.tuesday)
+            let query=CountedLocationQuery(projection)
+            let registration=try WorldLocationTool(world:query).registration()
+            let permission=HostActionPermission(actorID:identity.actor,tool:registration.definition.id,capability:registration.definition.capability,targets:["entity:"+identity.subject.uuidString.lowercased()],scope:["world:read"],expiresAt:.now.advanced(by:.seconds(60)))
+            let engine=try ReadRunEngine(router:ModelRouter(models:[model],clock:clock),gateway:ActionGateway(tools:[registration],policy:HostActionPolicy(permissions:[permission])),store:store,clock:clock,freshness:AnswerFreshnessPolicy(maximumObservationAgeSeconds:86400,minimumCurrentConfidence:Confidence(0.5)))
+            let request=try ReadRunRequest(actorID:identity.actor,question:"Where was Arduino on Monday, as known on Tuesday?",planningScope:ReadPlanningScope(entities:[PlanningEntity(id:identity.subject,label:"Arduino")]),effectiveToolScope:["world:read"],intent:.historical,modelOptions:ReadPlanningOptions(deadline:UTCInstant(secondsSince1970:clock.now().secondsSince1970+30)))
+            let start=ContinuousClock.now
+            let result=try await engine.execute(request)
+            let elapsed=milliseconds(start.duration(to:.now))
+            try require(result.snapshot.state == .completed && result.snapshot.calls==1 && result.snapshot.traceID==request.traceID)
+            try require(result.answer.status == .grounded && result.answer.requestId==request.requestID && result.answer.actorId==identity.actor)
+            try require(result.answer.claims.count==1 && result.answer.claims[0].locationId==identity.desk && result.answer.claims[0].citationIds==[identity.events[0]])
+            try require(result.answer.evidence.count==1 && result.answer.evidence[0].confidence==0.8)
+            try require(await model.calls==2)
+            try require(await query.reads==1)
+            let saved=try await store.load(actorID:identity.actor,runID:request.runID,deadline:.now.advanced(by:.seconds(4)))
+            try require(saved.state == .completed && saved.version==result.snapshot.version)
+            runtime.append(["milliseconds":elapsed,"warmup":index<3,"runID":request.runID.uuidString,"modelCalls":2,"worldReads":1,"state":"COMPLETED"])
+        }
+        let model=ToolFreeTextFixture()
+        let router=try ModelRouter(models:[model],clock:clock)
+        for index in 0..<33 {
+            let request=try ModelRequest(id:UUID(),messages:[ModelMessage(role:.user,content:"Return fixture-ok")],deadline:UTCInstant(secondsSince1970:clock.now().secondsSince1970+30))
+            let start=ContinuousClock.now
+            let result=try await router.generate(request)
+            let elapsed=milliseconds(start.duration(to:.now))
+            try require(result.response.requestID==request.id && result.response.text=="fixture-ok" && result.attemptedModelIDs==[model.descriptor.id] && result.reservedCostUpperBoundMicroUSD==0)
+            modelOnly.append(["milliseconds":elapsed,"warmup":index<3,"requestID":request.id.uuidString,"modelCalls":1,"worldReads":0])
+        }
+        try require(await model.calls==33)
+        let rows=try await client.query("SELECT version()").collect()
+        let version=try rows[0].decode(String.self)
+        #if DEBUG
+        let configuration="debug"
+        #else
+        let configuration="release"
+        #endif
+        let report:[String:Any]=["schemaVersion":1,"mode":"offline-scripted-latency","realModelExecuted":false,"providerCalls":0,"concurrency":1,"measuredCount":30,"warmupCount":3,"buildConfiguration":configuration,"databaseVersion":version,"os":ProcessInfo.processInfo.operatingSystemVersionString,"activeProcessorCount":ProcessInfo.processInfo.activeProcessorCount,"physicalMemoryBytes":ProcessInfo.processInfo.physicalMemory,"runtime":runtime,"toolFreeModelPort":modelOnly]
+        try JSONSerialization.data(withJSONObject:report,options:[.sortedKeys,.prettyPrinted]).write(to:path,options:.atomic)
+    }
+}

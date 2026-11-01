@@ -12,7 +12,7 @@ PostgreSQL/PostGIS/pgvector database, applies the existing migrations and export
 `evidence.json` plus a timestamped `verification.json` under `.build/demo/<run>/`.
 No production database, configuration or provider key is used. Credentials
 are temporary, private and removed; the owned database is removed and absence
-verified. The default profile is offline-replay; offline-fake-model is an explicit alternative. Other profiles
+verified. The default profile is offline-replay; offline-fake-model and offline-latency are explicit alternatives. Other profiles
 fail before executing a model call or creating a database.
 
 ## Authored UTC scenario
@@ -89,3 +89,31 @@ runner requires all seven markers; `T08-REPLAY` still requires its original five
 
 Real-model evidence for this exact historical scenario and the UI acceptance
 remain outstanding. Separate Meta/SAM receipts are not substituted for this run.
+
+## Offline latency profile
+
+`bash Scripts/demo.sh --profile=offline-latency` retains the default replay checks,
+then measures 30 sequential historical `ReadRunEngine.execute` calls after three
+warmups against the same isolated PostgreSQL database. Each measured run must
+complete, preserve its citation and confidence, execute one actual location read
+and two scripted model calls, and have a matching durable terminal checkpoint.
+The monotonic interval starts immediately before `execute` and ends immediately
+after its return. Object construction, fixture setup, compilation and the extra
+verification query are outside it; runtime-owned SQL writes/reads are inside it.
+
+A second series measures `ModelRouter.generate` against a text-only constant
+fixture with no tools. This is model-port routing/fixture overhead, **not** a
+fresh tool-free product-question workflow or real-model inference latency.
+The two series have different boundaries and are not a speedup comparison.
+
+`latency-raw.json` retains all 33 samples per series, including the three warmups,
+plus build configuration, OS/CPU/memory and PostgreSQL version. The Python scorer
+requires exactly 30 measured samples, complete unique successful runs and finite
+nonnegative durations. `latency-summary.json` gives milliseconds, p50/p95 using
+linear interpolation at `(n-1)*q`, and the median (the same value as p50), plus
+Swift version and raw-file hash. No outlier is removed and no SLA is asserted.
+The verification receipt hashes the summary and records source commit/dirty state.
+Default Swift builds are debug builds; results are not release-build claims.
+No HTTP, browser, network, cloud inference, concurrency/load, cold-start or
+cross-platform latency is measured. Repeated fixture requests are not independent
+real-world model trials. These limits remain open in #45.
