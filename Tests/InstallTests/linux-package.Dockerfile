@@ -4,5 +4,5 @@ FROM swift@sha256:4e1500a6490956ef1cb97cb9f208346475c0c43111bb1adefee1c2cf5dba3e
 RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
 COPY --from=node /usr/local/ /usr/local/
 FROM ubuntu@sha256:19cad59657037cffa0ac9a48107019b768900ff1071140965827513ac866bd5e AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends python3 libcurl4t64 libstdc++6 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends python3 libcurl4t64 libstdc++6 libatomic1 && rm -rf /var/lib/apt/lists/*
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
