@@ -22,8 +22,9 @@ filesystem paths. Build outputs are ignored and regenerated from checked-in sour
 
 Start the normal Squidra server with `SQUIDRA_UI_ORIGIN` exactly matching the
 browser page origin (scheme, host and port), and its existing database/actor/token
-configuration. Journals must currently be provisioned through the trusted
-ConsolidationArchive/PostgresConsolidationStore host API. Enter the server's local
+configuration. Create a journal with `squidra consolidate --input /path/batch.json` using the
+same server environment; its JSON result contains the journal UUID. The closed
+input format is documented in `docs/fact-consolidation.md`. Enter the server's local
 HTTP origin, its existing 64-character lowercase hexadecimal owner token, and the
 journal UUID in the page. The API origin accepts only localhost or 127.0.0.1,
 without credentials, paths, query or fragments. Redirects are refused. The token
@@ -76,7 +77,8 @@ builds the locked Web tools. The static server supports `SQUIDRA_WEB_PORT=0` for
 owned ephemeral port and prints the selected loopback address. The fixture harness
 starts both listeners on ephemeral ports and configures the real CORS origin.
 
-The authored dataset contains one approvable proposal, one rejected proposal and
+The fixture prepares local input files; the normal `squidra consolidate --input`
+command imports them. The authored dataset contains one approvable proposal, one rejected proposal and
 a contradictory pair, each with original texts and source IDs. Chromium uses the
 actual page and API without request interception: inspect sources, approve/reject,
 refuse contradictory decisions, logout and reject an invalid token. The harness

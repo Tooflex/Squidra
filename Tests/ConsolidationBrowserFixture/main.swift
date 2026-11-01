@@ -11,25 +11,29 @@ private struct Manifest: Codable {
 private enum Failure: Error { case invalid }
 private func run() async throws {
     let env = ProcessInfo.processInfo.environment, args = Array(CommandLine.arguments.dropFirst())
-    guard env["SQUIDRA_BROWSER_FIXTURE"] == "1", args.count == 2, ["seed", "verify"].contains(args[0]),
+    guard env["SQUIDRA_BROWSER_FIXTURE"] == "1", args.count == 2, ["prepare", "verify"].contains(args[0]),
           let port = env["SQUIDRA_TEST_DB_PORT"].flatMap(Int.init), let password = env["SQUIDRA_TEST_DB_PASSWORD"] else { throw Failure.invalid }
     let path = URL(fileURLWithPath: args[1])
     let client = try LocalDatabaseConfiguration(port: port, username: "squidra", password: password, database: "squidra").makeClient()
     try await withThrowingTaskGroup(of: Void.self) { group in
         group.addTask { await client.run() }; defer { group.cancelAll() }
-        if args[0] == "seed" {
+        if args[0] == "prepare" {
             let actor = UUID(), source = UUID(), record = try MemoryRecord(actorID: actor, subjectID: UUID(), sourceIDs: [source], sensitivity: .privateOnly,
                 text: "The key was red. The key was blue. <script>window.compromised=true</script>")
-            let store = PostgresConsolidationStore(client: client, actorID: actor)
             var journals: [(UUID, UUID)] = []
             for index in 0..<3 {
-                var archive = try ConsolidationArchive(actorID: actor, records: [record], predicates: [FactPredicate(name: "key.color", critical: true)])
-                try await store.save(archive, deadline: .now.advanced(by: .seconds(4)))
-                let period = try InstantInterval(start: UTCInstant(secondsSince1970: 0), end: nil)
-                var candidates = [try FactCandidate(subjectID: record.subjectID, predicate: "key.color", value: "red", validTime: period, quotations: [record.id: "The key was red."])]
-                if index == 2 { candidates.append(try FactCandidate(subjectID: record.subjectID, predicate: "key.color", value: "blue", validTime: period, quotations: [record.id: "The key was blue."])) }
-                let proposal = try await archive.propose(batchID: UUID(), candidates: candidates)[0]
-                try await store.save(archive, deadline: .now.advanced(by: .seconds(4))); journals.append((archive.id, proposal.id))
+                let journal = UUID()
+                func candidate(_ value: String, quote: String) -> [String: Any] {
+                    ["subjectId": record.subjectID.uuidString, "predicate": "key.color", "value": value,
+                     "validFrom": "1970-01-01T00:00:00Z", "validUntil": NSNull(), "quotations": [record.id.uuidString: quote]]
+                }
+                var candidates = [candidate("red", quote: "The key was red.")]
+                if index == 2 { candidates.append(candidate("blue", quote: "The key was blue.")) }
+                let input: [String: Any] = ["schemaVersion": "1", "journalId": journal.uuidString, "batchId": UUID().uuidString,
+                    "records": [["id": record.id.uuidString, "subjectId": record.subjectID.uuidString, "sourceIds": [source.uuidString], "text": record.text]],
+                    "predicates": [["name": "key.color", "critical": true]], "candidates": candidates]
+                try JSONSerialization.data(withJSONObject: input, options: [.sortedKeys]).write(to: path.appendingPathExtension("\(index).input.json"), options: .atomic)
+                journals.append((journal, UUID())) // Harness replaces proposal placeholders with CLI results.
             }
             let manifest = Manifest(actor: actor, journal: journals[0].0, proposal: journals[0].1, rejectedJournal: journals[1].0, rejectedProposal: journals[1].1,
                                     conflictedJournal: journals[2].0, conflictedProposal: journals[2].1, memory: record.id, source: source)

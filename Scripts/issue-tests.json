@@ -922,7 +922,7 @@
   },
   "SQD-029": {
     "kind": "xctest",
-    "filter": "^SquidraMemoryTests\\.FactConsolidationTests/"
+    "filter": "^SquidraMemoryTests\\.(FactConsolidationTests|ConsolidationImportTests)/"
   },
   "SQD-029-SQL": {
     "kind": "xctest",
