@@ -82,9 +82,9 @@ Recovery may be repeated after partial publication because event keys are stable
 
 This sealed-epoch profile is for completed bounded sequences. Arbitrary sliding
 windows are **not** equivalent epochs; changing boundaries can change detected
-movement identity. Continuous streaming, automatic enumeration of pending epochs
-and process-kill qualification are not implied by the explicit recovery API.
-Issue #43 remains open until the final end-to-end qualification is complete.
+movement identity. Continuous streaming and automatic enumeration of pending epochs are separate
+host scheduling concerns; this profile exposes explicit submit/recover APIs for
+completed sequences.
 
 Run `bash Scripts/test-issue.sh T07-UNIT` for controlled movement, jitter,
 repetition/duration, uncertainty, contradictions, occlusion, identity/calibration
@@ -103,3 +103,23 @@ occlusions. It does not claim an actual process-kill recovery test.
 Migration: `world/003_movement_epochs.sql` adds one immutable table and two mutation
 triggers. Application rollback can leave this evidence table intact. No existing
 world event or fact is rewritten, and deleting evidence is not a rollback step.
+
+## Complete T07 acceptance gate
+
+`bash Scripts/test-issue.sh T07` runs the rule regressions, real PostgreSQL
+persistence/replay checks, and `T07-CRASH`. The process fixture saves a sealed
+sequence containing two annotated movements. At the first boundary it waits
+after the source epoch commits; at the second it waits after the first movement
+event commits. The harness sends SIGKILL only to the exact child it created and
+verifies that child's signal exit before starting a new process.
+
+The restart manifest contains actor ID, epoch ID and boundary name only. The new
+process loads the original input and policy from PostgreSQL, runs recovery twice,
+and verifies exactly two journal events with the expected full-hash identities.
+An already committed first event must remain unchanged. The fixture requires an
+explicit test opt-in and isolated database credentials; it is a separate test
+executable, not part of the production server startup path.
+
+These checks qualify deterministic inferred movements, repetition, conservative
+uncertainty and durable deduplication for completed bounded epochs. They do not
+measure real vision F1, imply sensor calibration, or authorize external effects.

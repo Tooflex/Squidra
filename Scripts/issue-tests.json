@@ -661,5 +661,30 @@
       "client_loopback_boundary",
       "durable_movement_publication"
     ]
+  },
+  "T07-CRASH": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-movement-crash"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "crash_saved",
+      "crash_published"
+    ]
+  },
+  "T07": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/test-movements.py"
+    ],
+    "tests": [
+      "movement_rules",
+      "durable_evidence",
+      "process_restart"
+    ]
   }
 }
