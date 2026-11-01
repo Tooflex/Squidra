@@ -8,6 +8,7 @@ struct ServerConfiguration: Sendable {
     let database: LocalDatabaseConfiguration
     let port: Int
     let localRunDirectory: URL?
+    let syntheticImport: SyntheticImportConfiguration?
 
     init(environment: [String: String], credentialProvider: (any CredentialProvider)? = nil,
          credentialReference: CredentialReference? = nil) throws {
@@ -24,6 +25,7 @@ struct ServerConfiguration: Sendable {
             guard path.hasPrefix("/"),!path.contains("\0"),path.utf8.count <= 4096 else { throw Invalid.localRunDirectory }
             self.localRunDirectory = URL(fileURLWithPath:path,isDirectory:true)
         } else { self.localRunDirectory = nil }
+        self.syntheticImport = try SyntheticImportConfiguration.read(environment:environment,actorID:actor)
         self.port = port
         switch (credentialProvider, credentialReference) {
         case let (.some(provider), .some(reference)):

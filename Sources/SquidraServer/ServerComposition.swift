@@ -25,6 +25,7 @@ enum ServerComposition {
         let readiness = PostgresSchemaReadiness(client: client)
         let approvals = ApprovalCoordinator(store:PostgresApprovalStore(client:client),clock:SystemClock(timeZone:try! IANATimeZone(identifier:"Etc/UTC")))
         let world = PostgresLocationProjection(actorID:configuration.boundary.actorID,client:client)
+        let frameImports = try configuration.syntheticImport.map { FrameImportRoutes(ingestion:try PostgresFrameIngestion(client:client,model:$0.model,policy:$0.policy)) }
         let worldReads = try WorldReadRoutes(actorID:configuration.boundary.actorID,world:world,changes:world)
         let recovery = WorldProjectionRecovery(actorID:configuration.boundary.actorID,
             repository:PostgresWorldRepository(client:client),projector:world)
@@ -85,11 +86,16 @@ enum ServerComposition {
             } else { continuationStep = nil }
         } else { submission = nil;continuationStep = nil }
         return application(configuration: configuration, readiness: { try await readiness.check() }, client: client,
-            approvals:approvals,ledger:PostgresActionLedger(client:client),worldReads:worldReads,
+            approvals:approvals,ledger:PostgresActionLedger(client:client),worldReads:worldReads,frameImports:frameImports,
             consolidation:PostgresConsolidationStore(client:client,actorID:configuration.boundary.actorID),
             runs:try! RunRoutes.Dependencies(actorID:configuration.boundary.actorID,
                 events:events,publication:publication,runtime:runtime,submission:submission,traces:recorder),
             beforeServing:{
+                if let profile = configuration.syntheticImport {
+                    let policy = profile.policy
+                    let rows = try await client.query("SELECT EXISTS(SELECT 1 FROM world_entities WHERE id=\(policy.locationID) AND actor_id=\(policy.actorID)) AND EXISTS(SELECT 1 FROM coordinate_frames WHERE id=\(policy.coordinateFrameID) AND actor_id=\(policy.actorID))").collect()
+                    guard let row = rows.first,try row.decode(Bool.self) else { throw FramePublicationError.scopeMismatch }
+                }
                 try await ownershipStore?.bind(deadline:.now.advanced(by:.seconds(4)))
                 _ = try await recovery.recover()
             },localOwnership:localOwnership,
@@ -114,7 +120,7 @@ enum ServerComposition {
     static func application(configuration: ServerConfiguration,
                             readiness: @escaping @Sendable () async throws -> DatabaseReadiness,
                             client: PostgresClient? = nil, approvals: ApprovalCoordinator? = nil, ledger: (any ActionLedgerStore)? = nil,
-                            worldReads: WorldReadRoutes? = nil, consolidation: (any ConsolidationStore)? = nil, runs: RunRoutes.Dependencies? = nil,
+                            worldReads: WorldReadRoutes? = nil, frameImports: FrameImportRoutes? = nil, consolidation: (any ConsolidationStore)? = nil, runs: RunRoutes.Dependencies? = nil,
                             beforeServing: (@Sendable () async throws -> Void)? = nil,
                             localOwnership: LocalRunOwnership? = nil,
                             publicationStep: (@Sendable () async throws -> Bool)? = nil,
@@ -135,6 +141,7 @@ enum ServerComposition {
         if let approvals,let ledger { ApprovalRoutes.mount(router,approvals:approvals,ledger:ledger) }
         if let consolidation { ConsolidationRoutes.mount(router,store:consolidation) }
         worldReads?.mount(router)
+        frameImports?.mount(router)
         RunRoutes.mount(router,dependencies:runs)
         var app = Application(responder: HTTPBoundary(inner: router.buildResponder(), configuration: configuration.boundary),
             server: .http1(configuration: .init(idleTimeout: .seconds(30))),

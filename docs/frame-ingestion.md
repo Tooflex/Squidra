@@ -3,7 +3,8 @@
 `PostgresFrameIngestion` is an opt-in host composition for an authored fixture.
 It connects `FrameImporter`, `ContinuityEntityResolver`, the immutable world
 journal, and location projection recovery. The default server does not activate
-it. There is no image HTTP endpoint or UI in this profile.
+it. The optional authenticated HTTP profile below exposes it explicitly; an image
+import UI remains to integrate.
 
 The host supplies a `SyntheticScenePolicy`: authenticated actor, camera, named
 scene entity, existing coordinate frame, and validity of 1–1000 milliseconds.
@@ -67,6 +68,72 @@ model outputs are controlled fixtures; no live-model quality or cost is measured
 The suite also covers rollback, projection reconstruction, scope/consent/bounds,
 unknown confidence, conflicting replay, and cancellation during a blocked append.
 
-The next integration step is an authenticated, bounded import API with host scene
-configuration and an explicit offline demo profile. Live inference requires T11
-qualification; this composition does not close the broader vision/demo stories.
+The normal server now offers the explicit bounded import profile below. The next
+integration step is the browser import/question/evidence flow. Live inference
+requires T11 qualification; this composition does not close the broader vision
+and demo stories.
+
+
+## Explicit normal-server HTTP profile
+
+Keep the regular owner token, actor, database and exact UI-origin configuration.
+To opt in, supply all five variables (partial configuration is rejected):
+
+- `SQUIDRA_SYNTHETIC_IMPORT=1`
+- `SQUIDRA_SYNTHETIC_FIXTURE`: absolute path to the frozen repository file
+  `fixtures/providers/vision-synthetic.v1.json`
+- `SQUIDRA_SYNTHETIC_CAMERA_ID`: host-selected camera UUID
+- `SQUIDRA_SYNTHETIC_SCENE_ID`: existing scene entity UUID belonging to the actor
+- `SQUIDRA_SYNTHETIC_COORDINATE_FRAME_ID`: existing coordinate frame UUID belonging
+  to the same actor
+
+The host must provision the scene and coordinate frame through its trusted local
+setup. Startup checks their ownership; it does not invent a calibrated scene or
+silently create entities. `check-config` validates configuration/file format;
+database ownership is checked when `serve` starts. The fixture is read through a
+bounded regular-file, no-follow descriptor (32 KiB maximum), and the synthetic
+model verifies its frozen SHA256. Changed fixtures and unsupported profiles fail;
+there is no fallback to another provider. With no variables, the route is absent.
+
+`POST /api/v1/frames/import` requires the normal authenticated owner boundary,
+allowed browser origin, exactly one JSON content type, and this closed body:
+
+```json
+{"schemaVersion":"1","imageBase64":"<canonical base64 PNG>","permitsLocalProcessing":true}
+```
+
+The request body is at most 1 MiB; decoded media is at most 512 KiB for this HTTP
+profile. The lower-level PNG port supports larger envelopes, but this transport
+keeps the existing strict JSON/boundary cap. Consent is a required Boolean and
+applies only to this request's actor/camera with a ten-second monotonic deadline;
+it never permits cloud transfer. Actor, camera, scene, frame UUID, timestamps,
+model and publication state cannot be supplied in the body. The host generates
+a fresh frame UUID and observes receipt time in UTC; capture/occurrence time is
+unknown. Journal recording time remains database-owned.
+
+Success is HTTP 201 only after durable batch publication and projection recovery.
+The versioned JSON receipt includes `deployment: synthetic`, `basis: inferred`,
+`mediaRetained: false`, model/version, image hash, camera/frame, scene and spatial
+coordinate-frame IDs, observation event, entity/location-event references,
+`observedAt`, `knownAt`, and the 1000 ms half-open validity duration. These dates
+and entity IDs can be used by the existing world read routes to inspect evidence.
+The receipt's coordinate frame is not an image ID or proof of metric calibration.
+
+Invalid/duplicate fields, noncanonical base64, malformed PNG and excessive decoded
+media return 400 (body overflow returns 413). Missing consent returns 403.
+A valid PNG absent from the exact authored fixture returns 503, never fabricated
+detections. Provider/storage details are filtered. No bytes or masks are retained.
+The existing authentication, origin and no-store behavior applies to the route.
+
+Each accepted POST is a new observation, with a new host-owned frame identity.
+There is no automatic retry or client-selected idempotency key. If the connection
+fails after publication, the result is unknown; inspect the journal/world state
+before intentionally making a new observation. A staged association may remain
+after a failed publication, as described above. The HTTP client cannot recreate
+the host frame context for an exact internal retry.
+
+`SQD-020-HTTP` runs three Swift tests with real isolated PostgreSQL and normal
+`ServerComposition.live`: explicit/frozen configuration and symlink refusal,
+authenticated import/provenance readback, negative consent/identity/shape/PNG/size/
+unknown-image cases with no journal writes, and the default absent route.
+It is an HTTP/PostgreSQL check, not a browser, SAM, live-model or Linux qualification.
