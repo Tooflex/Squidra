@@ -1,9 +1,8 @@
 name: Bootstrap
 
 on:
-  pull_request:
-  push:
-    branches: [main]
+  # Temporarily paused: run python3 Scripts/check-local.py locally.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -40,6 +39,8 @@ jobs:
         run: python3 Scripts/schema-manifest.py --check
       - name: Verify test-runner failure handling
         run: python3 Scripts/test_issue_runner.py
+      - name: Verify local gate coverage and failure handling
+        run: python3 Scripts/test_local_checks.py
       - name: Build pinned dependencies and modules
         run: swift build --force-resolved-versions
       - name: Run T01 Domain tests

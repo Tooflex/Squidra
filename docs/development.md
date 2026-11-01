@@ -46,6 +46,56 @@ dependencies. Future changes must preserve the accepted
 
 ## Build and verify
 
+### Local checks while CI is paused
+
+GitHub's Bootstrap workflow is temporarily disabled at the maintainer's
+request (1 November 2026). Its checked-in trigger is manual only. Run the
+same 53 issue suites, including PostgreSQL integrations, on the local host:
+
+```bash
+python3 Scripts/check-local.py
+```
+
+This requires Swift 6.4.2, Python 3.10+, and a running Docker or Podman
+engine. It builds the isolated database image, verifies the schema and test
+runner, builds with the lockfile, rejects empty test selections, executes the
+issue suites, smoke-tests the CLI, and checks that the lockfile did not change.
+It stops on the first failure and writes logs and a summary (including suites
+not executed) under `.build/local-checks/<UTC timestamp>/`.
+`Scripts/local-checks.json` lists the suites previously run by Bootstrap;
+update it when adding a workflow check. The local run combines the macOS and
+Linux job selections on the current host; it does not qualify another OS.
+
+For an explicitly partial run without Docker:
+
+```bash
+python3 Scripts/check-local.py --unit-only
+```
+
+The report labels this coverage `unit-only` and lists omitted integration
+suites. Use `--integration-only` to retry database suites separately after
+fixing a local environment failure; its report also declares partial coverage.
+
+If the default Colima VM has a broken automatic SSH port forwarder, the
+container may be ready while its macOS loopback port remains unreachable.
+The database runner detects this within ten seconds. The following opt-in
+wrapper uses Colima's existing generated SSH configuration to forward only
+ports belonging to labeled Squidra test containers. It removes its forwards
+when each test container is removed, without restarting the VM:
+
+```bash
+SQUIDRA_CONTAINER_ENGINE="$PWD/Scripts/colima-test-engine.py" python3 Scripts/check-local.py
+```
+
+This workaround targets the default Colima profile and requires its existing
+`~/.colima/_lima/colima/ssh.config`. Docker Desktop and working Colima setups
+should use the normal command.
+
+To resume hosted CI, restore the push/pull-request triggers and run
+`gh workflow enable bootstrap.yml --repo Tooflex/Squidra`. Server-side branch
+rules are separate from workflow activation; disabling CI does not satisfy
+required GitHub checks.
+
 From the repository root:
 
 ```bash
