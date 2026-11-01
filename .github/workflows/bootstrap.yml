@@ -105,6 +105,8 @@ jobs:
         run: bash Scripts/test-issue.sh T11-META-TRANSPORT
       - name: Meta text price estimates
         run: bash Scripts/test-issue.sh T11-META-COST
+      - name: SAM image request contract
+        run: bash Scripts/test-issue.sh T11-SAM-IMAGE
       - name: Verify consent-bound offline frame imports
         run: bash Scripts/test-issue.sh SQD-020-OFFLINE
       - name: Verify bounded entity association and ambiguous identity handling

@@ -1,7 +1,7 @@
 # Provider qualification
 
 Public contracts first observed on 2026-10-31; authenticated catalog and minimal
-text inference verified on 2026-11-01 as detailed below. The default server
+text/image inference verified on 2026-11-01 as detailed below. The default server
 remains offline-only. These bounded probes do not establish general quality,
 account retention, billing reconciliation or safe production spending bounds.
 
@@ -12,7 +12,7 @@ account retention, billing reconciliation or safe production spending bounds.
 | Spark | `muse-spark-1.3` | Hosted multimodal input, text output | HTTP 200; one bounded JSON text probe passed |
 | Wonder | `muse-wonder-1.0` | Hosted multimodal input, text output | HTTP 200; one bounded JSON text probe passed |
 | Glimmer | `meta-models/Muse-Glimmer-30B` | Self-hosted image/text to text | Weights not downloaded; runtime unqualified |
-| SAM | `sam-3.1` | Hosted prompted image/video segmentation | Authenticated catalog present; segmentation and wire decoder unqualified |
+| SAM | `sam-3.1` | Hosted prompted image/video segmentation | HTTP 200; one synthetic image mask decoded and compared with expected pixels |
 
 The hosted base is `https://api.meta.ai/v1`, authenticated with a Bearer
 `MODEL_API_KEY`. Responses uses `POST /v1/responses`. Public API documentation
@@ -30,8 +30,8 @@ explicit frame and object IDs, pixel boxes and base85-encoded masks. Frame IDs
 can skip or arrive out of order; object IDs belong to a response and must not
 become persistent world entity IDs. Empty output can mean no matches.
 Confidence is optional and must not be invented when absent. This is a distinct
-wire contract from the normalized JSON fixtures below. No SAM parser or decoder
-has been qualified by these tests.
+wire contract from the normalized JSON fixtures below. A pinned official reference decoder has now decoded one real synthetic-image
+response (see below); a native Swift segmentation decoder remains unimplemented.
 Source: [SAM output](https://dev.meta.ai/docs/sam/reading-segmentation).
 
 ## Versions, weights and licenses
@@ -134,7 +134,7 @@ fixture tests cannot close them.
 ## Meta Responses client preparation (2026-11-01)
 
 The user selected hosted Meta AI and SAM 3.1 APIs and supplied a private key.
-Two minimal text probes now pass; SAM inference remains untested. The default
+Two minimal text probes and one synthetic-image SAM probe now pass. The default
 server remains offline.
 
 `MetaResponsesClient` implements a bounded, injectable text Responses contract
@@ -211,9 +211,8 @@ qualify Linux TLS, real Meta access, account retention, inference or billing.
 
 The user's selected deployment for both language models and SAM 3.1 is hosted
 API access. Authenticated catalog access now lists SAM with the supplied key.
-SAM still requires its own
-segmentation request/decoder contract and qualification; this text-response
-transport alone does not implement SAM or enable image upload.
+SAM now has a separate bounded image client and a reference-decoder probe below.
+The server still has no registered SAM VisionModel or cloud import route.
 
 
 ## Monetary evidence and dated text estimates
@@ -285,8 +284,8 @@ The user authorized **100 EUR total** across all Meta/SAM tests. The opt-in
 Git-ignored `.build/provider-access/live-budget.json`, before launching inference.
 A no-follow lock serializes probes and atomic fsync writes preserve reservations
 across failures/restarts. Estimates and failures never refund a reservation.
-Two completed calls currently consume 20 EUR of conservative reservations;
-this is **not 20 EUR spent**. Future SAM probes must use this same ledger and cap.
+The two text calls consume 20 EUR of conservative reservations;
+this is **not 20 EUR spent**. The SAM probe below reuses this same ledger and cap.
 Do not delete the ledger to repeat a probe or refresh pricing.
 
 The reservation deliberately exceeds a full published 1,048,576-token Standard
@@ -309,3 +308,63 @@ opt-in and a reservation ID supplied by the driver; do not invoke it directly.
 The driver and inference fixture are never run by CI or the offline gate.
 Offline Python tests exercise cumulative exhaustion, failure/restart reservation
 retention, stale/corrupt records and private-file rejection.
+
+
+## SAM 3.1 image probe and reference decoding (2026-11-01)
+
+`MetaSAMImageClient` sends one PNG as an inline data URL with explicit cloud-image
+consent. It accepts PNG envelopes up to 64 KiB and 1024 × 1024 pixels, a bounded
+concept prompt, and a monotonic deadline. The request disables storage,
+background work and streaming, and requests one_bit masks and confidence using
+string metadata values. Non-streaming segmentation is supported by the official
+[request documentation](https://dev.meta.ai/docs/sam/segmenting).
+
+The client accepts only a complete single assistant output_text lane for
+sam-3.1. An empty lane represents zero matches; an absent lane does not. Optional
+images_processed remains unknown if absent. The returned segmentation text is
+**not validated geometry** and is not a VisionOutput. This boundary does not
+invent confidence, appearance embeddings, persistent entity IDs or actor/camera
+identity. Offline T11-SAM-IMAGE tests cover consent, prompt/media limits, request
+flags, empty/missing lanes, usage types, partial/refused/error responses and
+cancellation.
+
+The authorized live probe sent only the authored 512 × 512 RGB PNG in
+`fixtures/providers/sam-red-square.png`, containing a red square at half-open
+coordinates [128,128,384,384]. The fixed concept was `red square`. The actual
+Swift client/HTTPS transport received HTTP 200 and images_processed=1. The
+returned inclusive box became half-open [128,128,384,383]. The decoded box-local
+mask was 256 × 255, with 64,849 foreground pixels. Its intersection-over-union
+against the authored source square was **0.9895172119140625**, above the probe's
+0.90 threshold. This is one synthetic case, not a general segmentation accuracy
+claim. Both observed token confidences were 0.8787879347801208; neither is a
+calibrated world certainty.
+
+`Scripts/test-sam-reference.py` verifies and imports the official
+meta-sam-parser 0.1.0 wheel, SHA-256
+`eca156907911c56cef3a350ffc81c34b7e70655e5fa3ccdddb77042c541a0152`.
+It is **SAM License**, not MIT or Apache, and is used only for development
+qualification; it is neither vendored nor installed as a server dependency.
+Its official package provenance is documented by the
+[client libraries](https://dev.meta.ai/docs/sam/client-libraries) and
+[package index](https://pypi.org/project/meta-sam-parser/0.1.0/).
+The helper caps text at 16 KiB, masks at 16, raster dimensions at 1024 and total
+raster area at 1,048,576 pixels **before** calling the reference parser. It rejects
+diagnostics, wrong source dimensions, unexpected scale/count and nonbinary
+rasters. The parent process bounds reference decoding to ten seconds.
+
+The [shared protocol](https://github.com/meta-models/meta-sam/blob/main/protocol/sam3.md)
+specifies inclusive wire corners, a custom base85 arithmetic-coded mask payload,
+and independent optional confidence on box and mask tokens. The reference helper
+retains both scores independently; an absent score remains null. A native Swift
+mask decoder and full-frame mask reconstruction are still required before SAM
+can be registered as a VisionModel for world ingestion. Streaming/video and
+long-term object identity remain unqualified.
+
+The anonymized live projection in `fixtures/providers/sam-image-live.v1.json`
+retains public synthetic segmentation text, image/response/raster hashes and
+measurements, without provider IDs or raw HTTP response. Re-decoding that stored
+text reproduced the raster hash without another API call. The estimated image
+charge is USD 0.002500 at the recorded rate; total text-plus-image estimate is
+USD 0.003480, not a reconciled invoice. The same private ledger now reserves
+**30 EUR of the authorized 100 EUR** across three attempts; reservations remain
+conservative, are never reset, and are not the measured charge.
