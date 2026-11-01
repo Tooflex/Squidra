@@ -110,7 +110,9 @@ final class RunWorkerSQLTests: XCTestCase, @unchecked Sendable {
             let owner = try LocalRunOwnership.acquire(directory:directory,actorID:actor)
             defer { owner.releaseAfterJoiningWorkers() }
             let ownership = PostgresReadRunOwnershipStore(client:client,ownership:owner)
-            try await ownership.bind(deadline:.now.advanced(by:.seconds(4)))
+            async let firstBind:Void = ownership.bind(deadline:.now.advanced(by:.seconds(4)))
+            async let secondBind:Void = PostgresReadRunOwnershipStore(client:other,ownership:owner).bind(deadline:.now.advanced(by:.seconds(4)))
+            _ = try await (firstBind,secondBind)
             let events = PostgresRunEventStore(client:client,actorID:actor),publication = PostgresRunPublicationStore(client:client,actorID:actor)
             let tasks = PostgresReadRunTaskStore(client:client,actorID:actor),executor = ExecutionFixture(.blocked)
             let coordinator = try PublishedReadRunCoordinator(actorID:actor,executor:executor,events:events,publication:publication,

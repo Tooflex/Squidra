@@ -3,7 +3,6 @@ import Hummingbird
 import Logging
 import SquidraAgentRuntime
 import SquidraCognition
-import SquidraAgentRuntime
 import SquidraObservability
 import SquidraProtocols
 import SquidraPostgres
@@ -17,7 +16,7 @@ import PostgresNIO
 enum ServerComposition {
     static func live(configuration: ServerConfiguration, readHost: ReadHostConfiguration? = nil, traceRecorder: PrivateTraceRecorder? = nil, localOwnership: LocalRunOwnership? = nil) throws -> some ApplicationProtocol {
         if let localOwnership {
-            guard localOwnership.isHeld,localOwnership.actorID == configuration.boundary.actorID,readHost != nil else { throw ReadRunTaskError.invalidState }
+            guard localOwnership.isHeld,localOwnership.actorID == configuration.boundary.actorID else { throw ReadRunTaskError.invalidState }
         }
         let recorder = try traceRecorder ?? PrivateTraceRecorder(limits:TraceLimits())
         let client = configuration.database.makeClient()
@@ -53,7 +52,16 @@ enum ServerComposition {
                 try await ownershipStore?.bind(deadline:.now.advanced(by:.seconds(4)))
                 _ = try await recovery.recover()
             },localOwnership:localOwnership,
-            publicationStep: { try await publication.recoverNextCompleted(at:UTCInstant(secondsSince1970:Date().timeIntervalSince1970),deadline:.now.advanced(by:.seconds(4))) },
+            publicationStep: {
+                if let ownershipStore,let localOwnership {
+                    let candidates = try await ownershipStore.previousRuns(completedOnly:true,deadline:.now.advanced(by:.seconds(4)))
+                    for candidate in candidates {
+                        if try await publication.recoverCompleted(runID:candidate.runID,ownership:localOwnership,
+                            at:UTCInstant(secondsSince1970:Date().timeIntervalSince1970),deadline:.now.advanced(by:.seconds(4))) { return true }
+                    }
+                }
+                return try await publication.recoverNextCompleted(at:UTCInstant(secondsSince1970:Date().timeIntervalSince1970),deadline:.now.advanced(by:.seconds(4)))
+            },
             watchStep: {
                 let progressed = try await watches.processNext(deadline: .now.advanced(by: .seconds(4)))
                 if progressed { _ = try await recovery.recover() }
@@ -95,9 +103,10 @@ enum ServerComposition {
             },
             logger: Logger(label: "squidra.server", factory: { _ in SwiftLogNoOpLogHandler() }))
         if let client { app.addServices(client) }
-        if let publicationStep { app.addServices(PublicationRecoveryService(processNext:publicationStep)) }
         if let watchStep { app.addServices(WatchWorkerService(processNext: watchStep)) }
-        if let coordinator = runs?.submission?.coordinator { app.addServices(ReadWorkerService(coordinator:coordinator,ownership:localOwnership)) }
+        if runs?.submission?.coordinator != nil || localOwnership != nil {
+            app.addServices(ReadWorkerService(coordinator:runs?.submission?.coordinator,ownership:localOwnership,recovery:publicationStep))
+        } else if let publicationStep { app.addServices(PublicationRecoveryService(processNext:publicationStep)) }
         if let beforeServing { app.beforeServerStarts(perform:beforeServing) }
         return app
     }
