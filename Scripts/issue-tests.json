@@ -524,5 +524,9 @@
   "SQD-004": {
     "kind": "xctest",
     "filter": "^(SquidraSecurityTests\\.CredentialProviderTests|SquidraServerTests\\.CredentialHTTPTests)/"
+  },
+  "SQD-027": {
+    "kind": "xctest",
+    "filter": "(^SquidraMemoryTests\\.|^SquidraAgentRuntimeTests\\.ReadRunEngineTests/testPrivateMemory)"
   }
 }
