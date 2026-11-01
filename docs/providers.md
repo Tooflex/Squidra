@@ -31,7 +31,7 @@ can skip or arrive out of order; object IDs belong to a response and must not
 become persistent world entity IDs. Empty output can mean no matches.
 Confidence is optional and must not be invented when absent. This is a distinct
 wire contract from the normalized JSON fixtures below. A pinned official reference decoder has now decoded one real synthetic-image
-response (see below); a native Swift segmentation decoder remains unimplemented.
+response (see below); the bounded native Swift image decoder is described below.
 Source: [SAM output](https://dev.meta.ai/docs/sam/reading-segmentation).
 
 ## Versions, weights and licenses
@@ -212,7 +212,7 @@ qualify Linux TLS, real Meta access, account retention, inference or billing.
 The user's selected deployment for both language models and SAM 3.1 is hosted
 API access. Authenticated catalog access now lists SAM with the supplied key.
 SAM now has a separate bounded image client and a reference-decoder probe below.
-The server still has no registered SAM VisionModel or cloud import route.
+A SAM VisionModel adapter is available, but the server has no cloud import route.
 
 
 ## Monetary evidence and dated text estimates
@@ -355,9 +355,9 @@ rasters. The parent process bounds reference decoding to ten seconds.
 The [shared protocol](https://github.com/meta-models/meta-sam/blob/main/protocol/sam3.md)
 specifies inclusive wire corners, a custom base85 arithmetic-coded mask payload,
 and independent optional confidence on box and mask tokens. The reference helper
-retains both scores independently; an absent score remains null. A native Swift
-mask decoder and full-frame mask reconstruction are still required before SAM
-can be registered as a VisionModel for world ingestion. Streaming/video and
+retains both scores independently; an absent score remains null. Native Swift
+mask decoding and full-frame reconstruction are now implemented below. Cloud
+world ingestion remains disabled pending host integration. Streaming/video and
 long-term object identity remain unqualified.
 
 The anonymized live projection in `fixtures/providers/sam-image-live.v1.json`
@@ -368,3 +368,34 @@ charge is USD 0.002500 at the recorded rate; total text-plus-image estimate is
 USD 0.003480, not a reconciled invoice. The same private ledger now reserves
 **30 EUR of the authorized 100 EUR** across three attempts; reservations remain
 conservative, are never reset, and are not the measured charge.
+
+
+## Native SAM image decoding
+
+`SAMOneBitMask` ports the one-bit custom base85/range codec from the pinned
+reference package. The derived code retains the SAM License and attribution in
+`ThirdPartyLicenses/`. No Python runtime is needed by the Swift adapter. Decoding
+checks canonical base85 and re-encodes the raster to reject truncated, appended
+or noncanonical arithmetic streams. Lossless (`~`), streaming and video profiles
+are unsupported. Dimensions are bounded to 1024, text/payload to 192 KiB, and
+cancellation and monotonic deadlines are checked throughout raster processing.
+
+`SAMImageSegmentation` accepts a single image frame, unique response-local IDs,
+exactly one box and mask per detection, inclusive wire corners and matching
+box-local raster dimensions. It rejects unknown/duplicate fields, malformed
+confidence, scaling and empty foreground masks. This is stricter than the
+reference parser's warning recovery. At most 16 detections, one million local
+mask pixels and four MiB of reconstructed full-frame masks are accepted. Pixels
+outside each box remain zero. Box and mask confidence remain independently
+optional.
+
+`MetaSAMVisionModel` preserves host context and image digest and identifies the
+provider version as `alias:sam-3.1`, not immutable weights. Detection confidence
+is the minimum only when both scores exist; otherwise it remains absent.
+Appearance embeddings are absent. FrameImporter still rejects cloud models,
+even with transfer consent: this adapter does not activate paid world ingestion.
+
+Offline `T11-SAM-NATIVE` compares 40 reference-encoded rasters and 18 rejected
+streams, exercises geometry, quotas, cancellation and adapter provenance, and
+reproduces the captured live raster SHA-256. It makes no paid calls. These checks
+qualify the bounded image profile, not arbitrary SAM output or general quality.
