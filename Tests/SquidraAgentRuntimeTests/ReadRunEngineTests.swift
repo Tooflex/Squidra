@@ -96,6 +96,20 @@ private actor EngineModelFixture: LanguageModel {
     }
 }
 
+private actor CompletionFixture: ReadRunCompletionStore {
+    let fail: Bool
+    private(set) var saved: StoredReadRunCompletion?
+    private(set) var state: RunState?
+    init(fail: Bool) { self.fail = fail }
+    func save(snapshot: RunSnapshot,answer: GroundedAnswer,deadline: ContinuousClock.Instant) throws {
+        state = snapshot.state
+        saved = StoredReadRunCompletion(actorID:snapshot.actorID,runID:snapshot.id,requestID:answer.requestId,
+            respondingVersion:snapshot.version,answerJSON:try JSONEncoder().encode(answer))
+        if fail { throw ReadRunTaskError.unavailable }
+    }
+    func load(runID: UUID,deadline: ContinuousClock.Instant) -> StoredReadRunCompletion? { saved }
+}
+
 // SAFETY: stateless suite; models, query counters and stores are actors.
 final class ReadRunEngineTests: XCTestCase, @unchecked Sendable {
     private static let actor = EngineWorldFixture.id(2)
@@ -105,13 +119,32 @@ final class ReadRunEngineTests: XCTestCase, @unchecked Sendable {
             modelOptions:ReadPlanningOptions(maximumCostMicroUSD:cost,deadline:UTCInstant(secondsSince1970:clock.now().secondsSince1970+seconds)),budget:budget)
     }
     private static func engine(clock: EngineClockFixture, store: EngineRunStore, model: EngineModelFixture, world: EngineWorldFixture, deny: Bool = false,
-                               memory: MemoryContextProvider? = nil) throws -> ReadRunEngine {
+                               memory: MemoryContextProvider? = nil, completions: (any ReadRunCompletionStore)? = nil) throws -> ReadRunEngine {
         let registrations = try [WorldLocationTool(world:world).registration(),WorldChangesTool(world:world).registration()]
         let permissions = registrations.map { HostActionPermission(actorID:actor,tool:$0.definition.id,capability:$0.definition.capability,
             targets:["entity:"+EngineWorldFixture.entity.uuidString.lowercased()],scope:["world:read"],expiresAt:.now.advanced(by:.seconds(60))) }
         let policy: any PolicyEngine = deny ? DenyAllActionPolicy() : HostActionPolicy(permissions:permissions)
         return try ReadRunEngine(router:ModelRouter(models:[model],clock:clock),gateway:ActionGateway(tools:registrations,policy:policy),store:store,
-            clock:clock,freshness:AnswerFreshnessPolicy(maximumObservationAgeSeconds:2000,minimumCurrentConfidence:Confidence(0.5)),memory:memory)
+            clock:clock,freshness:AnswerFreshnessPolicy(maximumObservationAgeSeconds:2000,minimumCurrentConfidence:Confidence(0.5)),memory:memory,completions:completions)
+    }
+    func testCompletionArchivePrecedesTerminalAndAmbiguousWritePreservesCheckpoint() async throws {
+        for fail in [false,true] {
+            let clock = EngineClockFixture(),store = EngineRunStore(),model = EngineModelFixture(),world = EngineWorldFixture()
+            let archive = CompletionFixture(fail:fail),request = try Self.request(clock:clock)
+            let engine = try Self.engine(clock:clock,store:store,model:model,world:world,completions:archive)
+            do {
+                let result = try await engine.execute(request)
+                XCTAssertFalse(fail);XCTAssertEqual(result.snapshot.state,.completed)
+            } catch let failure as ReadRunFailure {
+                XCTAssertTrue(fail);XCTAssertEqual(failure.code,.recoveryRequired)
+            }
+            let state = await archive.state,saved = await archive.saved
+            XCTAssertEqual(state,.responding);XCTAssertEqual(saved?.requestID,request.requestID)
+            let durable = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2)))
+            XCTAssertEqual(durable.state,fail ? .responding : .completed)
+            let calls = await model.requests
+            XCTAssertEqual(calls.count,2,"Archive failure must not rerun a model")
+        }
     }
     func testOneStepOneCallCompletesOnlyAfterGroundedValidation() async throws {
         let clock = EngineClockFixture(), store = EngineRunStore(), model = EngineModelFixture(), world = EngineWorldFixture()
