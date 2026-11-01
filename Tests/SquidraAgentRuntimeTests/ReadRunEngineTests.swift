@@ -127,6 +127,20 @@ private actor PlanFixture: ReadRunPlanStore {
     }
 }
 
+private actor ToolResultFixture: ReadRunToolResultStore {
+    let fail: Bool
+    private(set) var saved: StoredReadRunToolResult?
+    private(set) var state: RunState?
+    init(fail: Bool) { self.fail = fail }
+    func save(snapshot: RunSnapshot,requestID: UUID,command: ActionCommand,result: UntrustedToolResult,deadline: ContinuousClock.Instant) throws {
+        state = snapshot.state
+        saved = StoredReadRunToolResult(actorID:snapshot.actorID,runID:snapshot.id,requestID:requestID,callID:result.callID,
+            executionVersion:snapshot.version,commandFingerprint:command.fingerprintHex,toolIdentifier:result.tool.identifier,payload:result.payload)
+        if fail { throw ReadRunTaskError.unavailable }
+    }
+    func load(runID: UUID,deadline: ContinuousClock.Instant) -> StoredReadRunToolResult? { saved }
+}
+
 // SAFETY: stateless suite; models, query counters and stores are actors.
 final class ReadRunEngineTests: XCTestCase, @unchecked Sendable {
     private static let actor = EngineWorldFixture.id(2)
@@ -136,13 +150,40 @@ final class ReadRunEngineTests: XCTestCase, @unchecked Sendable {
             modelOptions:ReadPlanningOptions(maximumCostMicroUSD:cost,deadline:UTCInstant(secondsSince1970:clock.now().secondsSince1970+seconds)),budget:budget)
     }
     private static func engine(clock: EngineClockFixture, store: EngineRunStore, model: EngineModelFixture, world: EngineWorldFixture, deny: Bool = false,
-                               memory: MemoryContextProvider? = nil, completions: (any ReadRunCompletionStore)? = nil,plans: (any ReadRunPlanStore)? = nil) throws -> ReadRunEngine {
+                               memory: MemoryContextProvider? = nil, completions: (any ReadRunCompletionStore)? = nil,plans: (any ReadRunPlanStore)? = nil,toolResults: (any ReadRunToolResultStore)? = nil) throws -> ReadRunEngine {
         let registrations = try [WorldLocationTool(world:world).registration(),WorldChangesTool(world:world).registration()]
         let permissions = registrations.map { HostActionPermission(actorID:actor,tool:$0.definition.id,capability:$0.definition.capability,
             targets:["entity:"+EngineWorldFixture.entity.uuidString.lowercased()],scope:["world:read"],expiresAt:.now.advanced(by:.seconds(60))) }
         let policy: any PolicyEngine = deny ? DenyAllActionPolicy() : HostActionPolicy(permissions:permissions)
         return try ReadRunEngine(router:ModelRouter(models:[model],clock:clock),gateway:ActionGateway(tools:registrations,policy:policy),store:store,
-            clock:clock,freshness:AnswerFreshnessPolicy(maximumObservationAgeSeconds:2000,minimumCurrentConfidence:Confidence(0.5)),memory:memory,completions:completions,plans:plans)
+            clock:clock,freshness:AnswerFreshnessPolicy(maximumObservationAgeSeconds:2000,minimumCurrentConfidence:Confidence(0.5)),memory:memory,completions:completions,plans:plans,toolResults:toolResults)
+    }
+    func testToolResultArchivePrecedesConfirmationAndLostAcknowledgementStopsAnswer() async throws {
+        for fail in [false,true] {
+            let clock = EngineClockFixture(),store = EngineRunStore(),model = EngineModelFixture(),world = EngineWorldFixture()
+            let archive = ToolResultFixture(fail:fail),request = try Self.request(clock:clock)
+            let engine = try Self.engine(clock:clock,store:store,model:model,world:world,toolResults:archive)
+            do {
+                let completed = try await engine.execute(request)
+                XCTAssertFalse(fail);XCTAssertEqual(completed.snapshot.state,.completed)
+            } catch let failure as ReadRunFailure {
+                XCTAssertTrue(fail);XCTAssertEqual(failure.code,.recoveryRequired)
+            }
+            let state = await archive.state,saved = await archive.saved
+            let archived = try XCTUnwrap(saved)
+            XCTAssertEqual(state,.executingTool);XCTAssertEqual(archived.requestID,request.requestID)
+            XCTAssertEqual(archived.actorID,request.actorID);XCTAssertEqual(archived.runID,request.runID)
+            XCTAssertEqual(archived.toolIdentifier,"world.get_entity_location@1.0.0")
+            let decoded = try JSONSerialization.jsonObject(with:archived.payload) as! [String:Any]
+            XCTAssertEqual((decoded["entityId"] as? String)?.lowercased(),EngineWorldFixture.entity.uuidString.lowercased())
+            let durable = try await store.load(actorID:request.actorID,runID:request.runID,deadline:.now.advanced(by:.seconds(2)))
+            XCTAssertEqual(durable.state,fail ? .executingTool : .completed)
+            XCTAssertEqual(durable.calls,1);XCTAssertEqual(durable.steps,1)
+            if fail { XCTAssertEqual(durable.version,archived.executionVersion) }
+            else { XCTAssertLessThan(archived.executionVersion,durable.version) }
+            let models = await model.requests.count,reads = await world.calls
+            XCTAssertEqual(models,fail ? 1 : 2);XCTAssertEqual(reads,1)
+        }
     }
     func testCompletionArchivePrecedesTerminalAndAmbiguousWritePreservesCheckpoint() async throws {
         for fail in [false,true] {

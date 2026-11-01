@@ -40,13 +40,14 @@ public struct ReadRunEngine: Sendable {
     private let decoder: WorldReadEvidenceDecoder, store: any RunStore
     private let clock: any SquidraDomain.Clock, freshness: AnswerFreshnessPolicy
     private let memory: MemoryContextProvider?
+    private let toolResults: (any ReadRunToolResultStore)?
     private let plans: (any ReadRunPlanStore)?
     private let completions: (any ReadRunCompletionStore)?
     public init(router: ModelRouter, gateway: ActionGateway, store: any RunStore,
                 clock: any SquidraDomain.Clock, freshness: AnswerFreshnessPolicy,
-                memory: MemoryContextProvider? = nil, completions: (any ReadRunCompletionStore)? = nil, plans: (any ReadRunPlanStore)? = nil) throws {
+                memory: MemoryContextProvider? = nil, completions: (any ReadRunCompletionStore)? = nil, plans: (any ReadRunPlanStore)? = nil,toolResults: (any ReadRunToolResultStore)? = nil) throws {
         self.router = router; self.gateway = gateway; self.store = store; self.clock = clock; self.freshness = freshness
-        self.memory = memory; self.completions = completions; self.plans = plans
+        self.memory = memory; self.completions = completions; self.plans = plans;self.toolResults = toolResults
         planner = try ReadPlanner(router:router,clock:clock); decoder = try WorldReadEvidenceDecoder()
     }
     public func execute(_ request: ReadRunRequest) async throws -> ReadRunResult {
@@ -193,6 +194,10 @@ public struct ReadRunEngine: Sendable {
         catch let error as ActionGatewayError where [.denied,.approvalRequired,.policyUnavailable].contains(error) { throw ReadRunFailureCode.denied }
         catch let error as ActionGatewayError where error == .timedOut { throw ReadRunFailureCode.deadlineExceeded }
         catch { throw ReadRunFailureCode.readFailed }
+        if let toolResults {
+            do { try await toolResults.save(snapshot:controller.snapshot(),requestID:request.requestID,command:command,result:result,deadline:min(deadline,.now.advanced(by:.seconds(4)))) }
+            catch { throw ReadRunFailureCode.recoveryRequired }
+        }
         // A read succeeded; factual claims are not confirmed until validation.
         try Self.active(await controller.finishToolAttempt(.confirmed))
         let evidence: WorldReadEvidence

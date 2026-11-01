@@ -288,3 +288,33 @@ archived/published answer equality. The suite is registered in local checks and
 the currently suspended Bootstrap workflow. This qualifies the explicit saved
 plan continuation; automatic execution recovery and later-phase continuation
 remain pending for SQD-028.
+
+## Durable read-tool result before acknowledgement
+
+The live read engine saves the gateway's untrusted tool result before committing
+`finishToolAttempt(.confirmed)` and before asking the model for an answer.
+`ReadRunToolResultStore` retains the original call UUID, tool identifier, command
+fingerprint and bounded raw JSON with actor/run/request and execution checkpoint
+version. It is private run data, not a new factual proof or a dispatch grant.
+Evidence still passes through `WorldReadEvidenceDecoder` and final grounding.
+
+Migration `runtime/008_read_run_tool_results.sql` makes the archive immutable and
+binds it to the runtime and saved task. The PostgreSQL insertion checks the exact
+EXECUTING_TOOL version, one step/call, matching task request and command digest,
+and the original in-flight invocation key with one attempt. Only the two bounded
+world read tools are accepted. An exact duplicate save is idempotent even after
+later FSM progress; conflicting bytes or metadata fail. Actor-scoped loads retain
+the raw bytes. Purging follows the containing task/run lifecycle.
+
+A failed or ambiguously acknowledged archive write returns recoveryRequired,
+leaves the execution checkpoint intact and performs no answer-model call. The
+result can therefore be reconciled later without recreating the read. Missing
+archives do not establish whether the read happened. This step adds durable input
+for later-phase recovery; it does not yet activate result-based continuation or
+an automatic execution takeover.
+
+T14-RUN covers successful archival and loss of its acknowledgement, checking one
+read, unchanged checkpoint on failure and no premature answer. T05-HTTP checks
+real live persistence, ordering between planning and completion archives, exact
+command binding, schema/evidence decoding, actor isolation and SQL update
+rejection. SQD-028 remains open until continuation and host activation are complete.
