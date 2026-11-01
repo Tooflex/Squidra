@@ -39,9 +39,12 @@ public struct ReadRunEngine: Sendable {
     private let planner: ReadPlanner, router: ModelRouter, gateway: ActionGateway
     private let decoder: WorldReadEvidenceDecoder, store: any RunStore
     private let clock: any SquidraDomain.Clock, freshness: AnswerFreshnessPolicy
+    private let memory: MemoryContextProvider?
     public init(router: ModelRouter, gateway: ActionGateway, store: any RunStore,
-                clock: any SquidraDomain.Clock, freshness: AnswerFreshnessPolicy) throws {
+                clock: any SquidraDomain.Clock, freshness: AnswerFreshnessPolicy,
+                memory: MemoryContextProvider? = nil) throws {
         self.router = router; self.gateway = gateway; self.store = store; self.clock = clock; self.freshness = freshness
+        self.memory = memory
         planner = try ReadPlanner(router:router,clock:clock); decoder = try WorldReadEvidenceDecoder()
     }
     public func execute(_ request: ReadRunRequest) async throws -> ReadRunResult {
@@ -109,10 +112,12 @@ public struct ReadRunEngine: Sendable {
         guard ContinuousClock.now < deadline else { throw ReadRunFailureCode.deadlineExceeded }
         try Self.active(await controller.transition(to:.validating))
         try Self.active(await controller.transition(to:.contextLoading))
+        let memoryContext = try await memory?.context(actorID: request.actorID,
+            subjectIDs: Set(request.planningScope.entities.map(\.id)), question: request.question, deadline: deadline)
         try Self.active(await controller.transition(to:.planning,substate:.reasoning))
         let planned: PlannedRead
         do { planned = try await planner.plan(question:request.question,scope:request.planningScope,requestID:UUID(),
-            options:options(request,deadline:deadline,remainingCost:request.modelOptions.maximumCostMicroUSD)) }
+            options:options(request,deadline:deadline,remainingCost:request.modelOptions.maximumCostMicroUSD), memory: memoryContext) }
         catch is CancellationError { throw CancellationError() }
         catch let error as ModelRoutingError where error == .deadlineExceeded { throw ReadRunFailureCode.deadlineExceeded }
         catch let error as ModelRoutingError where error == .budgetExceeded { throw ReadRunFailureCode.budgetExceeded }
