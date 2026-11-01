@@ -80,6 +80,13 @@ public actor FactConsolidation {
     /// Atomic bounded batch with an immutable idempotency key. Source records
     /// and event IDs are retained; duplicates never count as independent proof.
     public func propose(batchID: UUID, candidates: [FactCandidate]) throws -> [FactProposal] {
+        guard !candidates.isEmpty, candidates.count <= 32 else { throw ConsolidationError.invalidInput }
+        return try propose(batchID: batchID, candidates: candidates, proposalIDs: candidates.map { _ in UUID() })
+    }
+
+    // Journal replay retains exact identities; arbitrary callers cannot replace
+    // existing proposals or inject a pre-approved state.
+    internal func propose(batchID: UUID, candidates: [FactCandidate], proposalIDs: [UUID]) throws -> [FactProposal] {
         try Task.checkCancellation()
         guard !candidates.isEmpty, candidates.count <= 32 else { throw ConsolidationError.invalidInput }
         if let previous = batches[batchID] {
@@ -87,8 +94,10 @@ public actor FactConsolidation {
             return previous.ids.compactMap { proposals[$0] }
         }
         guard batches.count < 256, proposals.count + candidates.count <= 256 else { throw ConsolidationError.capacityExceeded }
+        guard proposalIDs.count == candidates.count, Set(proposalIDs).count == proposalIDs.count,
+              proposalIDs.allSatisfy({ proposals[$0] == nil }) else { throw ConsolidationError.invalidInput }
         var pending: [FactProposal] = []
-        for candidate in candidates {
+        for (index, candidate) in candidates.enumerated() {
             guard let predicate = predicates[candidate.predicate] else { throw ConsolidationError.invalidInput }
             var sources = Set<UUID>()
             for (memoryID, quote) in candidate.quotations {
@@ -97,7 +106,7 @@ public actor FactConsolidation {
                 sources.formUnion(memory.sourceIDs)
             }
             guard sources.count <= 16 else { throw ConsolidationError.invalidSource }
-            pending.append(FactProposal(id: UUID(), actorID: actorID, candidate: candidate,
+            pending.append(FactProposal(id: proposalIDs[index], actorID: actorID, candidate: candidate,
                                         critical: predicate.critical, sourceIDs: sources.sorted(by: Self.ordered)))
         }
         // Validate every input before mutating state. Compare against all prior

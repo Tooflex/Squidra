@@ -923,5 +923,21 @@
   "SQD-029": {
     "kind": "xctest",
     "filter": "^SquidraMemoryTests\\.FactConsolidationTests/"
+  },
+  "SQD-029-SQL": {
+    "kind": "xctest",
+    "filter": "^SquidraMemoryTests\\.ConsolidationSQLTests/"
+  },
+  "SQD-029-DURABLE": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-consolidation"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "durable_consolidation"
+    ]
   }
 }
