@@ -1229,5 +1229,19 @@
     "tests": [
       "pr_provenance_contracts"
     ]
+  },
+  "T12-BACKUP": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Tests/SquidraRetentionTests/backup_restore.py"
+    ],
+    "tests": [
+      "private_no_overwrite",
+      "facts_versions_restored",
+      "restored_invariants",
+      "unsafe_and_corrupt_rejected",
+      "unowned_container_rejected"
+    ]
   }
 }
