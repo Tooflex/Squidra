@@ -54,7 +54,7 @@ async function perform(work: (signal: AbortSignal, generation: number) => Promis
 }
 function evidence(f: Fact) {
   const block = document.createElement('article'); block.className = 'card';
-  block.append(node('h3','Emplacement : ' + f.locationId), node('p',`${f.basis === 'observed' ? 'Observé' : 'Inféré'} · confiance déclarée ${f.confidence}`), node('p','Source : ' + f.source), node('p','Événement : ' + f.sourceEventId), node('p','Image : ' + f.frameId), node('p',`Validité : ${f.valid.from} → ${f.valid.to ?? 'ouverte'}`), node('p',`Connu : ${f.transaction.from} → ${f.transaction.to ?? 'ouverte'}`), node('p',`Observé ${f.observedAt} · enregistré ${f.recordedAt} · fuseau ${f.timeZone}`)); return block;
+  block.append(node('h3','Emplacement : ' + f.locationId), node('p',`${f.basis === 'observed' ? 'Observé' : 'Inféré'} · confiance déclarée ${f.confidence}`), node('p','Source : ' + f.source), node('p','Événement : ' + f.sourceEventId), node('p','Repère spatial : ' + f.frameId), node('p',`Validité : ${f.valid.from} → ${f.valid.to ?? 'ouverte'}`), node('p',`Connu : ${f.transaction.from} → ${f.transaction.to ?? 'ouverte'}`), node('p',`Observé ${f.observedAt} · enregistré ${f.recordedAt} · fuseau ${f.timeZone}`)); return block;
 }
 function renderPage(value: Page) {
   document.getElementById('changes-page')?.remove();
