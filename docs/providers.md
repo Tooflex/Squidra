@@ -130,3 +130,56 @@ models. Measure tokens or image/frame units, cost, runtime resources and latency
 Gated/self-hosted models additionally need explicit license acceptance and a
 qualified runtime. Those steps remain open under T11; public-source or offline
 fixture tests cannot close them.
+
+## Meta Responses client preparation (2026-11-01)
+
+The user selected hosted Meta AI and SAM 3.1 APIs and will configure credentials
+later. No live inference has been performed. The default server remains offline.
+
+`MetaResponsesClient` implements a bounded, injectable text Responses contract
+for Standard-mode `muse-spark-1.3` or `muse-wonder-1.0`. It requires explicit cloud
+consent and a monotonic deadline of at most 180 seconds. It permits 1–64 messages,
+64 KiB of input text and 16–4096 output tokens. It preserves system/user/assistant
+roles and maps prior assistant text to output_text. A tool-role message is
+rejected: the current ModelMessage has no call ID to represent function output,
+and tool text must not silently become a system instruction.
+
+Requests set store, stream and background to false, disable truncation, declare
+no tools, select minimal reasoning and request an object through
+`text.format` JSON Schema. This generic object format does not replace Squidra's
+planner/answer schema validation. No previous response ID, file, search tool,
+media input, cache identifier or encrypted reasoning replay is requested.
+`store:false` is a request setting, not a promise about account-wide retention.
+
+Responses must match the selected model and complete successfully with one
+assistant message containing bounded output_text JSON object content. Refusal,
+function/tool output, duplicate JSON keys, partial/multiple messages, wrong
+content type, oversized bodies and inconsistent token counts fail closed.
+Reasoning items are never returned as answer text. An explicit store/background
+true echo is rejected. Usage retains input/output/total tokens and optional
+cached/reasoning detail; absent detail remains unknown, not zero. It is not
+converted to money, and the model alias is not described as a pinned weight
+revision. HTTP failures expose fixed typed errors, never provider error bodies.
+There is no retry, polling or fallback.
+
+The transport is injected and must enforce response limits while receiving,
+refuse redirects and cooperate with cancellation. The client independently
+validates the complete response and joins the deadline/cancellation tasks. This
+component is **not yet registered as a LanguageModel**: a production authenticated
+transport, qualified spending bounds/accounting and explicit server configuration
+remain necessary. No environment key is read and no network transport is
+implicitly created by this component.
+
+`bash Scripts/test-issue.sh T11-META-RESPONSES` runs eight offline tests with
+hand-authored responses, covering request flags/roles, consent and resource
+limits, HTTP failures/no retry, refusal/partial/tool output, model/usage/JSON
+validation, encoding/body limits, deadline and caller cancellation. Passing them
+does not establish account access, billing, retention, model quality or live
+compatibility. Those remain pending the user's later credentials.
+
+Contract sources re-read on 2026-11-01:
+[Responses protocol](https://dev.meta.ai/docs/protocols/responses),
+[Responses reference](https://dev.meta.ai/docs/api-reference/responses), and
+[structured output](https://dev.meta.ai/docs/structured-output). The protocol
+specifies max_output_tokens as reasoning plus visible output with a minimum of
+16, and uses text.format rather than Chat Completions' response_format.
