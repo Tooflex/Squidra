@@ -1298,7 +1298,8 @@
       "installed_server_database",
       "installed_web",
       "safe_uninstall",
-      "unsafe_archives_rejected"
+      "unsafe_archives_rejected",
+      "owned_cleanup"
     ],
     "requires_database": true
   }

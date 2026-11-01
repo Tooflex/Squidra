@@ -58,11 +58,12 @@ outstanding; this package is not a production-readiness claim.
 ## Local verification — 1 November 2026
 
 `SQUIDRA_CONTAINER_ENGINE="$PWD/Scripts/colima-test-engine.py" bash Scripts/test-issue.sh SQD-002`
-executes six strict checks: SHA-256-verified installation without overwrite;
+executes seven strict checks: SHA-256-verified installation without overwrite;
 installed native help/version and signature/runtime-path inspection; installed
 server health, PostgreSQL readiness and authentication on loopback; eight
 installed Web routes/assets; safe uninstall refusing user additions or modified
-files; and malicious/traversal/link/duplicate/target/hash rejection. It uses
+files; malicious/traversal/link/duplicate/target/hash rejection; and confirmed removal
+of the owned database container. It uses
 private temporary installation/configuration and an owned temporary database.
 
 The build used Swift 6.4.2, Node 26.10.0 and the current macOS SDK. The binary is

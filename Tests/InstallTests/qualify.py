@@ -109,11 +109,11 @@ try:
         print('SQUIDRA_TEST_PASS:safe_uninstall')
         # Authored malicious archives with matching outer digest still cannot
         # escape the fresh prefix or carry links/duplicates/unlisted payloads.
-        for name,mode,duplicate in [('../escape',stat.S_IFREG,False),('bin/squidra',stat.S_IFLNK,False),('bin/squidra',stat.S_IFREG,True)]:
-            m={'format':1,'target':pkg.target(),'source_commit':'a'*40,'source_dirty':False,'files':{name:{'sha256':pkg.sha(b'x'),'size':1,'mode':0o755}}}
+        for archive_name,mode,duplicate in [('../escape',stat.S_IFREG,False),('bin/squidra',stat.S_IFLNK,False),('bin/squidra',stat.S_IFREG,True)]:
+            m={'format':1,'target':pkg.target(),'source_commit':'a'*40,'source_dirty':False,'files':{archive_name:{'sha256':pkg.sha(b'x'),'size':1,'mode':0o755}}}
             buf=io.BytesIO()
             with zipfile.ZipFile(buf,'w') as z:
-                info=zipfile.ZipInfo(name);info.external_attr=(mode|0o755)<<16;z.writestr(info,b'x')
+                info=zipfile.ZipInfo(archive_name);info.external_attr=(mode|0o755)<<16;z.writestr(info,b'x')
                 if duplicate:z.writestr(info,b'x')
                 z.writestr('manifest.json',json.dumps(m))
             bad=temp/'bad.zip';bad.write_bytes(buf.getvalue())
@@ -137,3 +137,6 @@ finally:
         data=json.loads(run([engine,'inspect',identity]).stdout)[0]
         if data['Config']['Labels'].get('io.squidra.install-test')!=nonce:raise AssertionError('Ownership mismatch')
         run([engine,'rm','-f',name])
+        remaining=run([engine,'ps','--all','--filter','id='+identity,'--format','{{.ID}}']).stdout.strip()
+        if remaining:raise AssertionError('Owned container cleanup incomplete')
+print('SQUIDRA_TEST_PASS:owned_cleanup')
