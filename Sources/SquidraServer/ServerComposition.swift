@@ -3,6 +3,7 @@ import Hummingbird
 import Logging
 import SquidraAgentRuntime
 import SquidraCognition
+import SquidraAgentRuntime
 import SquidraObservability
 import SquidraProtocols
 import SquidraPostgres
@@ -14,9 +15,13 @@ import PostgresNIO
 
 /// Composition owns dependencies per application. No global runtime or store.
 enum ServerComposition {
-    static func live(configuration: ServerConfiguration, readHost: ReadHostConfiguration? = nil, traceRecorder: PrivateTraceRecorder? = nil) throws -> some ApplicationProtocol {
+    static func live(configuration: ServerConfiguration, readHost: ReadHostConfiguration? = nil, traceRecorder: PrivateTraceRecorder? = nil, localOwnership: LocalRunOwnership? = nil) throws -> some ApplicationProtocol {
+        if let localOwnership {
+            guard localOwnership.isHeld,localOwnership.actorID == configuration.boundary.actorID,readHost != nil else { throw ReadRunTaskError.invalidState }
+        }
         let recorder = try traceRecorder ?? PrivateTraceRecorder(limits:TraceLimits())
         let client = configuration.database.makeClient()
+        let ownershipStore = localOwnership.map { PostgresReadRunOwnershipStore(client:client,ownership:$0) }
         let readiness = PostgresSchemaReadiness(client: client)
         let approvals = ApprovalCoordinator(store:PostgresApprovalStore(client:client),clock:SystemClock(timeZone:try! IANATimeZone(identifier:"Etc/UTC")))
         let world = PostgresLocationProjection(actorID:configuration.boundary.actorID,client:client)
@@ -37,14 +42,17 @@ enum ServerComposition {
                 policy:ServerWorldReadPolicy(actorID:configuration.boundary.actorID,entities:readHost.entities))
             let engine = try ReadRunEngine(router:router,gateway:gateway,store:runtime,clock:clock,freshness:readHost.freshness,completions:PostgresReadRunCompletionStore(client:client,actorID:configuration.boundary.actorID),plans:PostgresReadRunPlanStore(client:client,actorID:configuration.boundary.actorID),toolResults:PostgresReadRunToolResultStore(client:client,actorID:configuration.boundary.actorID),answers:PostgresReadRunAnswerStore(client:client,actorID:configuration.boundary.actorID))
             let coordinator = try PublishedReadRunCoordinator(actorID:configuration.boundary.actorID,executor:TracedReadExecutor(base:engine,recorder:recorder),
-                events:events,publication:publication,clock:clock,tasks:PostgresReadRunTaskStore(client:client,actorID:configuration.boundary.actorID))
+                events:events,publication:publication,clock:clock,tasks:PostgresReadRunTaskStore(client:client,actorID:configuration.boundary.actorID),ownership:ownershipStore)
             submission = try RunRoutes.Submission(coordinator:coordinator,clock:clock,entities:readHost.entities,budget:readHost.budget)
         } else { submission = nil }
         return application(configuration: configuration, readiness: { try await readiness.check() }, client: client,
             approvals:approvals,ledger:PostgresActionLedger(client:client),worldReads:worldReads,
             runs:try! RunRoutes.Dependencies(actorID:configuration.boundary.actorID,
                 events:events,publication:publication,runtime:runtime,submission:submission,traces:recorder),
-            beforeServing:{ _ = try await recovery.recover() },
+            beforeServing:{
+                try await ownershipStore?.bind(deadline:.now.advanced(by:.seconds(4)))
+                _ = try await recovery.recover()
+            },localOwnership:localOwnership,
             publicationStep: { try await publication.recoverNextCompleted(at:UTCInstant(secondsSince1970:Date().timeIntervalSince1970),deadline:.now.advanced(by:.seconds(4))) },
             watchStep: {
                 let progressed = try await watches.processNext(deadline: .now.advanced(by: .seconds(4)))
@@ -58,6 +66,7 @@ enum ServerComposition {
                             client: PostgresClient? = nil, approvals: ApprovalCoordinator? = nil, ledger: (any ActionLedgerStore)? = nil,
                             worldReads: WorldReadRoutes? = nil, runs: RunRoutes.Dependencies? = nil,
                             beforeServing: (@Sendable () async throws -> Void)? = nil,
+                            localOwnership: LocalRunOwnership? = nil,
                             publicationStep: (@Sendable () async throws -> Bool)? = nil,
                             watchStep: (@Sendable () async throws -> Bool)? = nil) -> some ApplicationProtocol {
         let router = Router(context: BoundaryContext.self)
@@ -88,7 +97,7 @@ enum ServerComposition {
         if let client { app.addServices(client) }
         if let publicationStep { app.addServices(PublicationRecoveryService(processNext:publicationStep)) }
         if let watchStep { app.addServices(WatchWorkerService(processNext: watchStep)) }
-        if let coordinator = runs?.submission?.coordinator { app.addServices(ReadWorkerService(coordinator:coordinator)) }
+        if let coordinator = runs?.submission?.coordinator { app.addServices(ReadWorkerService(coordinator:coordinator,ownership:localOwnership)) }
         if let beforeServing { app.beforeServerStarts(perform:beforeServing) }
         return app
     }
