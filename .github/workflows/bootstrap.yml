@@ -56,7 +56,7 @@ jobs:
       - name: Verify scoped private memory context
         run: bash Scripts/test-issue.sh SQD-027
       - name: Verify bounded fact consolidation
-        run: bash Scripts/test-issue.sh SQD-029
+        run: bash Scripts/test-issue.sh SQD-029-UNIT
       - name: Verify typed local review interface in Chromium
         run: bash Scripts/test-issue.sh T06-REVIEW
       - name: Temporal browser checks
