@@ -3,6 +3,7 @@ import Hummingbird
 import SquidraAgentRuntime
 import SquidraCognition
 import SquidraDomain
+import SquidraObservability
 import SquidraProtocols
 
 /// Squidra's authenticated POST-202 / finite GET-SSE extension, not the
@@ -25,13 +26,21 @@ enum RunRoutes {
     }
     struct Dependencies: Sendable {
         let actorID: UUID, events: any RunEventStore, publication: any RunPublicationStore, runtime: (any RunStore)?
+        let traces: PrivateTraceRecorder?
         let submission: Submission?, maximumWait: Duration
         init(actorID: UUID, events: any RunEventStore, publication: any RunPublicationStore, runtime: (any RunStore)? = nil,
-             submission: Submission? = nil, maximumWait: Duration = .seconds(20)) throws {
+             submission: Submission? = nil, traces: PrivateTraceRecorder? = nil, maximumWait: Duration = .seconds(20)) throws {
             guard maximumWait >= .zero,maximumWait <= .seconds(20) else { throw ReadRunSubmissionError.invalidRequest }
             self.actorID = actorID;self.events = events;self.publication = publication;self.runtime = runtime
-            self.submission = submission;self.maximumWait = maximumWait
+            self.submission = submission;self.maximumWait = maximumWait;self.traces = traces
         }
+    }
+    private struct RunTrace: Encodable {
+        let schemaVersion = "1"
+        let runId: String
+        let spans: [ExportedTraceSpan]
+        let partial: Bool
+        let retention = "bounded_process_memory"
     }
     private struct Capabilities: Encodable {
         let schemaVersion = "1"
@@ -99,6 +108,17 @@ enum RunRoutes {
                     } catch RunStoreError.notFound { runtime = nil }
                 }
                 return try json(.ok,RunHTTPStatus(status,runtime:runtime))
+            } catch { throw mapped(error) }
+        }
+        router.get("/api/v1/runs/:run/trace") { request,context in
+            do {
+                guard let dependencies else { throw HTTPError(.serviceUnavailable) }
+                let id = try await identity(request,context:context,dependencies:dependencies)
+                _ = try await dependencies.publication.status(actorID:dependencies.actorID,runID:id,deadline:.now.advanced(by:.seconds(4)))
+                guard let recorder = dependencies.traces else { throw HTTPError(.serviceUnavailable) }
+                let snapshot = await recorder.snapshot()
+                let spans = snapshot.spans.filter { $0.attributes["squidra.run_id"] == id.uuidString.lowercased() }
+                return try json(.ok,RunTrace(runId:id.uuidString.lowercased(),spans:Array(spans.prefix(256)),partial:snapshot.droppedSpans > 0 || !spans.contains(where:{ $0.stage == .run }) || spans.count > 256))
             } catch { throw mapped(error) }
         }
         router.get("/api/v1/runs/:run/events") { request,context in
