@@ -91,6 +91,8 @@ jobs:
         run: bash Scripts/test-issue.sh T14-EVIDENCE
       - name: Qualify one durable read-and-answer iteration
         run: bash Scripts/test-issue.sh T14-RUN
+      - name: Run checkpoint recovery contracts
+        run: bash Scripts/test-issue.sh SQD-028-UNIT
       - name: Run host FSM and budget tests
         if: runner.os == 'macOS'
         run: bash Scripts/test-issue.sh SQD-005-UNIT

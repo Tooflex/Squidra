@@ -556,5 +556,9 @@
       "durable_unknown_effects",
       "http_durable_cancellation"
     ]
+  },
+  "SQD-028-UNIT": {
+    "kind": "xctest",
+    "filter": "^SquidraAgentRuntimeTests\\.RunRecoveryTests/"
   }
 }

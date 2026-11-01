@@ -10,7 +10,7 @@ public actor RunController {
     private var lastTick: Duration?
     private var detached = false
 
-    private init(record: RunSnapshot, store: any RunStore, clock: any SquidraDomain.Clock, tick: Duration?) {
+    init(record: RunSnapshot, store: any RunStore, clock: any SquidraDomain.Clock, tick: Duration?) {
         self.record = record; self.store = store; self.clock = clock; self.lastTick = tick
     }
     public static func create(actorID: UUID, id: UUID = UUID(), traceID: UUID = UUID(),
