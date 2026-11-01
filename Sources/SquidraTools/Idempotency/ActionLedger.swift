@@ -10,7 +10,10 @@ public struct ActionLedger: Sendable {
         try Task.checkCancellation()
         let reservation = try await store.reserve(command, deadline: deadline)
         guard reservation.record.command.fingerprint == command.fingerprint else { throw ActionLedgerError.conflict }
-        if reservation.created, reservation.record.status == .reserved {
+        // A reserved row has never issued a dispatch permit. Claiming it
+        // after restart is safe under the same CAS as a newly-created row.
+        // The gateway still verifies policy/approval before calling this port.
+        if reservation.record.status == .reserved {
             do {
                 let claimed = try await store.update(reservation.record, to: .pending, result: nil, providerReference: nil, deadline: deadline)
                 return .dispatch(ActionDispatchPermit(record: claimed))

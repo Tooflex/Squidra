@@ -139,6 +139,8 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-007
       - name: Durable run checkpoint recovery
         run: bash Scripts/test-issue.sh SQD-028-DURABLE
+      - name: Run process crash recovery
+        run: bash Scripts/test-issue.sh SQD-028-CRASH
       - name: Verify durable approval decisions and expiry
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-009-PERSISTENCE

@@ -524,7 +524,9 @@ Docker/Podman engine. It runs the Swift adapter against real PostgreSQL, with
 concurrent sessions held behind an observed database lock. One successful
 `reserved → pending` compare-and-set grants dispatch; duplicates return a final
 result, an in-progress record, or an explicit reconciliation requirement.
-A reserved or pending record after a crash never grants another dispatch.
+A reserved record has not issued a dispatch permit and may be claimed after a
+crash through the same atomic version check; normal gateway policy and approval
+checks still precede that claim. A pending record never grants another dispatch.
 Final results and their minimal outbox notification commit in one transaction;
 a forced outbox collision verifies that the result update rolls back as well.
 The outbox is a durable notification queue; no external delivery worker is

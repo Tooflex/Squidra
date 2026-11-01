@@ -576,5 +576,20 @@
       "client_loopback_boundary",
       "durable_run_recovery"
     ]
+  },
+  "SQD-028-CRASH": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-run-crash"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "crash_reserved",
+      "crash_pending",
+      "crash_effect",
+      "crash_result"
+    ]
   }
 }
