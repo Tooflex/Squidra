@@ -64,7 +64,8 @@ public struct RunRecovery: Sendable {
                     }
                     group.addTask { try await ContinuousClock().sleep(until:deadline);return nil }
                     defer { group.cancelAll() }
-                    return try await group.next() ?? nil
+                    let completed: ActionResult?? = try await group.next()
+                    return completed.flatMap { $0 }
                 }
                 guard let outcome else {
                     invocation.inFlight = false;invocation.outcome = .unknown;snapshot.invocation = invocation

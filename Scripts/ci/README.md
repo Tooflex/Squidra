@@ -47,7 +47,7 @@ triggers and require the `Dependency analysis` status in the actual repository
 ruleset after a real runner execution. A workflow file does not change a ruleset.
 Existing Bootstrap contracts, database integration and offline evaluations remain
 in place, also paused. The targeted Swift SAST gate below is integrated locally;
-lint and final hosted checks remain before #35 is complete. Do not
+the lint gate below and final hosted checks are also required for #35. Do not
 treat either component as completing #35 or reactivate CI early.
 
 ## Swift static analysis
@@ -113,5 +113,56 @@ fail instead of silently dropping oversized files. `.build/security/secrets.json
 is replaced with an explicit failure on errors, so stale success is not reported.
 
 The manual-only job `Tracked secret scan` needs a real hosted run and actual
-required-status registration at final CI restoration. Lint remains to integrate;
-CI restoration and issue #35 completion are still pending.
+required-status registration at final CI restoration. The lint gate is described
+below; CI restoration and issue #35 completion are still pending.
+
+## Swift lint
+
+Run `SQD-035-LINT-CONTRACTS` and `SQD-035-LINT` with SwiftLint 0.65.1 on PATH.
+The Linux installer downloads the official ARM64 or AMD64 release archive,
+verifies its fixed SHA-256 and installs only the named executable under `.build`.
+It does not install system packages. Ubuntu needs `libcurl4t64`, `libstdc++6`
+and `libxml2`; the CI setup explicitly supplies these prerequisites. The local
+macOS qualification uses the same
+SwiftLint version. The workflow has no automatic trigger during the CI pause.
+
+Four explicit rules cover duplicate imports, redundant nil coalescing, unused
+control-flow labels and unused optional bindings. They do not need SourceKit;
+sourcekit loading and caching are disabled. No automatic formatting is applied.
+The gate supplies isolated tracked production Swift snapshots and requires a
+complete per-file progress count and summary, a matching JSON result, qualified
+version and consistent exit status. Inline lint suppressions are rejected.
+Diagnostics contain only rule/path/line. Tool failures replace the prior report
+with a failure at `.build/security/swift-lint.json`.
+
+Actual safe and four-rule negative fixtures verify that every configured rule
+runs; malformed coverage, exit errors and suppression attempts must fail.
+This is a documented correctness/idiom policy, not all available SwiftLint style
+rules. The separate Swift syntax/SAST gate validates parsing.
+
+The recovery task-group result is `ActionResult??`. SwiftLint flagged the former
+`group.next() ?? nil` as redundant, but deleting it could change optional
+flattening. Recovery now explicitly flattens one layer with `flatMap`; all seven
+existing recovery unit tests pass, preserving successful and uncertain outcomes.
+
+At final restoration, require `Swift lint` along with `Dependency analysis`,
+`Swift static analysis` and `Tracked secret scan`, after actual hosted execution.
+The existing Bootstrap build/contracts/integration/evaluation statuses also need
+restoration. Local green results and checked-in workflow files do not establish
+required-status configuration or hosted success. #35 remains open for that audit.
+
+## Combined local Security gate
+
+`bash Scripts/test-issue.sh SQD-035` runs all eight Security checks (four tools
+and their contract suites), stops on failure and requires nonzero complete
+results with no skipped/unexecuted tests. This covers the Security workflow.
+The existing `python3 Scripts/check-local.py` separately covers Bootstrap
+builds, contracts, database integration and offline evaluations. Both are
+required for the final campaign audit; this aggregate does not claim Bootstrap
+ran or that hosted required checks have been restored.
+
+Linux ARM64 qualification used the checksummed upstream binary in Ubuntu 24.04
+without a Swift compiler: all six lint contracts and 167 production files passed.
+The initial minimal runtime lacked libxml2, which is now an explicit prerequisite
+in the fixture Dockerfile and CI setup. AMD64 archive integrity is pinned, but
+its hosted execution remains to be verified at final CI restoration.

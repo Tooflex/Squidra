@@ -1,0 +1,5 @@
+only_rules:
+  - duplicate_imports
+  - redundant_nil_coalescing
+  - unused_control_flow_label
+  - unused_optional_binding

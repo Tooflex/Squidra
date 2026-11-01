@@ -1389,5 +1389,42 @@
     "tests": [
       "secret_scan_contracts"
     ]
+  },
+  "SQD-035-LINT": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/ci/swift_lint.py"
+    ],
+    "tests": [
+      "swift_lint"
+    ]
+  },
+  "SQD-035-LINT-CONTRACTS": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/ci/test_swift_lint.py"
+    ],
+    "tests": [
+      "swift_lint_contracts"
+    ]
+  },
+  "SQD-035": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/ci/check-security.py"
+    ],
+    "tests": [
+      "security_dependency_contracts",
+      "security_dependencies",
+      "security_sast_contracts",
+      "security_sast",
+      "security_secret_contracts",
+      "security_secrets",
+      "security_lint_contracts",
+      "security_lint"
+    ]
   }
 }

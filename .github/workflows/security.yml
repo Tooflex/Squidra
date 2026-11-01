@@ -53,3 +53,22 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-035-SECRET-CONTRACTS
       - name: Scan tracked files without exposing matches
         run: bash Scripts/test-issue.sh SQD-035-SECRETS
+
+  lint:
+    name: Swift lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install SwiftLint system libraries
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcurl4t64 libstdc++6 libxml2
+      - name: Install checksummed SwiftLint
+        run: |
+          python3 Scripts/ci/install-swiftlint.py
+          echo "$PWD/.build/swiftlint" >> "$GITHUB_PATH"
+      - name: Verify lint negative fixtures
+        run: bash Scripts/test-issue.sh SQD-035-LINT-CONTRACTS
+      - name: Lint tracked production Swift
+        run: bash Scripts/test-issue.sh SQD-035-LINT
