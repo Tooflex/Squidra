@@ -152,4 +152,7 @@ The verification receipt hashes the summary and records source commit/dirty stat
 Default Swift builds are debug builds; results are not release-build claims.
 No HTTP, browser, network, cloud inference, concurrency/load, cold-start or
 cross-platform latency is measured. Repeated fixture requests are not independent
-real-world model trials. These limits remain open in #45.
+real-world model trials. These are measurement limits, not requirements to add
+a new question workflow: on 2 November 2026 the maintainer selected the existing
+model-call baseline for the tool-free criterion in #45. See
+[the recorded decision](release-readiness.md#confirmed-latency-scope--2-november-2026).
