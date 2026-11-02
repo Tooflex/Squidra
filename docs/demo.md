@@ -90,6 +90,42 @@ runner requires all seven markers; `T08-REPLAY` still requires its original five
 Real-model evidence for this exact historical scenario and the UI acceptance
 remain outstanding. Separate Meta/SAM receipts are not substituted for this run.
 
+## Explicit Meta historical profile (live qualification pending)
+
+`SQUIDRA_HISTORICAL_META_LIVE=1 bash Scripts/demo.sh --profile=real-meta`
+prepares the same isolated historical database, then starts the normal CLI with
+its existing Meta qualification configuration. Two HTTP questions ask for Monday
+under Tuesday's and Wednesday's knowledge. The client uses the Web application's
+admission/SSE validator, checks the exact expected location, citation, source,
+time and confidence, and submits each question once. It never retries a POST.
+This is an HTTP integration test; it does not qualify browser rendering or VoiceOver.
+
+The profile uses the existing private `.build/secrets/meta-api-key` and shared
+`.build/provider-access/live-budget.json`. It never initializes or refunds a
+budget. Admission requires four available reservations, explicit consent and at
+least 420 seconds before the existing qualification expires. The server still
+reserves every actual call durably; the preflight is not an exclusive reservation
+against concurrent probes. Do not run paid probes concurrently. Provider secrets
+are passed only to the normal server via its key-file configuration, not Node.
+
+On 2 November 2026 the qualification envelope is expired and only one reservation
+remains. The live profile must therefore refuse before starting services; its
+real execution has **not** been qualified. Do not reset that ledger to make it
+run. Renewing the provider qualification and resolving the available allowance
+are separate prerequisites. The default profile remains offline.
+
+`real-model.json` records completed answers and run bindings; uncertain provider
+execution remains null, never a claim of zero calls. A successful client report
+alone is insufficient: require `harnessOutcome: passed`, clean server shutdown
+and the outer verification receipt including the report hash and database cleanup.
+Failures retain reservations and must not be automatically resubmitted.
+
+`bash Scripts/test-issue.sh T08-META-CONTRACTS` runs seven offline admission and
+loopback HTTP contracts, using authored responses and no provider credentials.
+Install the Web dependencies first (`cd web && npm ci --ignore-scripts`). The
+tests verify the whole-run budget boundary, expiry, consent, both correlated
+questions, wrong request/source rejection and absence of automatic resubmission.
+
 ## Offline latency profile
 
 `bash Scripts/demo.sh --profile=offline-latency` retains the default replay checks,
