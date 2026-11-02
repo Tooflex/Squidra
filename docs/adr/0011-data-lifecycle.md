@@ -1,6 +1,6 @@
 # ADR-011: Data lifecycle and privacy boundaries
 
-Status: **Proposed — privacy policy requires maintainer acceptance.** The
+Status: **Account-wide scope accepted on 2 November 2026; remaining policy and implementation proposed.** The
 retained-media implementation can be reviewed independently; merging that code
 does not constitute acceptance of a comprehensive personal-data erasure policy.
 
@@ -37,9 +37,11 @@ would therefore be inaccurate.
    explicit allowlist of fields, omit raw payloads, prompts, credentials and
    unrestricted labels, and bind every query/cursor to the actor. General JSON
    redaction is not sufficient. A backup is never an actor export.
-5. Personal-data erasure beyond retained media requires a defined subject
-   scope and consistent suppression across query/projection/recovery/export
-   paths. Tombstones alone do not remove existing journal payloads. Before
+5. The maintainer selected **whole-account erasure** for the MVP on
+   2 November 2026. The subject boundary is the authenticated `actor_id`, not
+   a named person, entity, object, or free-text search. All data owned by that
+   actor is in scope; other actors must remain unchanged. This requires
+   consistent removal/suppression across query/projection/recovery/export paths. Tombstones alone do not remove existing journal payloads. Before
    promising physical erasure, choose and implement a compatible strategy
    (for example, segregated encrypted personal payloads with managed key
    destruction and backup handling). No such guarantee exists in this revision.
@@ -55,8 +57,9 @@ can still be identifying metadata and is not anonymized. The retention adapter
 is opt-in and cannot establish a deployment-wide retention guarantee unless its
 purge scheduler and clock are operated correctly.
 
-The maintainer still needs to accept the privacy policy, especially personal
-subject scope, journal treatment, backup retention and restoration reconciliation.
+The account-wide subject scope is decided. Journal treatment, backup retention
+and restoration reconciliation still require a concrete implementation and
+verification before full policy acceptance.
 Prepare the scoped export and erasure integration before requesting final T12
 acceptance. T12 remains open until its actual requirements are verified; this
 ADR does not waive them.
