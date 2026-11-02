@@ -130,3 +130,39 @@ pagination with a later append excluded from the captured high-water range;
 invalid decoded/foreign cursor and limit/deadline rejection; failure on 129
 associated facts; empty-actor and 64+1 event page boundaries. No tests were
 skipped. The media gate is also rerun whenever its shared harness changes.
+
+## Whole-account erasure scope — confirmed 2 November 2026
+
+The maintainer selected account-wide erasure for the MVP. The target is one
+explicit authenticated actor UUID. This decision does not authorize erasing any
+current account as part of development; qualification uses isolated fixtures.
+It does not select person/entity erasure or alter other actors' data.
+
+The implementation must cover the actor's world entities, frames, observations,
+events and links, spatial facts/projection versions, associations, movement and
+watch state, retained media, runtime runs, action ledger, approvals/outbox,
+publication events, saved tasks/plans/tool results/answers/completions, ownership
+bindings and consolidation journals. Local run files and process-held traces
+must also be covered; deleting only PostgreSQL rows would be incomplete.
+
+Before erasure completes, admissions, workers and pending delivery for that
+actor must stop. A retry or restart must not resurrect its state or deliver a
+previously approved effect. The normal journal mutation protections must remain
+intact for ordinary operations and for other accounts. Any erasure exception
+must be explicit and auditable, never a general-purpose trigger bypass.
+
+A restored old backup must remain unavailable until current account-deletion
+decisions have been reconciled. That authority must survive independently of
+the backup being restored. Missing or stale deletion authority must prevent
+promotion; a copy of deletion state inside an old backup is insufficient.
+Tombstones may retain a minimal actor identifier to prevent resurrection; this
+identifier is not anonymous. Payloads, free text and provider credentials must
+not be copied into an erasure receipt.
+
+This records the agreed scope and implementation requirements, not a completed
+erasure facility. No current account was erased. Existing media purge and
+structural export remain narrower operations. PostgreSQL byte deletion does
+not prove physical destruction from WAL, replicas, snapshots or prior backups.
+The implementation and restoration tests must demonstrate actor isolation,
+interruption/retry behavior and absence of recovery/export leakage before #48
+can close.
