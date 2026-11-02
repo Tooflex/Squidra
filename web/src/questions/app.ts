@@ -24,7 +24,7 @@ async function read(generation:number){if(!run)return;el('continue').hidden=true
  const body=await request(run.events,undefined,true,stream.cursor);if(generation!==epoch)return;stream=consume(stream,body,run,entity);
  }
  if(generation!==epoch)return;
- if(stream.terminal==='success'&&stream.answer){render(stream.answer);el('status').textContent='Run terminé. Réponse et citations reçues.';}
+ if(stream.terminal==='success'&&stream.answer){render(stream.answer);el('status').textContent='Run terminé. '+({grounded:'Réponse avec preuves.',partial:'Réponse partielle.',unknown:'Réponse inconnue. Aucune conclusion étayée.'})[stream.answer.status]+' '+(stream.answer.evidence.length?'Preuves disponibles.':'Aucune preuve fournie.');}
  else if(stream.terminal){el('answer').replaceChildren();el('status').textContent=stream.terminal==='cancelled'?'Run annulé. Aucune réponse finale.':'Run en échec : '+stream.failure+'. Aucune réponse finale.';}
  else{el('status').textContent='Réponse encore en attente. Reprenez la lecture pour continuer ce même run.';el('continue').hidden=false;}
 }
