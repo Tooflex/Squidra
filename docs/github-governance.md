@@ -51,18 +51,30 @@ only fixed read-only GitHub API routes through `gh`, never follows instructions
 from descriptions or executes repository-supplied commands. Failures are
 content-free. `--fixture PATH` is explicitly reported as fixture evidence.
 
-## Dedicated App specification — not yet verified
+## Dedicated App — live identity verified on 2 November 2026
 
-The connected GitHub integration exposes an installation for the Tooflex
-account (`161010669`) with repository selection `all`. This observation does
-not identify a dedicated Squidra bot, establish token expiry or minimum
-permissions, or prove which authentication type performed a specific merge.
-A direct repository-installation query with the CLI identity returned HTTP 401
-because that endpoint requires App authentication; this is **not evidence that
-no installation exists**. No private key or token was displayed or requested.
+The maintainer authorized creation and scoped installation of **Tooflex Squidra
+Bot** (`tooflex-squidra-bot`, App ID `5587098`, installation `177992380`).
+GitHub confirmed successful registration and installation. A direct App-authenticated
+API check at `2026-11-02T22:48:22Z` verified the App identity, owner `Tooflex`,
+repository selection `selected`, and exactly the four permissions listed below.
+The installation currently includes **only Tooflex/Squidra**; no qualification
+repository has been added yet.
 
-For a dedicated implementation bot, an identified maintainer should register
-and install a GitHub App on **only Tooflex/Squidra**, with:
+A real installation credential was issued with an explicit `Squidra` repository
+restriction and the same permission allowlist. The authenticated repository
+listing returned exactly one repository, `Tooflex/Squidra`. GitHub returned
+expiry `2026-11-02T23:48:21Z`, with 3599 seconds remaining when checked.
+The credential was then revoked, and a follow-up repository request returned
+HTTP 401, confirming revocation. No private key or credential value was logged.
+The user-generated private-key file is outside the checkout with mode `0600`.
+This verifies issuance and revocation; it does not yet establish that subsequent
+implementation jobs automatically use this App instead of the maintainer CLI.
+
+The pre-existing connected integration (`161010669`, repository selection `all`)
+was not used as a substitute for this dedicated identity.
+
+The dedicated installation has these repository permissions:
 
 | Permission | Purpose |
 | --- | --- |
@@ -83,7 +95,7 @@ GitHub documents installation tokens as expiring after one hour and permits
 further restriction of repositories and permissions when issuing them. See
 [installation authentication](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation).
 The integration must verify actual returned expiry, repository and permissions
-before use; this repository has not performed that token qualification.
+before every use. The live qualification above verified one issuance and revocation.
 
 A bot's Contents write capability alone does not constrain branch names.
 Enforce the PR-only default-branch ruleset with no bot bypass and validate the
@@ -92,13 +104,14 @@ distinguishes requiring a PR from requiring its approval.
 
 ## Remaining evidence for SQD-033
 
-A dedicated App registration/installation and securely accessible issuer
-configuration are still needed to test short-lived, minimum-privilege identity.
-The current integration is not silently substituted for that requirement.
+The dedicated registration, scoped installation, short-lived credential and
+revocation are verified. Automated job integration still needs to enforce the
+same restrictions at every issuance and revoke credentials after each job.
 For the original strict-review profile, use an explicitly designated disposable
 test repository and a reviewer separate from the bot to demonstrate that a
 merge without approval is rejected, then that an approved tested head can be
 merged. Record request outcome and immutable SHA, never credentials. No such
-live negative merge experiment has been run, and no additional repository or
-access grant has been created. SQD-033 remains open for this missing evidence
-and reconciliation of its future profile with the maintainer's chosen workflow.
+live negative merge experiment has been run. SQD-033 remains open for that
+missing evidence and reconciliation of its future profile with the maintainer's
+chosen workflow. The production campaign ruleset has not been changed by this
+qualification, and CI restoration remains part of the final campaign phase.
