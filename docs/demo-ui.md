@@ -276,3 +276,66 @@ and uppercase evidence IDs with lowercase DOM anchors. The
 responses are mocked for these client tests. They do not yet prove the complete
 import → free-text model planning → answer workflow against a configured host.
 That integrated qualification and manual screen-reader evaluation remain open.
+
+## Reproducible screen-reader walkthrough fixture
+
+Build the unchanged production UI and start a disposable loopback fixture:
+
+```sh
+npm --prefix web ci --ignore-scripts
+npm --prefix web run build
+SQUIDRA_ACCESSIBILITY_FIXTURE=1 node web/tests/accessibility/fixture.mjs
+```
+
+The command prints `AUTHORED_UI_FIXTURE_NOT_REAL_BACKEND`, the ephemeral UI/API
+origins, a **public fixture-only token**, entity/approval IDs and the path to an
+extracted frozen PNG. Use these values in the existing UI. Do not enter any real
+credential or image. The static UI is unmodified; the HTTP responses are authored
+simulations, with no PostgreSQL, model, external delivery or production authority.
+The receipt's dates and displayed freshness are fixture values, not real events.
+Only the configured UI origin and fixture token are accepted. Imports require the
+exact frozen bytes and explicit local consent. Decisions require the exact digest;
+expired or already-decided requests cannot be approved. Stop with Ctrl-C to close
+both owned listeners. Restarting clears all fixture state. `--unavailable` starts a
+second mode in which text-run capability is explicitly absent.
+
+Before changing OS settings, record whether the screen reader and its caption
+panel are enabled. Restore that state afterward. The screen-reader check must
+observe actual announcements (audio or the reader's own caption panel), not just
+an accessibility-tree snapshot or DOM roles. Record OS, browser and reader
+versions, the exact announcement, focus destination, outcome and any failure for
+each step. A checked fixture response does not itself prove assistive-technology
+compatibility.
+
+1. Open the printed UI origin at `/import`. Navigate labels and controls with the
+   reader and keyboard. Connect using the printed API origin/public token.
+2. Select the printed frozen PNG, verify the consent label and submit once.
+   Confirm the receipt heading is announced and reached; inspect inferred basis,
+   source ID, confidence where applicable, and exact observed/known timestamps.
+3. Open `/questions`, reconnect, and use the printed entity and question. Confirm
+   the completed answer heading, citation link and expanded proof are announced
+   and reachable. Follow the citation with the keyboard and inspect its details.
+4. Repeat with the printed unknown entity. Confirm “Réponse inconnue” is distinct
+   from an error. Restart with `--unavailable` to confirm unavailable capability
+   is communicated and no question form is offered.
+5. Open `/approvals`, reconnect with the printed pending approval ID. Inspect the
+   exact tool, target and arguments. Choose Refuser; confirm the dialog title,
+   cancel/confirm controls and focus containment. Cancel once, then refuse and
+   confirm. Observe the refusal announcement and removal of action buttons.
+6. Reconnect with the printed expired approval ID. Confirm Expirée is announced
+   and no approval action is available. Log out and verify focus returns to login.
+
+The fixture HTTP checks run independently with:
+
+```sh
+node --test web/tests/accessibility/fixture.test.mjs
+```
+
+They cover origin/session rejection, frozen-image consent, grounded/unknown SSE
+bindings and invalid cursors, exact-digest denial/repetition, expiry and unavailable
+capability. These five passing checks are **not** a screen-reader qualification.
+The local import page has been opened in Safari and exposes labelled controls,
+but actual VoiceOver announcements have not yet been qualified. Full #42
+screen-reader acceptance remains open. A locked desktop prevents this interactive
+check; resume it only after normal manual unlocking, and verify restoration of
+any temporarily changed reader settings before concluding the session.
