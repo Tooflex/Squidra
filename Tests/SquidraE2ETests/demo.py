@@ -15,11 +15,15 @@ import time
 import uuid
 
 profile=sys.argv[1] if len(sys.argv)==2 else '--profile=offline-replay'
-if len(sys.argv)>2 or profile not in ['--profile=offline-replay','--profile=offline-fake-model','--profile=offline-latency']:raise SystemExit('Unsupported demo profile')
+if len(sys.argv)>2 or profile not in ['--profile=offline-replay','--profile=offline-fake-model','--profile=offline-latency','--profile=real-meta']:raise SystemExit('Unsupported demo profile')
 fake=profile=='--profile=offline-fake-model'
 latency=profile=='--profile=offline-latency'
 
 root=Path(__file__).resolve().parents[2]
+live=profile=='--profile=real-meta'
+if live:
+    import live_demo
+    live_demo.preflight(root)
 engine=os.environ.get('SQUIDRA_CONTAINER_ENGINE','docker')
 nonce=uuid.uuid4().hex;name='squidra-client-test-'+nonce[:12];identity=None
 out=root/'.build/demo'/nonce;out.mkdir(parents=True,mode=0o700)
@@ -38,6 +42,10 @@ try:
     (out/'build.log').write_bytes(build.stdout+build.stderr)
     bin_dir=run(['swift','build','--show-bin-path'],cwd=root).stdout.decode().strip()
     executable=str(Path(bin_dir)/'squidra-demo-fixture')
+    if live:
+        run(['swift','build','--force-resolved-versions','--product','squidra'],cwd=root)
+        run(['npm','ci','--ignore-scripts'],cwd=root/'web')
+        run(['npm','run','build'],cwd=root/'web')
     with tempfile.TemporaryDirectory(prefix='private-',dir=out) as temporary:
         temp=Path(temporary);credentials=temp/'postgres.env';credentials.touch(mode=0o600)
         password=secrets.token_urlsafe(32)
@@ -96,7 +104,10 @@ try:
             (out/'latency-summary.json').write_text(json.dumps(result,indent=2,allow_nan=False)+'\n')
             print('SQUIDRA_TEST_PASS:runtime_latency_samples')
             print('SQUIDRA_TEST_PASS:tool_free_model_port_samples')
-        manifest={'checked_at_utc':datetime.now(timezone.utc).isoformat(),'source_commit':run(['git','rev-parse','HEAD'],cwd=root).stdout.decode().strip(),'source_dirty':bool(run(['git','status','--porcelain'],cwd=root).stdout.strip()),'evidence_sha256':hashlib.sha256(report.read_bytes()).hexdigest(),'scope':'authored fixture; PostgreSQL production projection/watch APIs; no real model','fresh_process_verifications':2,'profile':profile,'latency_summary_sha256':hashlib.sha256((out/'latency-summary.json').read_bytes()).hexdigest() if latency else None,'fake_model_sha256':hashlib.sha256((out/'fake-model.json').read_bytes()).hexdigest() if fake else None}
+        if live:
+            live_demo.execute(root,Path(bin_dir),env,receipt,scenario,report,out)
+            print('SQUIDRA_TEST_PASS:real_meta_historical_correction')
+        manifest={'checked_at_utc':datetime.now(timezone.utc).isoformat(),'source_commit':run(['git','rev-parse','HEAD'],cwd=root).stdout.decode().strip(),'source_dirty':bool(run(['git','status','--porcelain'],cwd=root).stdout.strip()),'evidence_sha256':hashlib.sha256(report.read_bytes()).hexdigest(),'scope':'authored fixture; normal CLI Meta historical questions' if live else 'authored fixture; PostgreSQL production projection/watch APIs; no real model','real_model_sha256':hashlib.sha256((out/'real-model.json').read_bytes()).hexdigest() if live else None,'fresh_process_verifications':2,'profile':profile,'latency_summary_sha256':hashlib.sha256((out/'latency-summary.json').read_bytes()).hexdigest() if latency else None,'fake_model_sha256':hashlib.sha256((out/'fake-model.json').read_bytes()).hexdigest() if fake else None}
         (out/'verification.json').write_text(json.dumps(manifest,indent=2)+'\n')
 finally:
     if identity:
