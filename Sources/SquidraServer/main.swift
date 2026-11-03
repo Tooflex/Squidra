@@ -34,7 +34,7 @@ enum ServerMain {
         do {
             let configuration = try ServerConfiguration(environment: ProcessInfo.processInfo.environment)
             let authority = try ErasureAuthority(environment: ProcessInfo.processInfo.environment)
-            guard try authority.admits(configuration.boundary.actorID) else { throw ErasureAuthority.Invalid.unavailable }
+            try authority.holdUntilProcessExit(configuration.boundary.actorID)
             if arguments == ["check-config"] { print("SQUIDRA configuration valid"); return 0 }
             if importing {
                 let result = try await ConsolidationImportCommand.run(configuration: configuration, path: arguments[2], authority: authority)

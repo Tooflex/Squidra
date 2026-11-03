@@ -1,4 +1,5 @@
 import Foundation
+import CSquidraPlatform
 #if canImport(Darwin)
 import Darwin
 #else
@@ -17,6 +18,29 @@ struct ErasureAuthority: Sendable {
         guard let resolved = realpath(path, nil) else { throw Invalid.unavailable }
         defer { free(resolved) }
         guard String(cString: resolved) == path else { throw Invalid.unavailable }
+    }
+    /// Native CLI entrypoint only, once per process. The kernel owns this descriptor
+    /// after success: do not close it at service return or ARC deinitialization.
+    /// This keeps erasure excluded until process exit has stopped all threads.
+    func holdUntilProcessExit(_ actor: UUID) throws {
+        let parent = open(directory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard parent >= 0 else { throw Invalid.unavailable }
+        defer { _ = close(parent) }
+        var info = stat()
+        guard fstat(parent, &info) == 0, info.st_uid == geteuid(), info.st_mode & 0o077 == 0 else { throw Invalid.unavailable }
+        let fd = openat(parent, actor.uuidString.lowercased() + ".process.lock", O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK, mode_t(0o600))
+        guard fd >= 0 else { throw Invalid.unavailable }
+        var retained = false
+        defer { if !retained { _ = close(fd) } }
+        try check(fd)
+        guard squidra_filesystem_is_local(fd) == 1,
+              flock(fd, LOCK_SH | LOCK_NB) == 0,
+              fstat(fd, &info) == 0, info.st_nlink == 1, info.st_size == 0,
+              fsync(fd) == 0, fsync(parent) == 0 else { throw Invalid.unavailable }
+        // Recheck only after owning the lease: an administrator holding EX cannot
+        // race a stale admission into the deletion interval.
+        guard try admits(actor) else { throw Invalid.unavailable }
+        retained = true
     }
     func admits(_ actor: UUID) throws -> Bool {
         let parent = open(directory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)

@@ -69,14 +69,14 @@ let package = Package(
         .executableTarget(
             name: "SquidraServer",
             dependencies: applicationModules.map { .byName(name: $0) } + [
-                "SquidraDomain", "SquidraPostgres", "SquidraMeta",
+                "SquidraDomain", "SquidraPostgres", "SquidraMeta", "CSquidraPlatform",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "PostgresNIO", package: "postgres-nio"),
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
             ]
         ),
-        .testTarget(name: "SquidraRetentionTests", dependencies: ["SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio")], exclude: ["backup_restore.py", "media.py"]),
+        .testTarget(name: "SquidraRetentionTests", dependencies: ["SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio")], exclude: ["backup_restore.py", "media.py", "decision_registry.py", "erasure_fence.py", "erasure_rows.py", "erasure_rows.sql", "native_erasure.py", "__pycache__"]),
         .testTarget(name: "SquidraPostgresSwiftTests", dependencies: ["SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
         .testTarget(name: "SquidraServerTests", dependencies: ["SquidraMeta", "SquidraMemory", "SquidraPerception", "SquidraSpatial", "SquidraServer", "SquidraObservability", "SquidraWorld", "SquidraProtocols", "SquidraDomain", "SquidraSecurity", "SquidraTools", "SquidraPostgres", .product(name: "HummingbirdTesting", package: "hummingbird"), "SquidraTemporal", "SquidraAgentRuntime", "SquidraCognition", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")], exclude: ["server_process.py"]),
         .testTarget(name: "SquidraAgentRuntimeTests", dependencies: ["CSquidraPlatform", "SquidraDomain", "SquidraAgentRuntime", "SquidraCognition", "SquidraWorld", "SquidraTools", "SquidraSecurity", "SquidraTemporal", "SquidraPostgres", .product(name: "PostgresNIO", package: "postgres-nio"), .product(name: "Logging", package: "swift-log")]),
