@@ -12,7 +12,8 @@ import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from live_demo import admission
+from live_demo import admission, execute
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('budget_contract', ROOT / 'Scripts/test-meta-live.py')
@@ -56,6 +57,25 @@ class AdmissionTests(unittest.TestCase):
         self.ledger['authorizedEURCents'] = 20000
         with self.assertRaises(budget.Refused):
             admission(budget, self.ledger, '1', self.now)
+
+
+class ServerLaunchTests(unittest.TestCase):
+    def test_explicit_loopback_origin_without_starting_provider(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            identity = root / 'identity.json'
+            identity.write_text(json.dumps({'actor': str(uuid.uuid4()), 'subject': str(uuid.uuid4())}))
+            for inherited in (None, 'https://unrelated.example'):
+                env = {'SQUIDRA_TEST_DB_PORT': '5432', 'SQUIDRA_TEST_DB_PASSWORD': 'fixture-only'}
+                if inherited is not None:
+                    env['SQUIDRA_UI_ORIGIN'] = inherited
+                original = dict(env)
+                with patch('live_demo.preflight', return_value=0), patch('live_demo.subprocess.Popen', side_effect=RuntimeError('stop-before-launch')) as launch:
+                    with self.assertRaisesRegex(RuntimeError, 'stop-before-launch'):
+                        execute(root, root, env, identity, root/'scenario', root/'evidence', root)
+                    self.assertEqual(launch.call_args.kwargs['env']['SQUIDRA_UI_ORIGIN'], 'http://127.0.0.1:3000')
+                    self.assertEqual(launch.call_args.kwargs['env']['SQUIDRA_PORT'], '0')
+                self.assertEqual(env, original)
 
 
 class HTTPClientTests(unittest.TestCase):
@@ -147,6 +167,6 @@ class HTTPClientTests(unittest.TestCase):
 if __name__ == '__main__':
     subprocess.run(['npm', 'run', 'build'], cwd=ROOT / 'web', check=True)
     result = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromModule(__import__(__name__)))
-    if not result.wasSuccessful() or result.testsRun != 7 or result.skipped:
+    if not result.wasSuccessful() or result.testsRun != 8 or result.skipped:
         raise SystemExit(1)
     print('SQUIDRA_TEST_PASS:historical_meta_contracts')
