@@ -166,3 +166,35 @@ not prove physical destruction from WAL, replicas, snapshots or prior backups.
 The implementation and restoration tests must demonstrate actor isolation,
 interruption/retry behavior and absence of recovery/export leakage before #48
 can close.
+
+## Independent deletion decisions — first implementation component
+
+`Scripts/account-erasure/decisions.py` provides a trusted-host Python API for
+an independently retained decision registry. The host supplies an existing
+private, owned, canonical absolute directory outside database backup/restore
+paths. Explicit `initialize` provisions an empty registry once and refuses to
+replace an existing one. `request_erasure` monotonically records a canonical
+actor UUID; `snapshot` reads the complete actor set and a content digest.
+Records contain only schema version and actor IDs, never payloads or secrets.
+
+Concurrent requests serialize through a private advisory lock. Publication uses
+a private temporary file, file fsync, atomic replacement and directory fsync.
+Retries are idempotent. Missing, malformed, oversized, noncanonical or unsafe
+registries fail closed; they are never silently treated as empty. Symlinks,
+hardlinks, public permissions and non-regular files are rejected. Interrupted
+initial publication can leave a hardlinked pending file; that condition fails
+closed and needs operator recovery rather than automatic reset.
+
+This directory is a trusted host authority, not an untrusted import format.
+The digest binds a snapshot's bytes; it cannot prove freshness or prevent a
+privileged operator from replacing the entire directory with an old copy.
+The deployment must retain the current authority independently and reconcile
+it before allowing a restored database to serve requests. No promotion or
+freshness claim is made by this component alone.
+
+`T12-ERASURE-DECISIONS` verifies nine offline cases, including concurrent
+requests and interrupted publication. These tests use temporary fixture IDs.
+The registry records **intent**, not completed erasure. It is not yet wired to
+startup, database deletion, local-file cleanup, worker quiescence or restoration.
+Those integrations and their end-to-end interruption/isolation tests remain
+required before #48 can close. No current account has been erased.

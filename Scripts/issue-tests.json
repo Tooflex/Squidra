@@ -1530,5 +1530,15 @@
       "historical_meta_contracts"
     ],
     "requires_database": false
+  },
+  "T12-ERASURE-DECISIONS": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Tests/SquidraRetentionTests/decision_registry.py"
+    ],
+    "tests": [
+      "erasure_decision_registry"
+    ]
   }
 }
