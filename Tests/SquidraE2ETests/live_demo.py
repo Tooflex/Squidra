@@ -38,6 +38,7 @@ def execute(root, binaries, env, identity_path, scenario, evidence, out):
     identity = json.loads(identity_path.read_text())
     token = secrets.token_hex(32)
     server_env = dict(env, SQUIDRA_PROFILE='meta-qualification', SQUIDRA_PORT='0',
+        SQUIDRA_UI_ORIGIN='http://127.0.0.1:3000',
         SQUIDRA_AUTH_TOKEN=token, SQUIDRA_ACTOR_ID=identity['actor'],
         SQUIDRA_DB_PORT=env['SQUIDRA_TEST_DB_PORT'], SQUIDRA_DB_PASSWORD=env['SQUIDRA_TEST_DB_PASSWORD'],
         SQUIDRA_DB_USER='squidra', SQUIDRA_DB_NAME='squidra', SQUIDRA_META_CLOUD_CONSENT='1',
