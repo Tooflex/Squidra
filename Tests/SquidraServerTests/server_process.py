@@ -62,6 +62,12 @@ for stop_signal in [signal.SIGTERM, signal.SIGINT]:
         require(request(connection, '/api/v1/unknown', {'Authorization':'Bearer '+env['SQUIDRA_AUTH_TOKEN']})[0] == 404, 'Valid host credential rejected')
         if stop_signal == signal.SIGTERM:
             print('SQUIDRA_TEST_PASS:server_startup_and_auth', flush=True)
+            statement = "SELECT fence_account_for_erasure('"+env['SQUIDRA_ACTOR_ID']+"');"
+            subprocess.run([engine,'exec','-i',container,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U','squidra','-d','squidra'], input=statement.encode(), capture_output=True, check=True, timeout=10)
+            require(request(connection, '/ready') == (503, {'status':'not_ready','dependency':'account'}), 'Fenced account remained ready')
+            require(request(connection, '/health') == (200, {'status':'alive'}), 'Fence broke public liveness')
+            require(request(connection, '/api/v1/unknown', {'Authorization':'Bearer '+env['SQUIDRA_AUTH_TOKEN']})[0] == 503, 'Fenced account reached protected router')
+            print('SQUIDRA_TEST_PASS:fenced_account_admission', flush=True)
         else:
             subprocess.run([engine, 'stop', '--time', '2', container], check=True, stdout=subprocess.DEVNULL)
             require(request(connection, '/health') == (200, {'status':'alive'}), 'Database loss broke liveness')
@@ -77,6 +83,12 @@ for stop_signal in [signal.SIGTERM, signal.SIGINT]:
         else:
             raise RuntimeError('HTTP listener survived process shutdown')
         print('SQUIDRA_TEST_PASS:'+('sigterm_shutdown' if stop_signal == signal.SIGTERM else 'sigint_shutdown'), flush=True)
+        if stop_signal == signal.SIGTERM:
+            rejected = subprocess.run([str(binary), 'serve'], env=env, capture_output=True, timeout=15)
+            require(rejected.returncode != 0 and b'SQUIDRA listening' not in rejected.stdout, 'Fenced account restarted')
+            require(env['SQUIDRA_AUTH_TOKEN'].encode() not in rejected.stderr, 'Restart rejection leaked credentials')
+            print('SQUIDRA_TEST_PASS:fenced_account_restart', flush=True)
+            env['SQUIDRA_ACTOR_ID'] = str(uuid.uuid4())
     finally:
         if connection:
             connection.close()

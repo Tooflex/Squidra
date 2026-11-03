@@ -4,7 +4,7 @@ import PostgresNIO
 public enum DatabaseReadiness: Equatable, Sendable {
     case ready
     case notReady(Failure)
-    public enum Failure: String, Sendable { case database, migrations }
+    public enum Failure: String, Sendable { case database, migrations, account }
 }
 
 public struct SchemaMigration: Hashable, Sendable {
@@ -21,9 +21,10 @@ public struct SchemaMigration: Hashable, Sendable {
 public struct PostgresSchemaReadiness: Sendable {
     public enum Invalid: Error { case timeout }
     private let client: PostgresClient
+    private let actorID: UUID?
     private let expected: Set<SchemaMigration>
-    public init(client: PostgresClient, expected: Set<SchemaMigration> = ExpectedDatabaseSchema.migrations) {
-        self.client = client; self.expected = expected
+    public init(client: PostgresClient, expected: Set<SchemaMigration> = ExpectedDatabaseSchema.migrations, actorID: UUID? = nil) {
+        self.client = client; self.expected = expected; self.actorID = actorID
     }
 
     public func check(timeout: Duration = .seconds(2)) async throws -> DatabaseReadiness {
@@ -75,7 +76,14 @@ public struct PostgresSchemaReadiness: Sendable {
                 let (namespace, version, checksum) = try row.decode((String, String, String).self)
                 actual.insert(.init(namespace: namespace, version: version, checksum: checksum))
             }
-            return actual == expected ? .ready : .notReady(.migrations)
+            guard actual == expected else { return .notReady(.migrations) }
+            if let actorID {
+                let fences = try await BoundedPostgresQuery.rows(connection,
+                    "SELECT EXISTS(SELECT 1 FROM public.account_erasure_fences WHERE actor_id=\(actorID) AND erased)")
+                guard fences.count == 1, let fence = fences.first else { return .notReady(.database) }
+                if try fence.decode(Bool.self) { return .notReady(.account) }
+            }
+            return .ready
         } catch {
             try Task.checkCancellation()
             return .notReady(.migrations)
