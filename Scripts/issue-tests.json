@@ -1540,5 +1540,16 @@
     "tests": [
       "erasure_decision_registry"
     ]
+  },
+  "T12-ERASURE-FENCE": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Tests/SquidraRetentionTests/erasure_fence.py"
+    ],
+    "tests": [
+      "account_erasure_fence"
+    ],
+    "requires_database": true
   }
 }
