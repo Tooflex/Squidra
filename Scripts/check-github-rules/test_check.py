@@ -73,7 +73,95 @@ class Tests(unittest.TestCase):
                 self.assertNotIn('CANARY_NEVER_ECHO_123', result.stdout + result.stderr)
 
 
+spec_app = importlib.util.spec_from_file_location('app_job', Path(__file__).with_name('app_job.py'))
+a = importlib.util.module_from_spec(spec_app)
+spec_app.loader.exec_module(a)
+from datetime import datetime, timezone, timedelta
+
+
+class AppTests(unittest.TestCase):
+    def fake(self, permissions=None, repositories=None):
+        self.calls = []
+        def call(method, path, credential, body=None):
+            self.calls.append((method, path, body))
+            if path == '/app': return {'id': a.APP, 'slug': 'tooflex-squidra-bot'}
+            if path.endswith('/access_tokens'):
+                return {'token': 'CANARY_NEVER_ECHO_123', 'permissions': a.PERMISSIONS if permissions is None else permissions,
+                        'expires_at': (datetime.now(timezone.utc) + timedelta(minutes=59)).isoformat()}
+            if path == '/installation/repositories':
+                names = repositories or ['Tooflex/Squidra']
+                return {'total_count': len(names), 'repositories': [{'full_name': n} for n in names]}
+            if path.startswith('/app/installations/'):
+                return {'app_id': a.APP, 'account': {'login': 'Tooflex'}, 'repository_selection': 'selected', 'permissions': a.PERMISSIONS}
+        return call
+
+    def test_scoped_job_revokes_after_success(self):
+        with a.installation_job('Tooflex/Squidra', None, self.fake(), lambda _: 'fixture') as request:
+            request('GET', '/branches/main')
+        self.assertEqual(self.calls[-1][:2], ('DELETE', '/installation/token'))
+        issuance = [x for x in self.calls if x[0] == 'POST'][0]
+        self.assertEqual(issuance[2]['repositories'], ['Squidra'])
+
+    def test_revokes_after_job_failure(self):
+        with self.assertRaises(RuntimeError):
+            with a.installation_job('Tooflex/Squidra', None, self.fake(), lambda _: 'fixture'):
+                raise RuntimeError('job failed')
+        self.assertEqual(self.calls[-1][0], 'DELETE')
+
+    def test_broad_grant_revoked_before_job(self):
+        for permissions, repos in [({'administration': 'write'}, None), (None, ['Tooflex/Squidra', 'Tooflex/Other'])]:
+            with self.assertRaises(ValueError):
+                with a.installation_job('Tooflex/Squidra', None, self.fake(permissions, repos), lambda _: 'fixture'):
+                    self.fail('unverified grant reached job')
+            self.assertEqual(self.calls[-1][0], 'DELETE')
+
+    def test_invalid_repository_rejected_before_signing(self):
+        with self.assertRaises(ValueError):
+            with a.installation_job('Tooflex/Other', None, self.fake(), lambda _: self.fail('signed')):
+                self.fail('job ran')
+
+    def test_invalid_expiry_rejected(self):
+        now = datetime.now(timezone.utc)
+        for seconds in [-1, 30, 4000]:
+            with self.assertRaises(ValueError):
+                a.validate_grant({'permissions': a.PERMISSIONS, 'expires_at': (now + timedelta(seconds=seconds)).isoformat()}, now)
+
+    def test_merge_rejects_wrong_branch_or_head_before_write(self):
+        for branch, sha in [('main', 'a'*40), ('bot/33-fixture', 'b'*40)]:
+            calls = []
+            def request(method, path, body=None):
+                calls.append(method)
+                return {'head': {'repo': {'full_name': 'Tooflex/Squidra'}, 'ref': branch, 'sha': sha}, 'base': {'ref': 'main'}, 'draft': False}
+            with self.assertRaises(ValueError): a.merge(request, 'Tooflex/Squidra', 1, 'a'*40)
+            self.assertEqual(calls, ['GET'])
+
+    def test_insecure_key_rejected_before_openssl(self):
+        with tempfile.TemporaryDirectory() as folder:
+            key = Path(folder) / 'key'
+            key.write_text('not a real key')
+            key.chmod(0o644)
+            with self.assertRaises(ValueError): a.jwt(key)
+            link = Path(folder) / 'link'
+            link.symlink_to(key)
+            with self.assertRaises(ValueError): a.jwt(link)
+
+    def test_redirect_never_forwards_credential(self):
+        with self.assertRaises(ValueError):
+            a.NoRedirect().redirect_request(None, None, 302, '', {}, 'https://other.invalid')
+
+    def test_exact_merge_sha_and_safe_routes(self):
+        calls = []
+        def request(method, path, body=None):
+            calls.append((method, body))
+            return {'head': {'repo': {'full_name': 'Tooflex/Squidra'}, 'ref': 'bot/33-fixture', 'sha': 'a'*40}, 'base': {'ref': 'main'}, 'draft': False}
+        a.merge(request, 'Tooflex/Squidra', 1, 'a'*40)
+        self.assertEqual(calls[-1], ('PUT', {'sha': 'a'*40, 'merge_method': 'merge'}))
+        with a.installation_job('Tooflex/Squidra', None, self.fake(), lambda _: 'fixture') as request:
+            with self.assertRaises(ValueError): request('GET', '/../Other')
+
+
 if __name__ == '__main__':
-    result = unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(Tests))
-    if not result.wasSuccessful() or result.testsRun != 7: raise SystemExit(1)
+    suite = unittest.TestSuite([unittest.defaultTestLoader.loadTestsFromTestCase(c) for c in (Tests, AppTests)])
+    result = unittest.TextTestRunner().run(suite)
+    if not result.wasSuccessful() or result.testsRun != 16: raise SystemExit(1)
     print('SQUIDRA_TEST_PASS:github_governance_contracts')
