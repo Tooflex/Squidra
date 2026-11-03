@@ -48,3 +48,15 @@ not repeat or claim those tests. Repository native auto-merge stays disabled.
 If a hosted runner, permissions or billing failure prevents qualification,
 record the actual failure and retain the open issue. Do not remove a failing
 required test or claim completion to clear the issue.
+
+## Hosted matrix coverage
+
+Both Swift runners execute portable contracts, authored Chromium workflows and
+component evaluations. The Linux Swift job builds its own pinned PostgreSQL
+image before the first integration suite and runs every database-dependent
+suite. A separate Linux job verifies database migrations/constraints; its image
+store is not shared with the Swift job. Hosted macOS has no configured container
+engine and does not claim those integration results. The complete local macOS
+Colima audit is separate evidence. No suite is removed from the full inventory;
+local-runner tests guard image-before-use ordering and runner placement against
+the manifest's database requirement.

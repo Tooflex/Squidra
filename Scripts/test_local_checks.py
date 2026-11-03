@@ -24,6 +24,31 @@ class LocalChecksTests(unittest.TestCase):
         self.assertTrue(issues)
         self.assertEqual(json.loads((root / 'Scripts/local-checks.json').read_text()), issues)
 
+    def test_database_image_precedes_every_linux_integration_suite(self):
+        root = Path(__file__).resolve().parent.parent
+        manifest = json.loads((root / 'Scripts/issue-tests.json').read_text())
+        workflow = (root / '.github/workflows/bootstrap.yml').read_text().split('\n  world-database:')[0]
+        blocks = re.split(r'(?=^      - name: )', workflow, flags=re.M)
+        built = False
+        integrations = 0
+        for block in blocks:
+            if 'run: bash Scripts/dev-db.sh build' in block:
+                self.assertIn("if: runner.os == 'Linux'", block)
+                built = True
+            match = re.search(r'^        run: bash Scripts/test-issue.sh ([\w-]+)$', block, re.M)
+            if not match:
+                continue
+            suite = manifest[match[1]]
+            if suite.get('requires_database', suite['kind'] == 'command'):
+                self.assertTrue(built, match[1] + ' runs before its database image is built')
+                self.assertIn("if: runner.os == 'Linux'", block, match[1])
+                integrations += 1
+        self.assertGreater(integrations, 0)
+        for name in ['T06-REVIEW', 'T06-IMPORT', 'T06-QUESTIONS', 'T06-APPROVALS', 'SQD-023', 'SQD-031-COMPONENTS']:
+            self.assertIs(manifest[name]['requires_database'], False)
+            block = next(b for b in blocks if 'run: bash Scripts/test-issue.sh ' + name + '\n' in b)
+            self.assertNotIn('        if:', block, name)
+
     def exercise(self, args=(), fail=None, empty_status='empty_selection', change_lock=False,
                  non_database_command=False):
         with tempfile.TemporaryDirectory() as directory:

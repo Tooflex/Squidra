@@ -707,7 +707,8 @@
       "metric_regressions",
       "complete_exports",
       "component_thresholds"
-    ]
+    ],
+    "requires_database": false
   },
   "SQD-031-DATABASE": {
     "kind": "command",
@@ -984,7 +985,8 @@
     ],
     "tests": [
       "typed_web_review"
-    ]
+    ],
+    "requires_database": false
   },
   "T06-REVIEW-LIVE": {
     "kind": "command",
@@ -1008,7 +1010,8 @@
     ],
     "tests": [
       "typed_web_timeline"
-    ]
+    ],
+    "requires_database": false
   },
   "SQD-023-LIVE": {
     "kind": "command",
@@ -1036,7 +1039,8 @@
     ],
     "tests": [
       "typed_web_approvals"
-    ]
+    ],
+    "requires_database": false
   },
   "T06-APPROVALS-LIVE": {
     "kind": "command",
@@ -1076,7 +1080,8 @@
     ],
     "tests": [
       "typed_web_import"
-    ]
+    ],
+    "requires_database": false
   },
   "T06-IMPORT-LIVE": {
     "kind": "command",
@@ -1100,7 +1105,8 @@
     ],
     "tests": [
       "typed_web_questions"
-    ]
+    ],
+    "requires_database": false
   },
   "T11-META-RESPONSES": {
     "kind": "xctest",
