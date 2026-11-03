@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -52,7 +53,8 @@ def scan(files):
             target=source/path;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(data)
         (settings/'gitleaks.toml').write_bytes(CONFIG.read_bytes());(settings/'.gitleaksignore').write_text('')
         try:
-            identity=docker('create','--label','io.squidra.secret-scan='+nonce,'--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--cpus','1','--memory','512m','--mount','type=bind,source='+str(source)+',target=/scan,readonly','--mount','type=bind,source='+str(output)+',target=/output','--mount','type=bind,source='+str(settings)+',target=/settings,readonly',IMAGE,'dir','/scan','--config','/settings/gitleaks.toml','--gitleaks-ignore-path','/settings/.gitleaksignore','--ignore-gitleaks-allow','--redact=100','--no-banner','--log-level','error','--report-format','json','--report-path','/output/report.json','--exit-code','1','--timeout','90').stdout.decode().strip()
+            # Match private snapshot ownership on native Linux; no DAC override capability.
+            identity=docker('create','--user',str(os.getuid())+':'+str(os.getgid()),'--label','io.squidra.secret-scan='+nonce,'--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--cpus','1','--memory','512m','--mount','type=bind,source='+str(source)+',target=/scan,readonly','--mount','type=bind,source='+str(output)+',target=/output','--mount','type=bind,source='+str(settings)+',target=/settings,readonly',IMAGE,'dir','/scan','--config','/settings/gitleaks.toml','--gitleaks-ignore-path','/settings/.gitleaksignore','--ignore-gitleaks-allow','--redact=100','--no-banner','--log-level','error','--report-format','json','--report-path','/output/report.json','--exit-code','1','--timeout','90').stdout.decode().strip()
             result=subprocess.run(['docker','start','--attach',identity],capture_output=True,timeout=120)
             state=json.loads(docker('inspect',identity).stdout)[0]['State']
             if state['Running'] or state['ExitCode']!=result.returncode:raise ValueError('Scanner execution incomplete')
