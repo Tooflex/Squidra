@@ -53,6 +53,16 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual(admission(budget, self.ledger, '1',
             datetime(2026, 11, 1, 23, 52, 59, tzinfo=timezone.utc)), 0)
 
+    def test_v2_preserves_nine_old_attempts_and_requires_four_new_slots(self):
+        for _ in range(9):
+            budget.reserve(self.ledger, budget.MODELS['sam'], self.now)
+        upgraded = budget.upgrade_legacy_bytes(json.dumps(self.ledger).encode())
+        now = datetime(2026, 11, 4, tzinfo=timezone.utc)
+        self.assertEqual(admission(budget, upgraded, '1', now), 9000)
+        budget.reserve(upgraded, budget.MODELS['spark'], now)
+        with self.assertRaises(RuntimeError):
+            admission(budget, upgraded, '1', now)
+
     def test_invalid_or_refunded_allowance_rejected(self):
         self.ledger['authorizedEURCents'] = 20000
         with self.assertRaises(budget.Refused):
@@ -165,8 +175,9 @@ class HTTPClientTests(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    subprocess.run(['python3', '-m', 'unittest', 'Scripts/test_meta_live.py', 'Scripts/test_meta_budget_upgrade.py'], cwd=ROOT, check=True)
     subprocess.run(['npm', 'run', 'build'], cwd=ROOT / 'web', check=True)
     result = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromModule(__import__(__name__)))
-    if not result.wasSuccessful() or result.testsRun != 8 or result.skipped:
+    if not result.wasSuccessful() or result.testsRun != 9 or result.skipped:
         raise SystemExit(1)
     print('SQUIDRA_TEST_PASS:historical_meta_contracts')

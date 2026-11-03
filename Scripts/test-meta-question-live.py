@@ -23,9 +23,17 @@ import importlib.util
 spec = importlib.util.spec_from_file_location('meta_budget', ROOT / 'Scripts/test-meta-live.py')
 budget_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(budget_module)
-ledger = json.loads(budget_module.private_file(BUDGET / 'live-budget.json',262144))
+ledger = budget_module.decode_ledger(budget_module.private_file(BUDGET / 'live-budget.json',262144))
 used_before = budget_module.validate(ledger)
-if used_before > (7000 if SAM else 8000):
+reservation, expiry = budget_module.policy(ledger, budget_module.MODELS['spark'])
+required = 2 * reservation
+if SAM:
+    sam_reservation, _ = budget_module.policy(ledger, budget_module.MODELS['sam'])
+    required += sam_reservation
+from datetime import datetime, timezone, timedelta
+if datetime.now(timezone.utc) + timedelta(seconds=420) >= datetime.fromisoformat(expiry):
+    raise SystemExit('Qualification snapshot expired or too close to expiry')
+if used_before + required > budget_module.CAP_CENTS:
     raise SystemExit('Insufficient remaining reservations for the complete qualification')
 REPORT = BUDGET / ('sam-meta-question-live.json' if SAM else 'meta-question-live.json')
 if SAM and REPORT.exists():
@@ -140,6 +148,8 @@ with tempfile.TemporaryDirectory(prefix='squidra-meta-question-') as directory:
                               SQUIDRA_SAM_CAMERA_ID=info['camera'],SQUIDRA_SAM_SCENE_ID=info['scene'],SQUIDRA_SAM_COORDINATE_FRAME_ID=info['coordinate'])
         server_env.update(SQUIDRA_PROFILE='meta-qualification',SQUIDRA_META_CLOUD_CONSENT='1',SQUIDRA_META_MODEL='spark',
                           SQUIDRA_META_BUDGET_DIRECTORY=str(BUDGET),MODEL_API_KEY_FILE=str(KEY))
+        if ledger['schemaVersion'] == 2:
+            server_env['SQUIDRA_META_BUDGET_POLICY'] = budget_module.SPARK_POLICY_ID
         server, port = start([str(binaries / 'squidra'), 'serve'], server_env, root / 'server.log', 'SQUIDRA listening 127.0.0.1:')
         readiness(port)
         env = dict(browser_env,SQUIDRA_META_QUESTION_LIVE='1',SQUIDRA_META_REPORT=str(REPORT),SQUIDRA_WEB_MANIFEST=str(manifest),

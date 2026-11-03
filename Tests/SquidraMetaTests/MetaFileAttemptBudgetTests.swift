@@ -1,4 +1,5 @@
 import Foundation
+import Crypto
 import SquidraCognition
 import SquidraDomain
 import XCTest
@@ -32,6 +33,49 @@ final class MetaFileAttemptBudgetTests: XCTestCase, @unchecked Sendable {
     }
     private func reserve(_ budget: MetaFileAttemptBudget, id: UUID = UUID(), amount: Int64 = 10_000_000, deadline: ContinuousClock.Instant = .now.advanced(by:.seconds(3))) async throws {
         try await budget.reserve(attemptID:id,requestID:UUID(),model:.spark,maximumCostMicroUSD:amount,deadline:deadline)
+    }
+    private func renewed(_ count: Int = 9) throws -> [String:Any] {
+        var old = initial()
+        old["attempts"] = (0..<count).map { _ in ["id":UUID().uuidString.lowercased(),"model":"sam-3.1",
+            "reservedEURCents":1000,"status":"interrupted","report":["fixture":true]] as [String:Any] }
+        let raw = try JSONSerialization.data(withJSONObject:old,options:.prettyPrinted)
+        return ["schemaVersion":2,"authorizedEURCents":10000,"policyID":MetaFileAttemptBudget.sparkPolicyID,
+                "fx":["usdPerEUR":"1.1179","date":"2026-11-03","source":"ECB"],"validUntil":"2026-11-05T00:00:00+00:00",
+                "history":["base64":raw.base64EncodedString(),"sha256":SHA256.hash(data:raw).map{String(format:"%02x",$0)}.joined()],
+                "attempts":[[String:Any]]()]
+    }
+    func testRenewalPreservesHistoricalBytesAndFourAttemptsExhaustRemainingAllowance() async throws {
+        let dir = try directory(),value = try renewed();try save(value,to:dir)
+        for _ in 0..<4 { try await reserve(budget(dir,now:1_793_700_000),amount:1_500_000) }
+        do { try await reserve(budget(dir,now:1_793_700_000),amount:1_500_000);XCTFail() }
+        catch { XCTAssertEqual(error as? ModelRoutingError,.budgetExceeded) }
+        let stored = try load(dir)
+        XCTAssertEqual(stored["history"] as? [String:String],value["history"] as? [String:String])
+        XCTAssertEqual((stored["attempts"] as? [Any])?.count,4)
+        // Python independently accepts the exact Swift-written mixed ledger.
+        let root = URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let process = Process();process.executableURL = URL(fileURLWithPath:"/usr/bin/env")
+        process.arguments = ["python3","-c", """
+        import importlib.util,sys,pathlib
+        spec=importlib.util.spec_from_file_location('budget',sys.argv[1]);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+        assert m.validate(m.decode_ledger(pathlib.Path(sys.argv[2]).read_bytes()))==10000
+        """,root.appendingPathComponent("Scripts/test-meta-live.py").path,dir.appendingPathComponent("live-budget.json").path]
+        try process.run();process.waitUntilExit();XCTAssertEqual(process.terminationStatus,0)
+    }
+    func testRenewalRefusesUnqualifiedModelCostExpiryAndCorruptHistory() async throws {
+        let dir = try directory(),value = try renewed();try save(value,to:dir)
+        let ledger = try budget(dir,now:1_793_700_000)
+        do { try await reserve(ledger,amount:1_500_001);XCTFail() } catch { XCTAssertEqual(error as? MetaBudgetError,.invalidReservation) }
+        do { try await ledger.reserveSAM(attemptID:UUID(),frameID:UUID(),deadline:.now.advanced(by:.seconds(3)));XCTFail() }
+        catch { XCTAssertEqual(error as? MetaBudgetError,.invalidReservation) }
+        do { try await ledger.reserve(attemptID:UUID(),requestID:UUID(),model:.wonder,maximumCostMicroUSD:1_500_000,deadline:.now.advanced(by:.seconds(3)));XCTFail() }
+        catch { XCTAssertEqual(error as? MetaBudgetError,.invalidReservation) }
+        do { try await reserve(budget(dir,now:MetaFileAttemptBudget.sparkValidUntilSeconds),amount:1_500_000);XCTFail() }
+        catch { XCTAssertEqual(error as? MetaBudgetError,.expired) }
+        XCTAssertEqual((try load(dir)["attempts"] as? [Any])?.count,0)
+        var corrupt = value;var history = try XCTUnwrap(value["history"] as? [String:String]);history["sha256"] = String(repeating:"0",count:64);corrupt["history"] = history
+        try save(corrupt,to:dir)
+        do { try await reserve(ledger,amount:1_500_000);XCTFail() } catch { XCTAssertEqual(error as? MetaBudgetError,.invalidLedger) }
     }
     func testRestartAndExhaustionPreserveEarlierSAMReportsAndFailedReservations() async throws {
         let dir = try directory();var value = initial()

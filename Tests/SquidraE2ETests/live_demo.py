@@ -15,10 +15,11 @@ def admission(module, ledger, consent, now):
     if consent != '1':
         raise RuntimeError('Explicit historical cloud consent required')
     used = module.validate(ledger)
-    expiry = datetime.fromisoformat(module.VALID_UNTIL)
+    reservation, valid_until = module.policy(ledger, module.MODELS["spark"])
+    expiry = datetime.fromisoformat(valid_until)
     if now.tzinfo is None or now + timedelta(seconds=420) >= expiry:
         raise RuntimeError('Qualification snapshot expired or too close to expiry')
-    if used + 4 * module.RESERVATION_CENTS > module.CAP_CENTS:
+    if used + 4 * reservation > module.CAP_CENTS:
         raise RuntimeError('Four reservations required for two historical questions')
     return used
 
@@ -27,7 +28,7 @@ def preflight(root):
     spec = importlib.util.spec_from_file_location('historical_budget', root / 'Scripts/test-meta-live.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    ledger = json.loads(module.private_file(root / '.build/provider-access/live-budget.json', 262144))
+    ledger = module.decode_ledger(module.private_file(root / '.build/provider-access/live-budget.json', 262144))
     return admission(module, ledger, os.environ.get('SQUIDRA_HISTORICAL_META_LIVE'), datetime.now(timezone.utc))
 
 
@@ -47,7 +48,7 @@ def execute(root, binaries, env, identity_path, scenario, evidence, out):
         SQUIDRA_AUTH_TOKEN=token, SQUIDRA_ACTOR_ID=identity['actor'],
         SQUIDRA_DB_PORT=env['SQUIDRA_TEST_DB_PORT'], SQUIDRA_DB_PASSWORD=env['SQUIDRA_TEST_DB_PASSWORD'],
         SQUIDRA_DB_USER='squidra', SQUIDRA_DB_NAME='squidra', SQUIDRA_META_CLOUD_CONSENT='1',
-        SQUIDRA_META_MODEL='spark', SQUIDRA_META_ENTITY_IDS=identity['subject'].lower(),
+        SQUIDRA_META_MODEL='spark', SQUIDRA_META_BUDGET_POLICY='spark-standard-2026-11-03', SQUIDRA_META_ENTITY_IDS=identity['subject'].lower(),
         SQUIDRA_META_BUDGET_DIRECTORY=str(root / '.build/provider-access'),
         MODEL_API_KEY_FILE=str(root / '.build/secrets/meta-api-key'))
     log = out / 'meta-server.log'
