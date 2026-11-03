@@ -58,8 +58,10 @@ Bot** (`tooflex-squidra-bot`, App ID `5587098`, installation `177992380`).
 GitHub confirmed successful registration and installation. A direct App-authenticated
 API check at `2026-11-02T22:48:22Z` verified the App identity, owner `Tooflex`,
 repository selection `selected`, and exactly the four permissions listed below.
-The installation currently includes **only Tooflex/Squidra**; no qualification
-repository has been added yet.
+On 3 November, the maintainer explicitly authorized adding the private
+`Tooflex/Squidra-governance-qualification` repository. The installation now
+selects exactly these two repositories; each job credential remains limited
+to a single repository.
 
 A real installation credential was issued with an explicit `Squidra` repository
 restriction and the same permission allowlist. The authenticated repository
@@ -68,8 +70,9 @@ expiry `2026-11-02T23:48:21Z`, with 3599 seconds remaining when checked.
 The credential was then revoked, and a follow-up repository request returned
 HTTP 401, confirming revocation. No private key or credential value was logged.
 The user-generated private-key file is outside the checkout with mode `0600`.
-This verifies issuance and revocation; it does not yet establish that subsequent
-implementation jobs automatically use this App instead of the maintainer CLI.
+The local runner subsequently merged implementation PR #297 as
+`tooflex-squidra-bot[bot]` at commit
+`59412979b3fb137390773a55cef4b87d100d6d0f`, then revoked its credential.
 
 The pre-existing connected integration (`161010669`, repository selection `all`)
 was not used as a substitute for this dedicated identity.
@@ -102,20 +105,31 @@ Enforce the PR-only default-branch ruleset with no bot bypass and validate the
 allowed branch in the job before pushing. GitHub's [ruleset documentation](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets)
 distinguishes requiring a PR from requiring its approval.
 
-## Remaining evidence for SQD-033
+## Completed live review qualification — 3 November 2026
 
-The dedicated registration, scoped installation, short-lived credential and
-revocation are verified. The local App job runner below enforces the restrictions at every issuance
-and revokes credentials after each job. Hosted CI integration remains outside
-this local runner; CI is still temporarily suspended.
-For the original strict-review profile, use an explicitly designated disposable
-test repository and a reviewer separate from the bot to demonstrate that a
-merge without approval is rejected, then that an approved tested head can be
-merged. Record request outcome and immutable SHA, never credentials. No such
-live negative merge experiment has been run. SQD-033 remains open for that
-missing evidence and reconciliation of its future profile with the maintainer's
-chosen workflow. The production campaign ruleset has not been changed by this
-qualification, and CI restoration remains part of the final campaign phase.
+The dedicated App created [fixture PR #1](https://github.com/Tooflex/Squidra-governance-qualification/pull/1)
+on `bot/33-review-gate`. Its only change was a harmless one-line text fixture.
+The exact head was `fcb95f628c51b7f0c9b44825b02266932c518b5e` and the original
+main was `2e3f57cdab3791cbb0b821ab4fa3ecbbdbca174a`.
+
+1. With zero reviews, the App's exact-head merge request was rejected with
+   HTTP 405: `Waiting on code owner review from Tooflex.` The PR remained
+   unmerged and main's SHA did not change. The job revoked its credential.
+2. The maintainer reviewed the fixture in GitHub and reported completion.
+   A fresh API read verified `APPROVED` by `Tooflex` on that exact head.
+3. A new scoped App job merged the same head successfully. GitHub identifies
+   `tooflex-squidra-bot[bot]` as the merger and
+   `c1777908886e8ebd3ee87b0d90dca0580149a26b` as the merge commit. The job
+   revoked its credential after the operation.
+
+These live results complete the dedicated identity and review-gate evidence
+for SQD-033 under the documented maintainer-authorized campaign profile.
+The strict-review test repository does not imply that human approval is
+mandatory on the production campaign repository: its authorized zero-review
+profile is unchanged. Hosted CI restoration remains a separate final campaign
+requirement, tracked by SQD-035; it is not claimed complete here. The read-only
+inspector still reports `gh033_complete: false` because its own output cannot
+attest these separate live experiments.
 
 ## Local App jobs
 
@@ -141,5 +155,6 @@ The two allowed job repositories are `Tooflex/Squidra` and the private fixture
 repository `Tooflex/Squidra-governance-qualification`. Each credential is limited
 to one of them. The qualification repository has active ruleset `26481487`,
 CODEOWNERS `* @Tooflex`, one approving review, latest-push approval, stale-review
-dismissal and no bypass. Its App installation is still pending GitHub's
-interactive reauthentication; no negative merge result is claimed yet.
+dismissal and no bypass. The App installation and both negative and positive
+merge tests are verified above. The private fixture repository is retained
+for audit and repeat qualification; no production rules were weakened.
