@@ -96,7 +96,9 @@
       "sigterm_shutdown",
       "database_down_probes",
       "sigint_shutdown",
-      "swift_server_integration"
+      "swift_server_integration",
+      "fenced_account_admission",
+      "fenced_account_restart"
     ]
   },
   "SQD-001-SWIFT": {

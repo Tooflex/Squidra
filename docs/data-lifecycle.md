@@ -255,3 +255,20 @@ logical database-row removal only. Local run files, process-held data, startup
 and restored-backup reconciliation still require host integration. An external
 decision digest is supplied by that trusted host; SQL alone cannot prove its
 freshness. Receipt completion must not be presented as full account erasure.
+
+## Server admission after fencing
+
+The live server checks its configured actor's database fence before startup,
+authenticated HTTP dispatch, publication/recovery steps and watch steps. The
+consolidation import command checks it before applying a batch. A fenced actor
+returns readiness 503 with dependency `account`; public liveness stays available.
+The HTTP check runs inside the existing bounded request lifetime. Missing database
+or schema readiness also refuses admission.
+
+`SQD-001` verifies the real HTTP refusal and rejection of a subsequent process
+restart, alongside normal authentication, probes and signal shutdown (nine
+checks). Admission is a point-in-time check: it does not join work admitted
+before the fence, retract responses or cancel external effects already running.
+Host quiescence and independent decision reconciliation remain mandatory before
+reporting complete account erasure. A restored database alone is not sufficient
+authority to admit an account.

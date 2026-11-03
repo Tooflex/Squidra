@@ -24,7 +24,7 @@ enum ServerComposition {
         let recorder = try traceRecorder ?? PrivateTraceRecorder(limits:TraceLimits())
         let client = configuration.database.makeClient()
         let ownershipStore = localOwnership.map { PostgresReadRunOwnershipStore(client:client,ownership:$0) }
-        let readiness = PostgresSchemaReadiness(client: client)
+        let readiness = PostgresSchemaReadiness(client: client, actorID: configuration.boundary.actorID)
         let approvals = ApprovalCoordinator(store:PostgresApprovalStore(client:client),clock:SystemClock(timeZone:try! IANATimeZone(identifier:"Etc/UTC")))
         let world = PostgresLocationProjection(actorID:configuration.boundary.actorID,client:client)
         let frameImports: FrameImportRoutes?
@@ -100,12 +100,13 @@ enum ServerComposition {
                 }
             } else { continuationStep = nil }
         } else { submission = nil;continuationStep = nil }
-        return application(configuration: configuration, readiness: { try await readiness.check() }, client: client,
+        return application(configuration: configuration, readiness: { try await readiness.check() }, accountAdmission: { try await readiness.check() == .ready }, client: client,
             approvals:approvals,ledger:PostgresActionLedger(client:client),worldReads:worldReads,frameImports:frameImports,
             consolidation:PostgresConsolidationStore(client:client,actorID:configuration.boundary.actorID),
             runs:try! RunRoutes.Dependencies(actorID:configuration.boundary.actorID,
                 events:events,publication:publication,runtime:runtime,submission:submission,traces:recorder),
             beforeServing:{
+                guard try await readiness.check() == .ready else { throw HTTPError(.serviceUnavailable) }
                 if let policy = configuration.importPolicy {
                     let rows = try await client.query("SELECT EXISTS(SELECT 1 FROM world_entities WHERE id=\(policy.locationID) AND actor_id=\(policy.actorID)) AND EXISTS(SELECT 1 FROM coordinate_frames WHERE id=\(policy.coordinateFrameID) AND actor_id=\(policy.actorID))").collect()
                     guard let row = rows.first,try row.decode(Bool.self) else { throw FramePublicationError.scopeMismatch }
@@ -114,6 +115,7 @@ enum ServerComposition {
                 _ = try await recovery.recover()
             },localOwnership:localOwnership,
             publicationStep: {
+                guard try await readiness.check() == .ready else { return false }
                 if let ownershipStore,let localOwnership {
                     let candidates = try await ownershipStore.previousRuns(completedOnly:true,deadline:.now.advanced(by:.seconds(4)))
                     for candidate in candidates {
@@ -125,6 +127,7 @@ enum ServerComposition {
                 return try await publication.recoverNextCompleted(at:UTCInstant(secondsSince1970:Date().timeIntervalSince1970),deadline:.now.advanced(by:.seconds(4)))
             },
             watchStep: {
+                guard try await readiness.check() == .ready else { return false }
                 let progressed = try await watches.processNext(deadline: .now.advanced(by: .seconds(4)))
                 if progressed { _ = try await recovery.recover() }
                 return progressed
@@ -133,6 +136,7 @@ enum ServerComposition {
 
     static func application(configuration: ServerConfiguration,
                             readiness: @escaping @Sendable () async throws -> DatabaseReadiness,
+                            accountAdmission: (@Sendable () async throws -> Bool)? = nil,
                             client: PostgresClient? = nil, approvals: ApprovalCoordinator? = nil, ledger: (any ActionLedgerStore)? = nil,
                             worldReads: WorldReadRoutes? = nil, frameImports: FrameImportRoutes? = nil, consolidation: (any ConsolidationStore)? = nil, runs: RunRoutes.Dependencies? = nil,
                             beforeServing: (@Sendable () async throws -> Void)? = nil,
@@ -157,7 +161,7 @@ enum ServerComposition {
         worldReads?.mount(router)
         frameImports?.mount(router)
         RunRoutes.mount(router,dependencies:runs)
-        var app = Application(responder: HTTPBoundary(inner: router.buildResponder(), configuration: configuration.boundary),
+        var app = Application(responder: HTTPBoundary(inner: router.buildResponder(), configuration: configuration.boundary, accountAdmission: accountAdmission),
             server: .http1(configuration: .init(idleTimeout: .seconds(30))),
             configuration: .init(address: .hostname(configuration.boundary.listenHost, port: configuration.port), reuseAddress: false),
             onServerRunning: { channel in

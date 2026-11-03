@@ -17,6 +17,7 @@ struct BoundaryContext: RequestContext {
 struct HTTPBoundary<Inner: HTTPResponder>: HTTPResponder where Inner.Context == BoundaryContext {
     let inner: Inner
     let configuration: BoundaryConfiguration
+    var accountAdmission: (@Sendable () async throws -> Bool)? = nil
     private static var publicProbes: Set<String> { ["/health/live", "/health/ready", "/health", "/ready"] }
 
     func respond(to request: Request, context: BoundaryContext) async throws -> Response {
@@ -80,6 +81,9 @@ struct HTTPBoundary<Inner: HTTPResponder>: HTTPResponder where Inner.Context == 
     private func boundedResponse(_ request: Request, context: BoundaryContext) async throws -> Response {
         try await withThrowingTaskGroup(of: Response.self) { group in
             group.addTask {
+                if context.actorID != nil, let accountAdmission {
+                    guard try await accountAdmission() else { throw HTTPError(.serviceUnavailable) }
+                }
                 var request = request
                 if let length = request.headers[.contentLength] {
                     guard let size = Int(length), size >= 0 else { throw HTTPError(.badRequest) }

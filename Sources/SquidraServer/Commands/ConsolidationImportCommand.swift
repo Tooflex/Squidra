@@ -22,6 +22,9 @@ enum ConsolidationImportCommand {
         let client = configuration.database.makeClient()
         return try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask { await client.run() }; defer { group.cancelAll() }
+            guard try await PostgresSchemaReadiness(client: client, actorID: configuration.boundary.actorID).check() == .ready else {
+                throw ConsolidationError.invalidInput
+            }
             let result = try await batch.apply(to: PostgresConsolidationStore(client: client, actorID: configuration.boundary.actorID))
             let summaries = result.proposals.map { proposal in
                 let state: String
