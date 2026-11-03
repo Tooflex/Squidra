@@ -28,8 +28,10 @@ scalar() {
   "$container_engine" exec -i "$db_container" psql -X -A -t -q -v ON_ERROR_STOP=1 --username squidra --dbname squidra
 }
 ready() {
+  # The image initializes through a temporary Unix-only postmaster. Wait for
+  # final TCP readiness so migrations cannot race its intentional shutdown.
   for _ in {1..60}; do
-    if "$container_engine" exec "$db_container" pg_isready -U squidra -d squidra >/dev/null 2>&1; then return; fi
+    if "$container_engine" exec "$db_container" pg_isready -h 127.0.0.1 -U squidra -d squidra >/dev/null 2>&1; then return; fi
     sleep 1
   done
   echo 'Database readiness timed out' >&2; exit 1

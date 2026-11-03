@@ -68,10 +68,16 @@ try:
         db=create('--name',db_name,'--label','io.squidra.database=test','--network','none','--env-file',str(envfile),'--tmpfs','/var/lib/postgresql/data:rw,nosuid,size=1g','localhost/squidra-postgres:17-postgis3.6.4-vector0.8.7')
         docker('start',db)
         for _ in range(60):
-            if subprocess.run(['docker','exec',db,'pg_isready','-U','squidra','-d','squidra'],capture_output=True).returncode==0:break
+            if subprocess.run(['docker','exec',db,'pg_isready','-h','127.0.0.1','-U','squidra','-d','squidra'],capture_output=True).returncode==0:break
             time.sleep(.25)
         else:raise RuntimeError('Test database did not become ready')
-        run(['bash','Scripts/dev-db.sh','migrate'],cwd=root,env=dict(os.environ,SQUIDRA_DB_CONTAINER=db_name,SQUIDRA_CONTAINER_ENGINE='docker'))
+        try:
+            migration=run(['bash','Scripts/dev-db.sh','migrate'],cwd=root,env=dict(os.environ,SQUIDRA_DB_CONTAINER=db_name,SQUIDRA_CONTAINER_ENGINE='docker'))
+        except subprocess.CalledProcessError as failure:
+            # Only this owned, empty fixture's schema output; no connection secret.
+            (base/'migration.log').write_bytes((failure.stdout or b'')+(failure.stderr or b''))
+            raise RuntimeError('Fixture migration failed; inspect .build/linux-package/migration.log') from None
+        (base/'migration.log').write_bytes(migration.stdout+migration.stderr)
         runtime=create('--network','container:'+db,'--cpus','2','--memory','2g','--mount','type=bind,source='+str(support)+',target=/support,readonly','--mount','type=bind,source='+str(artifacts)+',target=/package,readonly','--mount','type=bind,source='+str(connection)+',target=/database.json,readonly','--env','SQUIDRA_INSTALL_ARCHIVE=/package/'+archive.name,'--env','SQUIDRA_INSTALL_BUILD_REPORT=/package/build-report.json','--env','SQUIDRA_INSTALL_DATABASE_FILE=/database.json',image_ids['runtime'],'python3','/support/Tests/InstallTests/qualify.py')
         output=execute(runtime,'runtime.log')
         expected={'verified_install','native_cli','installed_server_database','installed_web','safe_uninstall','unsafe_archives_rejected'}
