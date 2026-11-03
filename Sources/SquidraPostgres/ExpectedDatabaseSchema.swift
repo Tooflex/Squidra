@@ -19,5 +19,6 @@ public enum ExpectedDatabaseSchema {
         .init(namespace: "runtime", version: "010_read_run_ownership.sql", checksum: "9d990b238ff4da13fd874eec8becf7c13b37cca205c3e63a56a9baae021a1828"),
         .init(namespace: "runtime", version: "011_consolidation_journals.sql", checksum: "54c9354ec009c4e2c9f131efed203ae02ac1664212d12b1fff5012f271b70844"),
         .init(namespace: "runtime", version: "012_account_erasure_fence.sql", checksum: "79148c165c5af5ccabfa36e1455645c6d2566468f74a2ea105bab6a234964d3d"),
+        .init(namespace: "runtime", version: "013_account_database_erasure.sql", checksum: "74caec61505cb970579c09442c5f4fd829b47f99a2e9a45a6e12a1121f712543"),
     ]
 }
