@@ -15,7 +15,7 @@ import PostgresNIO
 
 /// Composition owns dependencies per application. No global runtime or store.
 enum ServerComposition {
-    static func live(configuration: ServerConfiguration, readHost: ReadHostConfiguration? = nil, traceRecorder: PrivateTraceRecorder? = nil, localOwnership: LocalRunOwnership? = nil) throws -> some ApplicationProtocol {
+    static func live(authority: ErasureAuthority, configuration: ServerConfiguration, readHost: ReadHostConfiguration? = nil, traceRecorder: PrivateTraceRecorder? = nil, localOwnership: LocalRunOwnership? = nil) throws -> some ApplicationProtocol {
         guard readHost == nil || configuration.configuredReadHost == nil else { throw ModelRoutingError.invalidConfiguration }
         let readHost = readHost ?? configuration.configuredReadHost
         if let localOwnership {
@@ -24,7 +24,13 @@ enum ServerComposition {
         let recorder = try traceRecorder ?? PrivateTraceRecorder(limits:TraceLimits())
         let client = configuration.database.makeClient()
         let ownershipStore = localOwnership.map { PostgresReadRunOwnershipStore(client:client,ownership:$0) }
-        let readiness = PostgresSchemaReadiness(client: client, actorID: configuration.boundary.actorID)
+        let databaseReadiness = PostgresSchemaReadiness(client: client, actorID: configuration.boundary.actorID)
+        let readiness: @Sendable () async throws -> DatabaseReadiness = {
+            do {
+                guard try authority.admits(configuration.boundary.actorID) else { return .notReady(.account) }
+            } catch { return .notReady(.account) }
+            return try await databaseReadiness.check()
+        }
         let approvals = ApprovalCoordinator(store:PostgresApprovalStore(client:client),clock:SystemClock(timeZone:try! IANATimeZone(identifier:"Etc/UTC")))
         let world = PostgresLocationProjection(actorID:configuration.boundary.actorID,client:client)
         let frameImports: FrameImportRoutes?
@@ -100,13 +106,13 @@ enum ServerComposition {
                 }
             } else { continuationStep = nil }
         } else { submission = nil;continuationStep = nil }
-        return application(configuration: configuration, readiness: { try await readiness.check() }, accountAdmission: { try await readiness.check() == .ready }, client: client,
+        return application(configuration: configuration, readiness: { try await readiness() }, accountAdmission: { try await readiness() == .ready }, client: client,
             approvals:approvals,ledger:PostgresActionLedger(client:client),worldReads:worldReads,frameImports:frameImports,
             consolidation:PostgresConsolidationStore(client:client,actorID:configuration.boundary.actorID),
             runs:try! RunRoutes.Dependencies(actorID:configuration.boundary.actorID,
                 events:events,publication:publication,runtime:runtime,submission:submission,traces:recorder),
             beforeServing:{
-                guard try await readiness.check() == .ready else { throw HTTPError(.serviceUnavailable) }
+                guard try await readiness() == .ready else { throw HTTPError(.serviceUnavailable) }
                 if let policy = configuration.importPolicy {
                     let rows = try await client.query("SELECT EXISTS(SELECT 1 FROM world_entities WHERE id=\(policy.locationID) AND actor_id=\(policy.actorID)) AND EXISTS(SELECT 1 FROM coordinate_frames WHERE id=\(policy.coordinateFrameID) AND actor_id=\(policy.actorID))").collect()
                     guard let row = rows.first,try row.decode(Bool.self) else { throw FramePublicationError.scopeMismatch }
@@ -115,7 +121,7 @@ enum ServerComposition {
                 _ = try await recovery.recover()
             },localOwnership:localOwnership,
             publicationStep: {
-                guard try await readiness.check() == .ready else { return false }
+                guard try await readiness() == .ready else { return false }
                 if let ownershipStore,let localOwnership {
                     let candidates = try await ownershipStore.previousRuns(completedOnly:true,deadline:.now.advanced(by:.seconds(4)))
                     for candidate in candidates {
@@ -127,7 +133,7 @@ enum ServerComposition {
                 return try await publication.recoverNextCompleted(at:UTCInstant(secondsSince1970:Date().timeIntervalSince1970),deadline:.now.advanced(by:.seconds(4)))
             },
             watchStep: {
-                guard try await readiness.check() == .ready else { return false }
+                guard try await readiness() == .ready else { return false }
                 let progressed = try await watches.processNext(deadline: .now.advanced(by: .seconds(4)))
                 if progressed { _ = try await recovery.recover() }
                 return progressed

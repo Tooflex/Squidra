@@ -82,7 +82,7 @@ final class MetaReadHostConfigurationTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(configured.budget.retries,0)
         XCTAssertEqual(configured.entities.first?.id.uuidString.lowercased(),env["SQUIDRA_META_ENTITY_IDS"])
         let configuration = try ServerConfiguration(environment:all,clock:clock())
-        XCTAssertThrowsError(try ServerComposition.live(configuration:configuration,readHost:configured))
+        XCTAssertThrowsError(try ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration:configuration,readHost:configured))
         all["SQUIDRA_META_MODEL"] = "wonder"
         XCTAssertEqual(try ServerConfiguration(environment:all,clock:clock()).configuredReadHost?.models.first?.descriptor.id,"muse-wonder-1.0")
         all["SQUIDRA_PROFILE"] = "meta";XCTAssertThrowsError(try ServerConfiguration(environment:all,clock:clock()))

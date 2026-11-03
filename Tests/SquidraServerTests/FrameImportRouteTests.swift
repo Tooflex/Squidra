@@ -47,7 +47,7 @@ final class FrameImportRouteTests: XCTestCase, @unchecked Sendable {
             group.addTask {await db.run()};defer {group.cancelAll()}
             _ = try await db.query("INSERT INTO world_entities(id,actor_id,kind) VALUES(\(scene),\(actor),'fixture_scene')").collect()
             _ = try await db.query("INSERT INTO coordinate_frames(id,actor_id,name,dimensions,units) VALUES(\(coordinate),\(actor),'synthetic host scene',3,'metres')").collect()
-            try await ServerComposition.live(configuration:config).test(.live) { client in
+            try await ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration:config).test(.live) { client in
                 try await client.execute(uri:"/api/v1/frames/import",method:.post,body:.init(string:body())) {XCTAssertEqual($0.status,.unauthorized)}
                 for (fields,status):([String:Any],HTTPResponse.Status) in [(["permitsLocalProcessing":false],.forbidden),(["actorId":UUID().uuidString],.badRequest),(["frameId":UUID().uuidString],.badRequest),(["permitsLocalProcessing":"true"],.badRequest),(["schemaVersion":"2"],.badRequest),(["imageBase64":"AAAA"],.badRequest),(["imageBase64":Data(repeating:0,count:524289).base64EncodedString()],.badRequest)] {
                     try await client.execute(uri:"/api/v1/frames/import",method:.post,headers:headers,body:.init(string:body(fields))) {XCTAssertEqual($0.status,status)}
@@ -86,7 +86,7 @@ final class FrameImportRouteTests: XCTestCase, @unchecked Sendable {
         let model = ImportedQuestionModelFixture()
         let host = try ReadHostConfiguration(models:[model],entities:[],allowImportedEntities:true)
         let noProfile = try ServerConfiguration(environment:env.filter { !$0.key.hasPrefix("SQUIDRA_SYNTHETIC_") })
-        XCTAssertThrowsError(try ServerComposition.live(configuration:noProfile,readHost:host))
+        XCTAssertThrowsError(try ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration:noProfile,readHost:host))
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with:Data(contentsOf:Self.fixture)) as? [String:Any])
         let image = try XCTUnwrap((root["frames"] as? [[String:Any]])?.first?["imageBase64"] as? String)
         let body = try JSONSerialization.data(withJSONObject:["schemaVersion":"1","imageBase64":image,"permitsLocalProcessing":true])
@@ -97,7 +97,7 @@ final class FrameImportRouteTests: XCTestCase, @unchecked Sendable {
             for id in [scene,unrelated] { _ = try await db.query("INSERT INTO world_entities(id,actor_id,kind) VALUES(\(id),\(actor),'fixture')").collect() }
             _ = try await db.query("INSERT INTO coordinate_frames(id,actor_id,name,dimensions,units) VALUES(\(coordinate),\(actor),'read scope',3,'metres')").collect()
             let receiptBox = ImportedReceiptBox()
-            try await ServerComposition.live(configuration:config,readHost:host).test(.live) { http in
+            try await ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration:config,readHost:host).test(.live) { http in
                 for id in [unrelated,scene,UUID()] {
                     let denied = try await http.executeRequest(uri:"/api/v1/runs",method:.post,headers:headers,body:RunHTTPTestSupport.body(id))
                     XCTAssertEqual(denied.status,.forbidden)
@@ -117,7 +117,7 @@ final class FrameImportRouteTests: XCTestCase, @unchecked Sendable {
             // the imported subject from its immutable actor-bound observation.
             for _ in 0..<2 {
                 await model.configure(plan:plan,answer:answer)
-                try await ServerComposition.live(configuration:config,readHost:host).test(.live) { http in
+                try await ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration:config,readHost:host).test(.live) { http in
                     let accepted = try await http.executeRequest(uri:"/api/v1/runs",method:.post,headers:headers,body:RunHTTPTestSupport.body(entity))
                     XCTAssertEqual(accepted.status,.accepted)
                     let path = try XCTUnwrap(accepted.headers[.location]);_ = try await RunHTTPTestSupport.completed(http,token:token,path:path)
@@ -146,11 +146,11 @@ final class FrameImportRouteTests: XCTestCase, @unchecked Sendable {
                 guard case .deny = try await policy.evaluate(context) else { return XCTFail("Imported scope expanded authority") }
             }
             let fixedHost = try ReadHostConfiguration(models:[model],entities:[PlanningEntity(id:unrelated,label:"explicit")])
-            try await ServerComposition.live(configuration:config,readHost:fixedHost).test(.live) { http in
+            try await ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration:config,readHost:fixedHost).test(.live) { http in
                 let response = try await http.executeRequest(uri:"/api/v1/runs",method:.post,headers:headers,body:RunHTTPTestSupport.body(entity));XCTAssertEqual(response.status,.forbidden)
             }
             var otherCamera = env;otherCamera["SQUIDRA_SYNTHETIC_CAMERA_ID"] = UUID().uuidString
-            try await ServerComposition.live(configuration:ServerConfiguration(environment:otherCamera),readHost:host).test(.live) { http in
+            try await ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration:ServerConfiguration(environment:otherCamera),readHost:host).test(.live) { http in
                 let response = try await http.executeRequest(uri:"/api/v1/runs",method:.post,headers:headers,body:RunHTTPTestSupport.body(entity));XCTAssertEqual(response.status,.forbidden)
             }
         }

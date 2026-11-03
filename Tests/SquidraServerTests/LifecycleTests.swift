@@ -19,7 +19,7 @@ final class LifecycleTests: XCTestCase, @unchecked Sendable {
     }
 
     func testRealDatabaseProbesAndAliasesOverLiveHTTP() async throws {
-        let app = try ServerComposition.live(configuration: Self.configuration())
+        let app = try ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration: Self.configuration())
         try await app.test(.live) { client in
             for path in ["/health/live", "/health"] {
                 try await client.execute(uri: path, method: .get) { response in

@@ -98,12 +98,14 @@
       "sigint_shutdown",
       "swift_server_integration",
       "fenced_account_admission",
-      "fenced_account_restart"
+      "fenced_account_restart",
+      "authority_required",
+      "independent_authority_admission"
     ]
   },
   "SQD-001-SWIFT": {
     "kind": "xctest",
-    "filter": "^SquidraServerTests\\.LifecycleTests/"
+    "filter": "^SquidraServerTests\\.(LifecycleTests|ErasureAuthorityTests)/"
   },
   "SQD-017": {
     "kind": "xctest",

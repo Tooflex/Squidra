@@ -340,6 +340,8 @@ export SQUIDRA_DB_PASSWORD="$POSTGRES_PASSWORD" SQUIDRA_DB_NAME="$POSTGRES_DB"
 export SQUIDRA_AUTH_TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
 export SQUIDRA_ACTOR_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
 export SQUIDRA_UI_ORIGIN=http://localhost:3000
+# Existing current independent registry; see docs/data-lifecycle.md for first provisioning.
+export SQUIDRA_ERASURE_AUTHORITY_DIRECTORY=/absolute/private/current-authority
 swift run --skip-build squidra check-config
 swift run --skip-build squidra serve
 ```

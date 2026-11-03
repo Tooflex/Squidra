@@ -101,7 +101,7 @@ final class AutomaticRecoveryProcessTests: XCTestCase, @unchecked Sendable {
                 defer { ownership.releaseAfterJoiningWorkers() }
                 let config = try ServerConfiguration(environment:env)
                 let host = try ReadHostConfiguration(models:[model],entities:task.request.planningScope.entities)
-                try await ServerComposition.live(configuration:config,readHost:host,localOwnership:ownership).runService()
+                try await ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration:config,readHost:host,localOwnership:ownership).runService()
             }
             return
         }

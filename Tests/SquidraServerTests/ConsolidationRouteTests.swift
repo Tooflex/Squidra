@@ -35,7 +35,7 @@ final class ConsolidationRouteTests: XCTestCase, @unchecked Sendable {
             let (archive, proposalID, record) = try await Self.seed(store: store)
             let config = try RunHTTPTestSupport.configuration(actor: actor, token: Self.token)
             let index = "/api/v1/consolidations/" + archive.id.uuidString, path = index + "/proposals/" + proposalID.uuidString
-            try await ServerComposition.live(configuration: config).test(.live) { http in
+            try await ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration: config).test(.live) { http in
                 try await http.execute(uri: path, method: .get) { XCTAssertEqual($0.status, .unauthorized) }
                 try await http.execute(uri: path + "/decision", method: .post, body: .init(string: Self.body())) { XCTAssertEqual($0.status, .unauthorized) }
                 try await http.execute(uri: index, method: .get, headers: [.authorization: "Bearer " + Self.token]) { response in
@@ -60,7 +60,7 @@ final class ConsolidationRouteTests: XCTestCase, @unchecked Sendable {
                 try await http.execute(uri: path + "/decision", method: .post, headers: [.authorization: "Bearer " + Self.token, .contentType: "application/json"], body: .init(string: Self.body())) { XCTAssertEqual($0.status, .conflict) }
             }
             // Recreate the normal server and independently reload its durable decision.
-            try await ServerComposition.live(configuration: config).test(.live) { http in
+            try await ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration: config).test(.live) { http in
                 try await http.execute(uri: path, method: .get, headers: [.authorization: "Bearer " + Self.token]) { response in
                     XCTAssertEqual(response.status, .ok)
                     XCTAssertTrue(String(buffer: response.body).contains("\"state\":\"approved\""))
@@ -72,7 +72,7 @@ final class ConsolidationRouteTests: XCTestCase, @unchecked Sendable {
             let promoted = try await workspace.promotedMemory(id: proposalID)
             XCTAssertEqual(promoted.sourceIDs, record.sourceIDs); XCTAssertEqual(promoted.sensitivity, .privateOnly)
             let otherConfig = try RunHTTPTestSupport.configuration(actor: UUID(), token: Self.token)
-            try await ServerComposition.live(configuration: otherConfig).test(.live) { http in
+            try await ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration: otherConfig).test(.live) { http in
                 try await http.execute(uri: path, method: .get, headers: [.authorization: "Bearer " + Self.token]) { XCTAssertEqual($0.status, .notFound) }
                 try await http.execute(uri: path + "/decision", method: .post, headers: [.authorization: "Bearer " + Self.token, .contentType: "application/json"], body: .init(string: Self.body())) { XCTAssertEqual($0.status, .notFound) }
             }
@@ -85,7 +85,7 @@ final class ConsolidationRouteTests: XCTestCase, @unchecked Sendable {
             let (conflicted, conflictID, _) = try await Self.seed(store: store, conflict: true)
             let config = try RunHTTPTestSupport.configuration(actor: actor, token: Self.token)
             let path = "/api/v1/consolidations/\(archive.id)/proposals/\(id)/decision"
-            try await ServerComposition.live(configuration: config).test(.live) { http in
+            try await ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration: config).test(.live) { http in
                 let valid = Self.body()
                 let malformed = ["[]", "\u{00a0}" + valid, valid.dropLast() + ",\"actorId\":\"fake\"}", valid.dropLast() + ",\"decision\":\"rejected\"}",
                                  valid.replacingOccurrences(of: "\"1\"", with: "1"), valid.replacingOccurrences(of: "proposalVersion", with: #"proposal\u0056ersion"#),
