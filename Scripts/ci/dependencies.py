@@ -4,6 +4,7 @@ import collections
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -65,7 +66,8 @@ def scan(swift_path, npm_path):
         directory=Path(temporary)
         (directory/'Package.resolved').write_bytes(swift_bytes);(directory/'package-lock.json').write_bytes(npm_bytes)
         try:
-            identity=docker('create','--label','io.squidra.dependency-scan='+nonce,'--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--memory','512m','--cpus','1','--mount','type=bind,source='+str(directory)+',target=/locks,readonly',IMAGE,'scan','source','--format','json','--all-packages','--all-vulns','--lockfile','/locks/Package.resolved','--lockfile','/locks/package-lock.json').stdout.decode().strip()
+            # Match private snapshot ownership on native Linux; no DAC override capability.
+            identity=docker('create','--user',str(os.getuid())+':'+str(os.getgid()),'--label','io.squidra.dependency-scan='+nonce,'--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--memory','512m','--cpus','1','--mount','type=bind,source='+str(directory)+',target=/locks,readonly',IMAGE,'scan','source','--format','json','--all-packages','--all-vulns','--lockfile','/locks/Package.resolved','--lockfile','/locks/package-lock.json').stdout.decode().strip()
             result=subprocess.run(['docker','start','--attach',identity],capture_output=True,timeout=120)
             state=json.loads(docker('inspect',identity).stdout)[0]['State']
             if state['Running'] or result.returncode!=state['ExitCode']:raise ValueError('Scanner execution incomplete')
