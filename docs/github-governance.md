@@ -29,7 +29,7 @@ end of the campaign, as documented in the bootstrap recovery record.
 
 ## Executable inspection
 
-`bash Scripts/test-issue.sh SQD-033` runs seven offline contract tests of the
+`bash Scripts/test-issue.sh SQD-033` runs sixteen offline contract tests of the
 inspector. A green fixture suite is **not** live governance qualification.
 
 Run `python3 Scripts/check-github-rules/check.py --live --profile campaign-paused`
@@ -105,8 +105,9 @@ distinguishes requiring a PR from requiring its approval.
 ## Remaining evidence for SQD-033
 
 The dedicated registration, scoped installation, short-lived credential and
-revocation are verified. Automated job integration still needs to enforce the
-same restrictions at every issuance and revoke credentials after each job.
+revocation are verified. The local App job runner below enforces the restrictions at every issuance
+and revokes credentials after each job. Hosted CI integration remains outside
+this local runner; CI is still temporarily suspended.
 For the original strict-review profile, use an explicitly designated disposable
 test repository and a reviewer separate from the bot to demonstrate that a
 merge without approval is rejected, then that an approved tested head can be
@@ -115,3 +116,30 @@ live negative merge experiment has been run. SQD-033 remains open for that
 missing evidence and reconciliation of its future profile with the maintainer's
 chosen workflow. The production campaign ruleset has not been changed by this
 qualification, and CI restoration remains part of the final campaign phase.
+
+## Local App jobs
+
+`Scripts/check-github-rules/app_job.py` now issues a fresh installation credential
+for each job and validates App identity, installation owner, exact permission
+allowlist, expiry and a single repository before executing an API operation.
+It revokes the credential in a `finally` block on success, validation failure or
+job failure. SIGTERM and keyboard interruption also unwind cleanup; a forced
+process kill or network outage can prevent revocation, so the maximum one-hour
+expiry remains the backstop. Credentials are never written to disk or printed.
+The private-key path is supplied by the operator with `--key-file`; the file
+must be a regular owner-only file. Do not place it in the repository.
+
+The default operation checks the main branch read-only. To merge an already
+locally tested PR, supply `--merge-pr NUMBER --tested-sha FULL_SHA`. The job
+requires a same-repository `bot/<issue>-<slug>` branch, base `main`, a non-draft
+PR and the exact tested head, then uses GitHub's expected-SHA merge API.
+The caller must run the relevant local checks before passing the SHA. This
+runner does not claim to attest that the caller actually ran tests, and never
+bypasses GitHub rules or falls back to a maintainer credential.
+
+The two allowed job repositories are `Tooflex/Squidra` and the private fixture
+repository `Tooflex/Squidra-governance-qualification`. Each credential is limited
+to one of them. The qualification repository has active ruleset `26481487`,
+CODEOWNERS `* @Tooflex`, one approving review, latest-push approval, stale-review
+dismissal and no bypass. Its App installation is still pending GitHub's
+interactive reauthentication; no negative merge result is claimed yet.
