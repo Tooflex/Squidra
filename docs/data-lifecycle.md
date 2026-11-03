@@ -226,3 +226,32 @@ existing reads, in-memory work and external effects are not stopped by a trigger
 No full erasure success may be reported until host quiescence, actual row/file
 removal and restore/startup reconciliation have also completed. No real account
 has been fenced by qualification.
+
+## Transactional database-row erasure
+
+Migration `runtime/013_account_database_erasure.sql` exposes the trusted-owner
+function `erase_fenced_account_rows(actor, authorityDigest)`. The host must first
+record the external decision, stop the actor's processes/effects and establish
+the permanent database fence. The function validates the exact current inventory
+of 27 actor-owned tables, locks the fence and removes the actor's rows in foreign
+key order within one transaction. An unknown actor-owned table refuses erasure.
+A retry after success returns the existing database receipt UUID.
+
+The only journal exception is DELETE for the target actor while its incomplete
+receipt belongs to the current PostgreSQL transaction. Normal UPDATE/TRUNCATE
+protections remain intact; merely fencing an actor does not allow deletion.
+No trigger is disabled, and other accounts retain their normal protections.
+The receipt becomes immutable on completion. A statement failure rolls back
+all deletions and the receipt; the previously committed fence remains. The
+receipt contains actor UUID, receipt UUID, authority digest, transaction ID and
+completion boolean, without payloads. PUBLIC cannot invoke the erasure entry
+point or write receipts. The migration owner/superuser is a trusted operator.
+
+`T12-ERASURE-ROWS` seeds all 27 tables for the target, verifies byte-for-byte
+preservation of the second actor, tests failure late in deletion, checks retries,
+permanent fences, retained receipts and rejection of an unexpected table. It
+runs exclusively in an owned disposable PostgreSQL container. This qualifies
+logical database-row removal only. Local run files, process-held data, startup
+and restored-backup reconciliation still require host integration. An external
+decision digest is supplied by that trusted host; SQL alone cannot prove its
+freshness. Receipt completion must not be presented as full account erasure.

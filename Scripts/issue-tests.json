@@ -1551,5 +1551,16 @@
       "account_erasure_fence"
     ],
     "requires_database": true
+  },
+  "T12-ERASURE-ROWS": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Tests/SquidraRetentionTests/erasure_rows.py"
+    ],
+    "tests": [
+      "account_database_erasure"
+    ],
+    "requires_database": true
   }
 }

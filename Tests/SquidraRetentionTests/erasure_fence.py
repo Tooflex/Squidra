@@ -35,7 +35,7 @@ try:
             time.sleep(.25)
         else: raise AssertionError('Readiness failed')
         subprocess.run(['bash','Scripts/dev-db.sh','migrate'],cwd=ROOT,env=dict(os.environ,SQUIDRA_DB_CONTAINER=name,SQUIDRA_CONTAINER_ENGINE=ENGINE),capture_output=True,check=True,timeout=120)
-        assert sql("SELECT count(*) FROM information_schema.columns c WHERE c.table_schema='public' AND c.column_name='actor_id' AND c.table_name<>'account_erasure_fences' AND NOT EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid=('public.'||c.table_name)::regclass AND t.tgname='account_write_admission')")=='0'
+        assert sql("SELECT count(*) FROM information_schema.columns c WHERE c.table_schema='public' AND c.column_name='actor_id' AND c.table_name NOT IN ('account_erasure_fences','account_database_erasure_receipts') AND NOT EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid=('public.'||c.table_name)::regclass AND t.tgname='account_write_admission')")=='0'
         assert sql("SELECT count(*) FROM pg_trigger WHERE tgname='account_write_admission'")=='27'
         sql(insert(a)+insert(b))
         sql(f"BEGIN; SELECT fence_account_for_erasure('{a}'); ROLLBACK;")
