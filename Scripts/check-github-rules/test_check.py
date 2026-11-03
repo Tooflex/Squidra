@@ -59,6 +59,21 @@ class Tests(unittest.TestCase):
         data = fixture(); data['administrator']['permission'] = 'write'
         self.assertEqual(v.evaluate(data, 'campaign-paused')['status'], 'failed')
 
+    def test_restored_maintainer_ci_requires_all_seven_owned_checks(self):
+        data = fixture()
+        checks = [{'context':name,'integration_id':15368} for name in sorted(v.CHECKS | v.SECURITY_CHECKS)]
+        rule = {'type':'required_status_checks','parameters':{'strict_required_status_checks_policy':True,'required_status_checks':checks}}
+        data['ruleset']['rules'].append(rule)
+        self.assertEqual(v.evaluate(data,'maintainer-ci')['status'],'passed')
+        self.assertEqual(v.evaluate(data,'strict')['status'],'failed')
+        for changed in [checks[:-1],checks+[checks[0]],checks+[{'context':'extra','integration_id':15368}],
+                        [dict(item,integration_id=1) for item in checks]]:
+            altered = copy.deepcopy(data)
+            altered['ruleset']['rules'][-1]['parameters']['required_status_checks'] = changed
+            self.assertEqual(v.evaluate(altered,'maintainer-ci')['status'],'failed')
+        rule['parameters']['strict_required_status_checks_policy'] = False
+        self.assertEqual(v.evaluate(data,'maintainer-ci')['status'],'failed')
+
     def test_duplicate_rules_rejected(self):
         data = fixture(); data['ruleset']['rules'].append(copy.deepcopy(data['ruleset']['rules'][0]))
         with self.assertRaises(ValueError): v.evaluate(data, 'campaign-paused')
@@ -163,5 +178,5 @@ class AppTests(unittest.TestCase):
 if __name__ == '__main__':
     suite = unittest.TestSuite([unittest.defaultTestLoader.loadTestsFromTestCase(c) for c in (Tests, AppTests)])
     result = unittest.TextTestRunner().run(suite)
-    if not result.wasSuccessful() or result.testsRun != 16: raise SystemExit(1)
+    if not result.wasSuccessful() or result.testsRun != 17: raise SystemExit(1)
     print('SQUIDRA_TEST_PASS:github_governance_contracts')

@@ -1,7 +1,9 @@
 name: Bootstrap
 
 on:
-  # Temporarily paused: run python3 Scripts/check-local.py locally.
+  pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -15,7 +17,7 @@ jobs:
   build-test:
     name: Swift 6.4.2 / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:

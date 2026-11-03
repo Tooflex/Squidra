@@ -1,7 +1,8 @@
 name: PR Metadata
 
-# Restore pull_request events at the end of the maintainer-authorized CI pause.
 on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -27,5 +28,5 @@ jobs:
       - name: Validate description without running PR code
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ inputs.pr_number }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
         run: python3 Scripts/validate-pr-metadata/validate.py --pr "$PR_NUMBER"

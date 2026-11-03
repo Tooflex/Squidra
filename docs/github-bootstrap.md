@@ -120,3 +120,7 @@ A completed checkbox records evidence, not a promise. T10 and T01 were
 integrated after the required validations. Reverting these files does not remove
 server-side rules; changing rules requires an explicit administrative
 operation.
+
+The end-of-campaign [CI restoration procedure](github-ci-restoration.md) defines
+the seven build/security checks and the `maintainer-ci` audit profile. Actual
+workflow activation and ruleset API verification are required separately.
