@@ -198,3 +198,31 @@ The registry records **intent**, not completed erasure. It is not yet wired to
 startup, database deletion, local-file cleanup, worker quiescence or restoration.
 Those integrations and their end-to-end interruption/isolation tests remain
 required before #48 can close. No current account has been erased.
+
+## PostgreSQL write fence — erasure preparation
+
+Migration `runtime/012_account_erasure_fence.sql` adds an irreversible per-actor
+write fence. The trusted migration owner can call `fence_account_for_erasure`
+after durably recording the external decision. Its transaction waits for
+previously admitted database writes to commit or roll back. Subsequent inserts
+and updates for that actor fail, including stale repeatable-read transactions.
+All 27 current actor-owned tables have an admission trigger; actor reassignment
+is rejected. The integration test queries the catalog to detect uncovered tables.
+Existing journal, ledger and media mutation protections remain enabled.
+
+Each write takes a row lock in the actor's fence record until transaction end.
+This deliberately serializes writes for one actor and can introduce ordinary
+PostgreSQL deadlocks when callers acquire other locks in conflicting orders;
+callers must preserve their existing bounded failure/retry behavior. Other
+actors use separate rows. Fence records contain only UUID and boolean state.
+They cannot be deleted, truncated or reset through normal SQL operations.
+The migration owner remains a trusted administrator; this is not isolation
+against a superuser. PUBLIC cannot call the administrative fencing function.
+
+`T12-ERASURE-FENCE` checks real PostgreSQL coverage, actor isolation, rollback,
+permanent fencing, concurrent admitted writes and stale-snapshot rejection in
+an owned network-isolated container. This is only the database write boundary:
+existing reads, in-memory work and external effects are not stopped by a trigger.
+No full erasure success may be reported until host quiescence, actual row/file
+removal and restore/startup reconciliation have also completed. No real account
+has been fenced by qualification.
