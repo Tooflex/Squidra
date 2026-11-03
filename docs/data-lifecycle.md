@@ -48,9 +48,8 @@ local database recovery profile only.
 ## Remaining T12 work
 
 Backup/restore and opt-in media retention are implemented below. Actor-scoped
-structural export is described below too. Comprehensive personal-data erasure,
-its privacy-policy acceptance, and deletion reconciliation after restoration
-remain outstanding. The immutable journal must not be silently rewritten. If
+structural export is described below too. The native account-erasure and restoration implementation is documented below;
+final privacy-policy acceptance remains outstanding. The immutable journal must not be silently rewritten. If
 export or deletion is later exposed as a tool, route it through gateway
 authorization and approval. T12 is not complete yet.
 
@@ -348,3 +347,87 @@ symlinks/hardlinks/FIFO and concurrent writer-lock refusal/recovery.
 This remains point-in-time admission. Work already admitted must still be joined
 before full account erasure; this component does not cancel an external effect
 or claim memory or local payload cleanup.
+
+## Quiesced administrative account erasure
+
+The current native single-host profile provides a trusted operator command:
+
+```bash
+python3 Scripts/account-erasure/erase.py \
+  --authority /absolute/private/current-authority \
+  --actor CANONICAL_ACTOR_UUID --container LABELED_CONTAINER \
+  --run-directory /absolute/private/run-directory
+```
+
+Use `--no-local-run-directory` instead if that account was operated without
+`SQUIDRA_RUN_DIRECTORY`. This command is not a model tool or HTTP endpoint. It
+requires an explicitly selected actor and a running local container labeled for
+Squidra test/development use. The operator is trusted with the database owner
+role; no production deployment or distributed-process erasure is implied.
+
+Every native command now takes a shared `<actor>.process.lock` in the current
+authority directory before rechecking admission. The descriptor deliberately
+remains open until the kernel terminates the process, including abnormal exit;
+it is not released when a service returns or an object is deinitialized. Only
+known local filesystems are supported. All native processes for the account
+must use the same current authority. Stop legacy binaries or custom embedding
+hosts before upgrading: they do not participate in this process protocol.
+
+The operator command first records the erasure decision durably, then attempts
+an exclusive process lock. A live process produces `busy` (exit 2), retains the
+decision and leaves database payloads untouched. Stop the account's native
+services normally with SIGTERM, wait for actual exit, and retry. No PID is
+guessed or killed by this command. An unresponsive worker cannot cause a false
+completion: its process retains the shared lock. While intent is pending,
+normal HTTP/startup admission remains denied. Other actors use separate process
+locks and keep working.
+
+With exclusive ownership, the command checks declared local run storage,
+commits the permanent database fence, then erases the actor's 27 database
+tables transactionally. A later failure cannot roll back the committed fence
+or the independent decision. Success returns `erased`, the explicit profile
+`native-single-host-v1`, a database receipt UUID and authority digest, without
+payloads. Retrying a completed deletion returns the existing receipt. Its
+original digest remains in the database even if unrelated later decisions
+change the registry's current digest. Failure never claims completion.
+
+### Local storage and process inventory
+
+The native server's local recovery writer is `LocalRunOwnership`: it stores
+only an actor-named lock containing a domain UUID. These minimum identities and
+empty process locks remain to prevent accidental ownership reuse; they are not
+anonymous. The operator checks private regular, single-link UUID lock files,
+holds the target ownership lock and refuses unknown file formats. It never
+unlinks lock identities. The current profile has no local run payload files to
+remove (`local_payload_files: 0`). A future payload-file writer requires a new
+inventory and erasure implementation before this profile can qualify it.
+
+Run tasks, plans, checkpoints, results, approvals, delivery state and retained
+media are PostgreSQL rows included in transactional erasure. The native model
+tool registry exposes only the two world-read tools; it does not launch the
+sandbox module's file-writing executors. Private trace recorders/exporters are
+process memory with no file or remote exporter. Kernel process exit ends their
+accessibility and all local workers before the exclusive erasure lock becomes
+available. This is not a physical RAM/swap/core-dump zeroization claim.
+
+Original operator input files, global provider credentials, and the shared
+provider attempt budget are externally managed configuration/accounting, not
+local run payload copies. The command never deletes them or resets spending
+reservations. It cannot retract data already transmitted to a cloud provider,
+physical WAL, backups or operator-created copies. Those retention obligations
+remain explicit in ADR-011; restored backups are separately reconciled above.
+
+### Verification and gate registration
+
+`T12-ERASURE-NATIVE` exercises two actual native servers for one actor and a
+third for another actor: durable intent with unchanged rows while busy, refusal
+after only one server exits via SIGKILL, completion only after the second exits
+via SIGTERM, exact preservation of the other actor, rejected restart, idempotent
+receipt retry, and unknown local-file refusal followed by safe retry preserving
+lock inode/content. All operations use an owned disposable test database.
+
+`bash Scripts/test-issue.sh T12` now runs media, structural export, backup,
+independent decisions, database fences, all-table row erasure, native admission
+and native quiescence suites. The same aggregate is registered in Bootstrap
+and its local selection. Hosted CI remains suspended during the campaign.
+No real account has been erased in qualification.

@@ -1569,5 +1569,37 @@
       "account_database_erasure"
     ],
     "requires_database": true
+  },
+  "T12-ERASURE-NATIVE": {
+    "kind": "command",
+    "command": [
+      "bash",
+      "Scripts/dev-db.sh",
+      "test-native-erasure"
+    ],
+    "tests": [
+      "client_loopback_boundary",
+      "native_process_quiescence",
+      "local_storage_inventory"
+    ],
+    "requires_database": true
+  },
+  "T12": {
+    "kind": "command",
+    "command": [
+      "python3",
+      "Scripts/test-retention.py"
+    ],
+    "tests": [
+      "t12_media",
+      "t12_export",
+      "t12_backup",
+      "t12_decisions",
+      "t12_fence",
+      "t12_rows",
+      "t12_admission",
+      "t12_native"
+    ],
+    "requires_database": true
   }
 }

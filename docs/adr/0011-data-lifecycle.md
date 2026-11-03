@@ -31,8 +31,9 @@ would therefore be inaccurate.
    physical disk erasure. PostgreSQL MVCC, WAL, replicas and existing backups
    may retain prior bytes. Administrative backups contain all actors and need
    their own approved retention/access policy. Restoring an older backup must
-   apply the latest deletion decisions before exposing recovered data; this
-   reconciliation is not yet implemented and must not be claimed complete.
+   apply the latest deletion decisions before exposing recovered data; the
+   restore utility now reconciles the independent authority, and native admission
+   rechecks it before exposing an actor. Neither step promotes the database.
 4. Export is a separate authenticated, bounded read operation. It must use an
    explicit allowlist of fields, omit raw payloads, prompts, credentials and
    unrestricted labels, and bind every query/cursor to the actor. General JSON
@@ -57,9 +58,14 @@ can still be identifying metadata and is not anonymized. The retention adapter
 is opt-in and cannot establish a deployment-wide retention guarantee unless its
 purge scheduler and clock are operated correctly.
 
-The account-wide subject scope is decided. Journal treatment, backup retention
-and restoration reconciliation still require a concrete implementation and
-verification before full policy acceptance.
+The account-wide subject scope is decided. The implemented journal exception is
+trusted administrative DELETE only for one fenced actor inside the active
+erasure transaction, with an immutable minimal receipt; ordinary UPDATE and
+TRUNCATE protections remain. Native process leases and independent restoration
+reconciliation are described and qualified in `docs/data-lifecycle.md`.
+Final policy acceptance must explicitly retain the limits on physical storage,
+backups and previously transmitted provider data; those are not silently
+converted into destruction guarantees.
 Prepare the scoped export and erasure integration before requesting final T12
 acceptance. T12 remains open until its actual requirements are verified; this
 ADR does not waive them.
