@@ -51,6 +51,9 @@ jobs:
         run: python3 Scripts/test_local_checks.py
       - name: Build pinned dependencies and modules
         run: swift build --force-resolved-versions
+      - name: Build isolated database before integration suites
+        if: runner.os == 'Linux'
+        run: bash Scripts/dev-db.sh build
       - name: Verify structured issue validation
         run: bash Scripts/test-issue.sh SQD-032
       - name: Verify credential rotation and redaction
@@ -64,18 +67,22 @@ jobs:
       - name: Synthetic frame import browser
         run: bash Scripts/test-issue.sh T06-IMPORT
       - name: Synthetic frame import browser against normal CLI and PostgreSQL
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh T06-IMPORT-LIVE
       - name: Historical questions and grounded evidence browser
         run: bash Scripts/test-issue.sh T06-QUESTIONS
       - name: Exact command approval browser
         run: bash Scripts/test-issue.sh T06-APPROVALS
       - name: Approval browser against normal server and PostgreSQL
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh T06-APPROVALS-LIVE
       - name: Temporal browser checks
         run: bash Scripts/test-issue.sh SQD-023
       - name: Temporal browser against normal server and PostgreSQL
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-023-LIVE
       - name: Verify browser review against real server and PostgreSQL
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh T06-REVIEW-LIVE
       - name: Run T01 Domain tests
         run: bash Scripts/test-issue.sh T01
@@ -184,9 +191,6 @@ jobs:
         run: bash Scripts/test-issue.sh SQD-008
       - name: Run HTTP boundary tests
         run: bash Scripts/test-issue.sh T04
-      - name: Build isolated database for Swift adapter
-        if: runner.os == 'Linux'
-        run: bash Scripts/dev-db.sh build
       - name: Verify real Swift database adapter
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh DB-CLIENT
@@ -200,28 +204,40 @@ jobs:
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-007
       - name: Verify durable consolidation journals
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-029-DURABLE
       - name: Verify authenticated consolidation review
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-029-HTTP
       - name: Durable run checkpoint recovery
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-028-DURABLE
       - name: Run process crash recovery
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-028-CRASH
       - name: Verify completed answer recovery across process crashes
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-028-PUBLICATION-CRASH
       - name: Verify CLI owned completion recovery after SIGKILL
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-028-OWNED-PUBLICATION-CRASH
       - name: Verify automatic host continuation after process crashes
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-028-AUTOMATIC-HOST-CRASH
       - name: Verify early read continuation after SIGKILL
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-028-PREPLANNING-CRASH
       - name: Verify saved plan continuation after SIGKILL
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-028-SAVED-PLAN-CRASH
       - name: Verify saved read result continuation after SIGKILL
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-028-SAVED-RESULT-CRASH
       - name: Verify saved answer continuation after SIGKILL
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-028-SAVED-ANSWER-CRASH
       - name: Verify saved completion continuation after SIGKILL
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-028-SAVED-COMPLETION-CRASH
       - name: Verify durable approval decisions and expiry
         if: runner.os == 'Linux'
@@ -263,19 +279,25 @@ jobs:
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-021-SQL
       - name: Verify durable movement publication
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh T07-SQL
       - name: Verify movement recovery after process death
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh T07-CRASH
       - name: Measure frozen PostgreSQL query benchmark
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-031-DATABASE
       - name: Verify durable internal watches
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-026-SQL
       - name: Verify watch restart after SIGKILL
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-026-CRASH
       - name: Verify frame import to durable evidence and sourced answers
         if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-020-PUBLISH
       - name: Authenticated synthetic frame import
+        if: runner.os == 'Linux'
         run: bash Scripts/test-issue.sh SQD-020-HTTP
       - name: Verify private tracing against actual PostgreSQL evidence
         if: runner.os == 'Linux'
