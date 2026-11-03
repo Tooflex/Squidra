@@ -158,3 +158,7 @@ CODEOWNERS `* @Tooflex`, one approving review, latest-push approval, stale-revie
 dismissal and no bypass. The App installation and both negative and positive
 merge tests are verified above. The private fixture repository is retained
 for audit and repeat qualification; no production rules were weakened.
+
+The end-of-campaign [CI restoration procedure](github-ci-restoration.md) defines
+the seven build/security checks and the `maintainer-ci` audit profile. Actual
+workflow activation and ruleset API verification are required separately.

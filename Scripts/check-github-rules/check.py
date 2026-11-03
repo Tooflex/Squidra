@@ -8,11 +8,12 @@ import subprocess
 
 REPO = 'Tooflex/Squidra'
 RULESET = 26267411
+SECURITY_CHECKS = {'Dependency analysis', 'Swift static analysis', 'Tracked secret scan', 'Swift lint'}
 CHECKS = {'Swift 6.4.2 / ubuntu-24.04', 'Swift 6.4.2 / macos-15', 'PostgreSQL 17 / PostGIS + pgvector'}
 
 
 def evaluate(data, profile):
-    if profile not in {'strict', 'campaign-paused'}:
+    if profile not in {'strict', 'campaign-paused', 'maintainer-ci'}:
         raise ValueError('Unknown profile')
     repo, rule = data['repository'], data['ruleset']
     by_type = {}
@@ -37,15 +38,16 @@ def evaluate(data, profile):
         'codeowner_exact': active_lines == ['* @Tooflex'],
         'identified_administrator': data.get('administrator') == {'login': 'Tooflex', 'permission': 'admin'},
     }
-    if profile == 'campaign-paused':
+    if profile in {'campaign-paused', 'maintainer-ci'}:
         results['authorized_review_profile'] = type(pr.get('required_approving_review_count')) is int and pr.get('required_approving_review_count') == 0 and pr.get('require_code_owner_review') is False
+    if profile == 'campaign-paused':
         results['required_checks_temporarily_absent'] = 'required_status_checks' not in by_type
     else:
         approvals = pr.get('required_approving_review_count')
-        results['independent_review_required'] = type(approvals) is int and approvals >= 1 and pr.get('require_code_owner_review') is True and pr.get('require_last_push_approval') is True and pr.get('dismiss_stale_reviews_on_push') is True
+        if profile == 'strict': results['independent_review_required'] = type(approvals) is int and approvals >= 1 and pr.get('require_code_owner_review') is True and pr.get('require_last_push_approval') is True and pr.get('dismiss_stale_reviews_on_push') is True
         checks = by_type.get('required_status_checks', {})
         selected = checks.get('required_status_checks', [])
-        results['strict_ci_required'] = checks.get('strict_required_status_checks_policy') is True and {x.get('context') for x in selected} == CHECKS and all(x.get('integration_id') == 15368 for x in selected)
+        results['strict_ci_required'] = checks.get('strict_required_status_checks_policy') is True and {x.get('context') for x in selected} == (CHECKS | SECURITY_CHECKS if profile == 'maintainer-ci' else CHECKS) and len(selected) == len(CHECKS | SECURITY_CHECKS if profile == 'maintainer-ci' else CHECKS) and all(x.get('integration_id') == 15368 for x in selected)
     return {
         'profile': profile,
         'status': 'passed' if all(results.values()) else 'failed',
@@ -76,7 +78,7 @@ def live():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--profile', choices=['strict', 'campaign-paused'], default='strict')
+    parser.add_argument('--profile', choices=['strict', 'campaign-paused', 'maintainer-ci'], default='strict')
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument('--live', action='store_true')
     source.add_argument('--fixture', type=Path)
