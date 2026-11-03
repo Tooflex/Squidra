@@ -1243,7 +1243,10 @@
       "facts_versions_restored",
       "restored_invariants",
       "unsafe_and_corrupt_rejected",
-      "unowned_container_rejected"
+      "unowned_container_rejected",
+      "restore_requires_authority",
+      "old_backup_erasure_reconciled",
+      "restore_reconciliation_fail_closed"
     ],
     "requires_database": true
   },
