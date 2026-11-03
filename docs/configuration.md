@@ -68,3 +68,6 @@ The native `check-config`, `serve` and `consolidate` commands also require
 host-owned private registry retained independently of database backups. It must
 already exist; startup never initializes or resets it. See
 [data lifecycle](data-lifecycle.md) for provisioning and admission semantics.
+
+The dated Spark-only [budget renewal](meta-budget-renewal.md) preserves all old
+Meta/SAM reservations and requires an explicit policy selection and migration.

@@ -16,7 +16,15 @@ enum MetaReadHostConfiguration {
         case "wonder": selected = .wonder
         default: throw Invalid.model
         }
-        let expires = try UTCInstant(secondsSince1970:MetaFileAttemptBudget.validUntilSeconds)
+        let sparkPolicy: Bool
+        switch environment["SQUIDRA_META_BUDGET_POLICY"] {
+        case nil: sparkPolicy = false
+        case MetaFileAttemptBudget.sparkPolicyID:
+            guard selected == .spark else { throw Invalid.model };sparkPolicy = true
+        default: throw Invalid.budget
+        }
+        let attemptCost: Int64 = sparkPolicy ? MetaFileAttemptBudget.sparkMaximumCostMicroUSD : 10_000_000
+        let expires = try UTCInstant(secondsSince1970:sparkPolicy ? MetaFileAttemptBudget.sparkValidUntilSeconds : MetaFileAttemptBudget.validUntilSeconds)
         // A complete run must fit before the dated qualification expires.
         guard try clock.now().secondsSince1970+180 < expires.secondsSince1970 else { throw Invalid.expired }
         guard let path = environment["SQUIDRA_META_BUDGET_DIRECTORY"],path.hasPrefix("/"),!path.contains("\0"),path.utf8.count <= 4096 else { throw Invalid.budget }
@@ -34,9 +42,9 @@ enum MetaReadHostConfiguration {
         let key = try MetaCredentialConfiguration.read(environment:environment)
         let transport = try transportFactory(key)
         let budget = try MetaFileAttemptBudget(directory:URL(fileURLWithPath:path,isDirectory:true),clock:clock)
-        let qualification = try MetaTextQualification(model:selected,maximumCostMicroUSD:10_000_000,validUntil:expires)
+        let qualification = try MetaTextQualification(model:selected,maximumCostMicroUSD:attemptCost,validUntil:expires)
         let model = MetaLanguageModel(qualification:qualification,transport:transport,budget:budget,clock:clock)
         return try ReadHostConfiguration(models:[model],entities:entities,budget:RunBudget(retries:0),
-            allowImportedEntities:allowsImportedEntities,cloudConsent:true,maximumCostMicroUSD:20_000_000,maximumOutputTokens:2048)
+            allowImportedEntities:allowsImportedEntities,cloudConsent:true,maximumCostMicroUSD:attemptCost*2,maximumOutputTokens:2048)
     }
 }

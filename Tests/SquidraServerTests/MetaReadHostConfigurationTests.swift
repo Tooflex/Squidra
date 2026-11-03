@@ -72,6 +72,15 @@ final class MetaReadHostConfigurationTests: XCTestCase, @unchecked Sendable {
         XCTAssertThrowsError(try ServerConfiguration(environment:server,clock:clock()))
         XCTAssertFalse(FileManager.default.fileExists(atPath:dir.appendingPathComponent("live-budget.json").path))
     }
+    func testRenewedSparkPolicyIsExplicitBoundedAndCannotEnableWonderOrExpiredRuns() throws {
+        var env = environment(try directory());env["SQUIDRA_META_BUDGET_POLICY"] = MetaFileAttemptBudget.sparkPolicyID
+        let configured = try host(env,time:1_793_700_000)
+        XCTAssertEqual(configured.maximumCostMicroUSD,3_000_000);XCTAssertEqual(configured.budget.retries,0)
+        XCTAssertThrowsError(try host(env,time:MetaFileAttemptBudget.sparkValidUntilSeconds-180))
+        env["SQUIDRA_META_MODEL"] = "wonder";XCTAssertThrowsError(try host(env,time:1_793_700_000))
+        env["SQUIDRA_META_MODEL"] = "spark";env["SQUIDRA_META_BUDGET_POLICY"] = "unknown"
+        XCTAssertThrowsError(try host(env,time:1_793_700_000))
+    }
     func testKeyAloneDoesNotActivateAndExplicitProfileBuildsActualAdapter() throws {
         let env = environment(try directory());var all = baseEnvironment().merging(env,uniquingKeysWith:{ _,b in b })
         XCTAssertNil(try ServerConfiguration(environment:all,clock:clock()).configuredReadHost)

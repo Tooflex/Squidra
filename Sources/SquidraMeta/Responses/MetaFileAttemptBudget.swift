@@ -1,5 +1,6 @@
 import Foundation
 import CoreFoundation
+import Crypto
 import SquidraCognition
 import SquidraDomain
 #if canImport(Darwin)
@@ -21,6 +22,9 @@ public protocol MetaSAMAttemptBudget: Sendable {
 public struct MetaFileAttemptBudget: MetaAttemptBudget, MetaSAMAttemptBudget {
     public static let validUntilSeconds: Double = 1_793_577_600
     public static let maximumReservationMicroUSD: Int64 = 11_172_000 // 10 EUR × 1.1172
+    public static let sparkPolicyID = "spark-standard-2026-11-03"
+    public static let sparkValidUntilSeconds: Double = 1_793_836_800
+    public static let sparkMaximumCostMicroUSD: Int64 = 1_500_000
     private let directory: URL
     private let clock: any SquidraDomain.Clock
     public init(directory: URL, clock: any SquidraDomain.Clock) throws {
@@ -67,17 +71,21 @@ public struct MetaFileAttemptBudget: MetaAttemptBudget, MetaSAMAttemptBudget {
         catch { throw MetaBudgetError.invalidLedger }
         guard document.kind == .object,!document.containsNUL,
               var ledger = try JSONSerialization.jsonObject(with:document.bytes) as? [String:Any] else { throw MetaBudgetError.invalidLedger }
-        var attempts = try validatedAttempts(ledger)
-        guard attempts.count < 10 else { throw ModelRoutingError.budgetExceeded }
+        let state = try validatedState(ledger)
+        var attempts = state.attempts
+        guard try clock.now().secondsSince1970 < state.expiry else { throw MetaBudgetError.expired }
+        guard maximumCostMicroUSD <= state.maximumCost,
+              !state.sparkOnly || model == MetaTextModel.spark.rawValue else { throw MetaBudgetError.invalidReservation }
+        guard state.used + state.reservation <= 10000 else { throw ModelRoutingError.budgetExceeded }
         let id = attemptID.uuidString.lowercased()
-        guard !attempts.contains(where:{ $0["id"] as? String == id }) else { throw MetaBudgetError.invalidReservation }
-        // Keep the Python schema unchanged. Correlation is intentionally omitted;
+        guard !state.ids.contains(id) else { throw MetaBudgetError.invalidReservation }
+        // Keep prior history intact. Correlation is intentionally omitted;
         // no question, provider ID, credential or private world data is persisted.
-        attempts.append(["id":id,"model":model,"reservedEURCents":1000,"status":"reserved","report":NSNull()])
+        attempts.append(["id":id,"model":model,"reservedEURCents":state.reservation,"status":"reserved","report":NSNull()])
         ledger["attempts"] = attempts
         let output = try JSONSerialization.data(withJSONObject:ledger,options:[.sortedKeys,.prettyPrinted,.withoutEscapingSlashes])
         guard output.count <= 262_144 else { throw MetaBudgetError.invalidLedger }
-        try check(deadline)
+        try check(deadline,expiry:state.expiry)
         let name = ".budget-"+UUID().uuidString.lowercased()
         let temporary = openat(parent,name,O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW | O_CLOEXEC,mode_t(0o600))
         guard temporary >= 0 else { throw MetaBudgetError.unavailable }
@@ -89,15 +97,15 @@ public struct MetaFileAttemptBudget: MetaAttemptBudget, MetaSAMAttemptBudget {
             guard written > 0 else { throw MetaBudgetError.unavailable };offset += written
         }
         guard fsync(temporary) == 0 else { throw MetaBudgetError.unavailable }
-        try check(deadline)
+        try check(deadline,expiry:state.expiry)
         guard renameat(parent,name,parent,"live-budget.json") == 0,fsync(parent) == 0 else { throw MetaBudgetError.unavailable }
         // Cancellation/expiry after commit retains the reservation but forbids dispatch.
-        try check(deadline)
+        try check(deadline,expiry:state.expiry)
     }
-    private func check(_ deadline: ContinuousClock.Instant) throws {
+    private func check(_ deadline: ContinuousClock.Instant, expiry: Double? = nil) throws {
         try Task.checkCancellation()
         guard ContinuousClock.now < deadline else { throw ModelRoutingError.deadlineExceeded }
-        guard try clock.now().secondsSince1970 < Self.validUntilSeconds else { throw MetaBudgetError.expired }
+        if let expiry { guard try clock.now().secondsSince1970 < expiry else { throw MetaBudgetError.expired } }
     }
     private func validateFile(_ fd: Int32, maximum: Int64?) throws {
         var info = stat()
@@ -105,11 +113,52 @@ public struct MetaFileAttemptBudget: MetaAttemptBudget, MetaSAMAttemptBudget {
               info.st_mode & 0o777 == 0o600,info.st_nlink == 1 else { throw MetaBudgetError.unsafePath }
         if let maximum { guard info.st_size > 0,info.st_size <= maximum else { throw MetaBudgetError.invalidLedger } }
     }
-    private func validatedAttempts(_ ledger: [String:Any]) throws -> [[String:Any]] {
-        func integer(_ value: Any?, equals expected: Int) -> Bool {
-            guard let number = value as? NSNumber,CFGetTypeID(number) != CFBooleanGetTypeID(),!["f","d"].contains(String(cString:number.objCType)) else { return false }
-            return number.stringValue == String(expected)
+    private struct State {
+        let attempts: [[String:Any]]
+        let ids: Set<String>
+        let used: Int
+        let reservation: Int
+        let expiry: Double
+        let maximumCost: Int64
+        let sparkOnly: Bool
+    }
+    private func validatedState(_ ledger: [String:Any]) throws -> State {
+        if (ledger["schemaVersion"] as? NSNumber)?.stringValue == "1" {
+            let attempts = try validatedAttempts(ledger)
+            return State(attempts:attempts,ids:Set(attempts.compactMap{$0["id"] as? String}),used:attempts.count*1000,
+                         reservation:1000,expiry:Self.validUntilSeconds,maximumCost:Self.maximumReservationMicroUSD,sparkOnly:false)
         }
+        guard Set(ledger.keys) == ["schemaVersion","authorizedEURCents","policyID","fx","validUntil","history","attempts"],
+              integer(ledger["schemaVersion"],equals:2),integer(ledger["authorizedEURCents"],equals:10000),
+              ledger["policyID"] as? String == Self.sparkPolicyID,
+              ledger["fx"] as? [String:String] == ["usdPerEUR":"1.1179","date":"2026-11-03","source":"ECB"],
+              ledger["validUntil"] as? String == "2026-11-05T00:00:00+00:00",
+              let history = ledger["history"] as? [String:String],Set(history.keys) == ["base64","sha256"],
+              let encoded = history["base64"],let raw = Data(base64Encoded:encoded),raw.count <= 262_144,
+              raw.base64EncodedString() == encoded,
+              SHA256.hash(data:raw).map({String(format:"%02x",$0)}).joined() == history["sha256"],
+              let document = try? JSONDocument(raw,maximumBytes:262_144),!document.containsNUL,
+              let legacy = try? JSONSerialization.jsonObject(with:document.bytes) as? [String:Any],
+              let attempts = ledger["attempts"] as? [[String:Any]],attempts.count <= 40 else { throw MetaBudgetError.invalidLedger }
+        let old = try validatedAttempts(legacy)
+        var ids = Set(old.compactMap{$0["id"] as? String})
+        for item in attempts {
+            guard Set(item.keys) == ["id","model","reservedEURCents","status","report"],
+                  let id = item["id"] as? String,UUID(uuidString:id)?.uuidString.lowercased() == id,ids.insert(id).inserted,
+                  item["model"] as? String == MetaTextModel.spark.rawValue,integer(item["reservedEURCents"],equals:250),
+                  let status = item["status"] as? String,["reserved","passed","failed","interrupted"].contains(status),
+                  item["report"] is NSNull || item["report"] is [String:Any] else { throw MetaBudgetError.invalidLedger }
+        }
+        let used = old.count*1000 + attempts.count*250
+        guard used <= 10000 else { throw MetaBudgetError.invalidLedger }
+        return State(attempts:attempts,ids:ids,used:used,reservation:250,expiry:Self.sparkValidUntilSeconds,
+                     maximumCost:Self.sparkMaximumCostMicroUSD,sparkOnly:true)
+    }
+    private func integer(_ value: Any?, equals expected: Int) -> Bool {
+        guard let number = value as? NSNumber,CFGetTypeID(number) != CFBooleanGetTypeID(),!["f","d"].contains(String(cString:number.objCType)) else { return false }
+        return number.stringValue == String(expected)
+    }
+    private func validatedAttempts(_ ledger: [String:Any]) throws -> [[String:Any]] {
         guard Set(ledger.keys) == ["schemaVersion","authorizedEURCents","reservationEURCents","fx","validUntil","attempts"],
               integer(ledger["schemaVersion"],equals:1),integer(ledger["authorizedEURCents"],equals:10000),integer(ledger["reservationEURCents"],equals:1000),
               ledger["fx"] as? [String:String] == ["usdPerEUR":"1.1172","date":"2026-10-30","source":"ECB"],
