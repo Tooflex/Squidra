@@ -10,11 +10,12 @@ utilities, and never publishes credentials. The archive is written to a private
 sibling, fsynced, then published atomically without replacing any existing path.
 Keep its parent directory private and controlled by the operator.
 
-`bash Scripts/restore.sh CONTAINER ARCHIVE` accepts a private, owned regular
+`bash Scripts/restore.sh CONTAINER ARCHIVE AUTHORITY_DIRECTORY` accepts a private, owned regular
 archive (no symlink/hardlink) and restores into a newly generated
 `squidra_restore_<uuid>` database using template0 and a single transaction.
-It prints that database name. It never replaces `squidra` or selects an existing
-database supplied by the caller. PostgreSQL roles and ACLs are not restored;
+It prints that database name only after reconciling current erasure decisions. It never replaces `squidra` or selects an existing
+database supplied by the caller. PostgreSQL source roles and ACLs are not restored; PUBLIC connection to the new
+database is revoked, and erasure administrative grants are explicitly restricted;
 this is a local same-role development/recovery verification profile. Matching
 PostgreSQL 17, PostGIS and pgvector extension binaries must already be installed
 in the destination image. It is not a production failover or role backup.
@@ -195,7 +196,8 @@ freshness claim is made by this component alone.
 `T12-ERASURE-DECISIONS` verifies nine offline cases, including concurrent
 requests and interrupted publication. These tests use temporary fixture IDs.
 The registry records **intent**, not completed erasure. It is not yet wired to
-startup, database deletion, local-file cleanup, worker quiescence or restoration.
+startup, live-account deletion, local-file cleanup or worker quiescence.
+Restore reconciliation is implemented below.
 Those integrations and their end-to-end interruption/isolation tests remain
 required before #48 can close. No current account has been erased.
 
@@ -272,3 +274,36 @@ before the fence, retract responses or cancel external effects already running.
 Host quiescence and independent decision reconciliation remain mandatory before
 reporting complete account erasure. A restored database alone is not sufficient
 authority to admit an account.
+
+## Restore reconciliation — 3 November 2026
+
+The restore command requires the current independent authority directory as its
+third argument. Missing, invalid or unsafe authority fails before database
+creation. The utility holds its registry lock through restoration and erasure,
+so a concurrently recorded decision cannot be omitted from the reported snapshot.
+The operator must supply the independently retained current directory; the digest
+is a content binding, not a proof that an old copied registry is current.
+
+A restored database remains a new, unpromoted recovery candidate. PUBLIC CONNECT
+is revoked before loading the archive. Only the trusted owner/operator may
+access it; do not start a server or give other processes its credentials while
+recovery is running. This same-role local profile does not isolate a superuser.
+The exact migration inventory and checksums must match the current checkout;
+older schemas are refused rather than silently migrated or promoted.
+
+After loading, one transaction re-establishes administrative erasure privileges,
+fences every actor in the authority and erases its database rows. A failure rolls
+back reconciliation and reports `database_to_inspect`, never `restored`. The
+candidate is retained for diagnosis, not automatically dropped after an uncertain
+timeout. Success includes the authority SHA-256 and reconciled actor count. The
+source database, source archive and independent authority remain unchanged.
+
+The eight `T12-BACKUP` checks include an archive created before an erasure
+decision: all 27 actor tables are checked for absence of the erased actor, the
+other actor is compared exactly, the fence prevents new writes, and the receipt
+binds the decision digest. Missing/corrupt authority, schema mismatch and an
+unrecognized actor table fail closed. PUBLIC CONNECT/administrative EXECUTE
+restrictions are checked in PostgreSQL. Existing backup and restore guards pass.
+This does not promote a database or replace startup reconciliation: decisions
+recorded after this utility releases its lock still need to be enforced at
+subsequent admission. Full live-account quiescence and local cleanup remain open.

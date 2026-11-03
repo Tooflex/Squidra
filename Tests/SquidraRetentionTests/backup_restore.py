@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Actual PostgreSQL restore qualification, exclusively in an owned ephemeral container."""
 import json
+import importlib.util
 import os
 from pathlib import Path
 import secrets
@@ -14,6 +15,10 @@ ENGINE = os.environ.get('SQUIDRA_CONTAINER_ENGINE', 'docker')
 name = 'squidra-retention-test-' + uuid.uuid4().hex[:12]
 nonce = uuid.uuid4().hex
 identity = None
+spec = importlib.util.spec_from_file_location('decisions', ROOT/'Scripts/account-erasure/decisions.py')
+decisions = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(decisions)
+authority = None
 
 
 def engine(*args, **kwargs):
@@ -27,8 +32,10 @@ def sql(statement, database='squidra', succeeds=True):
     return result.stdout
 
 
-def utility(script, archive, succeeds=True, container=None):
-    result = subprocess.run(['bash', str(ROOT / 'Scripts' / script), container or name, str(archive)], capture_output=True, timeout=180)
+def utility(script, archive, succeeds=True, container=None, authority_path=None):
+    arguments = ['bash', str(ROOT / 'Scripts' / script), container or name, str(archive)]
+    if script == 'restore.sh': arguments.append(str(authority_path or authority))
+    result = subprocess.run(arguments, capture_output=True, timeout=180)
     if (result.returncode == 0) != succeeds:
         raise AssertionError('Unexpected utility outcome: ' + result.stdout.decode())
     return json.loads(result.stdout)
@@ -36,7 +43,10 @@ def utility(script, archive, succeeds=True, container=None):
 
 try:
     with tempfile.TemporaryDirectory(prefix='squidra-retention-') as folder:
-        root = Path(folder)
+        root = Path(folder).resolve()
+        authority = root/'authority'
+        authority.mkdir(mode=0o700)
+        decisions.initialize(authority)
         credentials = root / 'credentials'
         credentials.touch(mode=0o600)
         credentials.write_text('POSTGRES_DB=squidra\nPOSTGRES_USER=squidra\nPOSTGRES_PASSWORD=' + secrets.token_urlsafe(32) + '\n')
@@ -79,6 +89,57 @@ try:
         sql('UPDATE agent_runs SET version=8', restored, succeeds=False)
         assert snapshot(restored) == before
         print('SQUIDRA_TEST_PASS:restored_invariants')
+        # An authority is mandatory even when the archive contains no fence.
+        omitted = subprocess.run(['bash', str(ROOT/'Scripts/restore.sh'), name, str(archive)], capture_output=True, timeout=10)
+        assert omitted.returncode != 0
+        missing = utility('restore.sh', archive, succeeds=False, authority_path=root/'missing')
+        assert 'database_to_inspect' not in missing
+        broken_authority = root/'broken-authority'
+        broken_authority.mkdir(mode=0o700)
+        (broken_authority/'decisions.json').touch(mode=0o600)
+        (broken_authority/'decisions.json').write_text('{}')
+        invalid_authority = utility('restore.sh', archive, succeeds=False, authority_path=broken_authority)
+        assert 'database_to_inspect' not in invalid_authority
+        print('SQUIDRA_TEST_PASS:restore_requires_authority')
+        actor = '00000000-0000-0000-0000-000000000001'
+        other = '00000000-0000-0000-0000-000000000002'
+        digest = decisions.request_erasure(authority, actor)
+        report = utility('restore.sh', archive)
+        reconciled = report['database']
+        assert report['erasure_authority_sha256'] == digest and report['reconciled_actor_count'] == 1
+        actor_tables = sql("SELECT table_name FROM information_schema.columns WHERE table_schema='public' AND column_name='actor_id' AND table_name NOT IN ('account_erasure_fences','account_database_erasure_receipts') ORDER BY table_name", reconciled).decode().splitlines()
+        assert len(actor_tables) == 27
+        for table in actor_tables:
+            assert sql(f"SELECT count(*) FROM {table} WHERE actor_id='{actor}'", reconciled).strip() == b'0'
+            query = f"SELECT row_to_json(t)::text FROM {table} t WHERE actor_id='{other}' ORDER BY row_to_json(t)::text"
+            assert sql(query, reconciled) == sql(query)
+        assert sql(f"SELECT erased FROM account_erasure_fences WHERE actor_id='{actor}'", reconciled).strip() == b't'
+        assert sql(f"SELECT complete AND authority_digest='{digest}' FROM account_database_erasure_receipts WHERE actor_id='{actor}'", reconciled).strip() == b't'
+        sql(f"INSERT INTO world_entities(id,actor_id,kind) VALUES(gen_random_uuid(),'{actor}','object')", reconciled, succeeds=False)
+        # No PUBLIC connection/admission or administrative execution grant after restore.
+        assert sql(f"SELECT count(*) FROM pg_database d, aclexplode(d.datacl) a WHERE d.datname='{reconciled}' AND a.grantee=0 AND a.privilege_type='CONNECT'").strip() == b'0'
+        assert sql("SELECT count(*) FROM pg_proc p, aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a WHERE p.proname IN ('fence_account_for_erasure','erase_fenced_account_rows') AND a.grantee=0 AND a.privilege_type='EXECUTE'", reconciled).strip() == b'0'
+        assert snapshot('squidra') == before and archive.read_bytes() == original
+        print('SQUIDRA_TEST_PASS:old_backup_erasure_reconciled')
+        # A schema mismatch and a deletion failure never report a restored database.
+        sql("UPDATE squidra_schema_migrations SET checksum=repeat('0',64) WHERE namespace='runtime' AND version='013_account_database_erasure.sql'")
+        incompatible = root/'incompatible.dump'
+        utility('backup.sh', incompatible)
+        failed = utility('restore.sh', incompatible, succeeds=False)
+        assert 'database_to_inspect' in failed
+        import hashlib
+        checksum = hashlib.sha256((ROOT/'Migrations/runtime/013_account_database_erasure.sql').read_bytes()).hexdigest()
+        sql(f"UPDATE squidra_schema_migrations SET checksum='{checksum}' WHERE namespace='runtime' AND version='013_account_database_erasure.sql'")
+        sql('CREATE TABLE unqualified_actor_data(actor_id uuid)')
+        unknown = root/'unknown-table.dump'
+        utility('backup.sh', unknown)
+        failed = utility('restore.sh', unknown, succeeds=False)
+        assert 'database_to_inspect' in failed
+        assert sql('SELECT count(*) FROM account_database_erasure_receipts', failed['database_to_inspect']).strip() == b'0'
+        assert snapshot(failed['database_to_inspect']) == before
+        sql('DROP TABLE unqualified_actor_data')
+        assert snapshot('squidra') == before
+        print('SQUIDRA_TEST_PASS:restore_reconciliation_fail_closed')
         symlink = root / 'link.dump'
         symlink.symlink_to(archive)
         utility('restore.sh', symlink, succeeds=False)
