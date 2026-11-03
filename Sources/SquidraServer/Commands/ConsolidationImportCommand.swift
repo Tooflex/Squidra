@@ -8,7 +8,8 @@ import Darwin
 #endif
 
 enum ConsolidationImportCommand {
-    static func run(configuration: ServerConfiguration, path: String) async throws -> Data {
+    static func run(configuration: ServerConfiguration, path: String, authority: ErasureAuthority) async throws -> Data {
+        guard try authority.admits(configuration.boundary.actorID) else { throw ErasureAuthority.Invalid.unavailable }
         guard !path.isEmpty, !path.contains("\0"), path.utf8.count <= 4096 else { throw ConsolidationError.invalidInput }
         let fd = open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
         guard fd >= 0 else { throw ConsolidationError.invalidInput }

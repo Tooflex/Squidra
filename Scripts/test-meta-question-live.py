@@ -94,6 +94,11 @@ def readiness(port):
 
 with tempfile.TemporaryDirectory(prefix='squidra-meta-question-') as directory:
     root = Path(directory)
+    authority_dir = Path(directory).resolve() / ('authority-' + __import__('uuid').uuid4().hex)
+    authority_dir.mkdir(mode=0o700)
+    (authority_dir / 'authority.lock').touch(mode=0o600)
+    (authority_dir / 'decisions.json').touch(mode=0o600)
+    (authority_dir / 'decisions.json').write_text('{"actors":[],"schemaVersion":1}\n')
     manifest = root / 'fixture.json'
     fixture = str(binaries / 'squidra-frame-browser-fixture')
     token = secrets.token_hex(32)
@@ -125,7 +130,7 @@ with tempfile.TemporaryDirectory(prefix='squidra-meta-question-') as directory:
     harness_passed = False
     try:
         origin = 'http://127.0.0.1:' + str(ui_port)
-        server_env = dict(browser_env, SQUIDRA_PORT='0', SQUIDRA_AUTH_TOKEN=token, SQUIDRA_ACTOR_ID=info['actor'], SQUIDRA_UI_ORIGIN=origin,
+        server_env = dict(browser_env, SQUIDRA_ERASURE_AUTHORITY_DIRECTORY=str(authority_dir), SQUIDRA_PORT='0', SQUIDRA_AUTH_TOKEN=token, SQUIDRA_ACTOR_ID=info['actor'], SQUIDRA_UI_ORIGIN=origin,
                           SQUIDRA_SYNTHETIC_IMPORT='1', SQUIDRA_SYNTHETIC_FIXTURE=str(ROOT / 'fixtures/providers/vision-synthetic.v1.json'),
                           SQUIDRA_SYNTHETIC_CAMERA_ID=info['camera'], SQUIDRA_SYNTHETIC_SCENE_ID=info['scene'], SQUIDRA_SYNTHETIC_COORDINATE_FRAME_ID=info['coordinate'],
                           SQUIDRA_DB_PORT=db_port, SQUIDRA_DB_USER='squidra', SQUIDRA_DB_PASSWORD=password, SQUIDRA_DB_NAME='squidra')

@@ -36,8 +36,13 @@ def execute(root, binaries, env, identity_path, scenario, evidence, out):
     # reserves every attempt under the existing locked global ledger.
     used = preflight(root)
     identity = json.loads(identity_path.read_text())
+    authority_dir = Path(out).resolve() / ('authority-' + __import__('uuid').uuid4().hex)
+    authority_dir.mkdir(mode=0o700)
+    (authority_dir / 'authority.lock').touch(mode=0o600)
+    (authority_dir / 'decisions.json').touch(mode=0o600)
+    (authority_dir / 'decisions.json').write_text('{"actors":[],"schemaVersion":1}\n')
     token = secrets.token_hex(32)
-    server_env = dict(env, SQUIDRA_PROFILE='meta-qualification', SQUIDRA_PORT='0',
+    server_env = dict(env, SQUIDRA_ERASURE_AUTHORITY_DIRECTORY=str(authority_dir), SQUIDRA_PROFILE='meta-qualification', SQUIDRA_PORT='0',
         SQUIDRA_UI_ORIGIN='http://127.0.0.1:3000',
         SQUIDRA_AUTH_TOKEN=token, SQUIDRA_ACTOR_ID=identity['actor'],
         SQUIDRA_DB_PORT=env['SQUIDRA_TEST_DB_PORT'], SQUIDRA_DB_PASSWORD=env['SQUIDRA_TEST_DB_PASSWORD'],

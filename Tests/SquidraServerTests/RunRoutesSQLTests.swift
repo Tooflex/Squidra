@@ -110,7 +110,7 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                 let winners = try await [one,two]
                 XCTAssertEqual(winners.filter { $0 }.count,1)
             }
-            try await ServerComposition.live(configuration:config,localOwnership:mode == 4 ? nextOwner : nil).test(.live) { http in
+            try await ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration:config,localOwnership:mode == 4 ? nextOwner : nil).test(.live) { http in
                 try await RunHTTPTestSupport.wait {
                     (try? await publication.status(actorID:actor,runID:request.runID,deadline:.now.advanced(by:.seconds(4))))?.phase == .succeeded
                 }
@@ -129,7 +129,7 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
             async let a = publication.recoverNextCompleted(at:clock.now(),deadline:.now.advanced(by:.seconds(4)))
             async let b = PostgresRunPublicationStore(client:second,actorID:actor).recoverNextCompleted(at:clock.now(),deadline:.now.advanced(by:.seconds(4)))
             let repeated = try await [a,b];XCTAssertEqual(repeated,[false,false])
-            try await ServerComposition.live(configuration:config).test(.live) { _ in
+            try await ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration:config).test(.live) { _ in
                 let status = try await publication.status(actorID:actor,runID:request.runID,deadline:.now.advanced(by:.seconds(4)))
                 XCTAssertEqual(status.stream.nextSequence,7);XCTAssertEqual(status.phase,.succeeded)
             }
@@ -170,7 +170,7 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                 let owner = try LocalRunOwnership.acquire(directory:directory,actorID:fixture.actor)
                 defer { owner.releaseAfterJoiningWorkers() }
                 let host = try ReadHostConfiguration(models:[model],entities:[PlanningEntity(id:mode == "revoked-scope" ? UUID() : fixture.entity,label:"Current scope")])
-                try await ServerComposition.live(configuration:fixture.configuration,readHost:host,localOwnership:owner).test(.live) { http in
+                try await ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration:fixture.configuration,readHost:host,localOwnership:owner).test(.live) { http in
                     if mode == "cancel" {
                         try await RunHTTPTestSupport.wait { await model.calls == 1 }
                         let cancelled = try await http.executeRequest(uri:"/api/v1/runs/"+request.runID.uuidString+"/cancel",method:.post,
@@ -285,7 +285,7 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
             let journal = PostgresWorldRepository(client: client)
             let input = try Self.report(actor: actor,entity: entity),movement = input.events[0]
             let epoch = try MovementEpoch(detector: ConfirmedMovementDetector(actorID: actor,entityID: entity,epochID: movement.epochID,entityType: movement.entityType,policy: movement.policy),samples: input.samples,origin: .synthetic)
-            try await ServerComposition.live(configuration: config).test(.live) { _ in
+            try await ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration: config).test(.live) { _ in
                 _ = try await MovementEpochRecovery(store: PostgresMovementEpochStore(client: client,actorID: actor),publisher: MovementPublisher(actorID: actor,repository: journal)).submit(epoch,deadline: .now.advanced(by: .seconds(4)))
                 try await RunHTTPTestSupport.wait {
                     (try? await store.load(id: watch.id,deadline: .now.advanced(by: .seconds(4))))?.status == .fulfilled
@@ -293,7 +293,7 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
             }
             // A new application instance must drain any remaining source/notification
             // events without redelivering the fulfilled intention.
-            try await ServerComposition.live(configuration: config).test(.live) { _ in
+            try await ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration: config).test(.live) { _ in
                 try await RunHTTPTestSupport.wait {
                     let rows = try? await client.query("SELECT c.last_sequence=(SELECT max(sequence) FROM world_events WHERE actor_id=\(actor)) FROM watch_dispatch_cursors c WHERE actor_id=\(actor)").collect()
                     return (try? rows?.first?.decode(Bool.self)) == true
@@ -312,7 +312,7 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
             defer { localOwner.releaseAfterJoiningWorkers();try? FileManager.default.removeItem(at:ownershipDirectory) }
             let recorder = PrivateTraceRecorder(limits:try TraceLimits())
             let host = try ReadHostConfiguration(models:[model],entities:[PlanningEntity(id:fixture.entity,label:"Allowed fixture entity")])
-            try await ServerComposition.live(configuration:fixture.configuration,readHost:host,traceRecorder:recorder,localOwnership:localOwner).test(.live) { http in
+            try await ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration:fixture.configuration,readHost:host,traceRecorder:recorder,localOwnership:localOwner).test(.live) { http in
                 let capabilities = try await http.executeRequest(uri:"/api/v1/run-capabilities",method:.get,headers:[.authorization:"Bearer "+fixture.token],body:nil)
                 XCTAssertEqual(capabilities.status,.ok)
                 XCTAssertEqual(try RunHTTPTestSupport.object(capabilities.body)["textRuns"] as? Bool,true)
@@ -422,7 +422,7 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
                 XCTAssertEqual(denied.status,.forbidden)
             }
             XCTAssertFalse(localOwner.isHeld)
-            try await ServerComposition.live(configuration:fixture.configuration).test(.live) { http in
+            try await ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration:fixture.configuration).test(.live) { http in
                 let anonymous = try await http.executeRequest(uri:"/api/v1/run-capabilities",method:.get,headers:[:],body:nil)
                 XCTAssertEqual(anonymous.status,.unauthorized)
                 let capabilities = try await http.executeRequest(uri:"/api/v1/run-capabilities",method:.get,headers:[.authorization:"Bearer "+fixture.token],body:nil)
@@ -441,7 +441,7 @@ final class RunRoutesSQLTests: XCTestCase, @unchecked Sendable {
             let (fixture,model,_,_) = try await RunHTTPTestSupport.realHarness(client:client,pauseOnModelCall:1)
             let recorder = PrivateTraceRecorder(limits:try TraceLimits())
             let host = try ReadHostConfiguration(models:[model],entities:[PlanningEntity(id:fixture.entity,label:"private-label-canary")])
-            try await ServerComposition.live(configuration:fixture.configuration,readHost:host,traceRecorder:recorder).test(.live) { http in
+            try await ServerComposition.live(authority:try ErasureAuthorityFixture.make(),configuration:fixture.configuration,readHost:host,traceRecorder:recorder).test(.live) { http in
                 let accepted = try await http.executeRequest(uri:"/api/v1/runs",method:.post,headers:[.authorization:"Bearer "+fixture.token,.contentType:"application/json"],body:RunHTTPTestSupport.body(fixture.entity))
                 let path = try XCTUnwrap(accepted.headers[.location])
                 try await RunHTTPTestSupport.wait { await model.calls == 1 }

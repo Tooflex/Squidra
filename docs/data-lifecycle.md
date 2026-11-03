@@ -195,9 +195,8 @@ freshness claim is made by this component alone.
 
 `T12-ERASURE-DECISIONS` verifies nine offline cases, including concurrent
 requests and interrupted publication. These tests use temporary fixture IDs.
-The registry records **intent**, not completed erasure. It is not yet wired to
-startup, live-account deletion, local-file cleanup or worker quiescence.
-Restore reconciliation is implemented below.
+The registry records **intent**, not completed erasure. Restore reconciliation and native admission are implemented below.
+Live-account orchestration, local-file cleanup and worker quiescence remain open.
 Those integrations and their end-to-end interruption/isolation tests remain
 required before #48 can close. No current account has been erased.
 
@@ -307,3 +306,45 @@ restrictions are checked in PostgreSQL. Existing backup and restore guards pass.
 This does not promote a database or replace startup reconciliation: decisions
 recorded after this utility releases its lock still need to be enforced at
 subsequent admission. Full live-account quiescence and local cleanup remain open.
+
+## Independent authority at native admission
+
+`SQUIDRA_ERASURE_AUTHORITY_DIRECTORY` is mandatory for `check-config`, `serve`
+and `consolidate`. Supply the canonical absolute path of the current private
+authority, independently retained by the trusted host. The native Swift reader
+uses POSIX path resolution, private owned regular files with one hard link,
+no-follow descriptor-relative opens, a nonblocking shared registry lock and a
+1 MiB bound. It requires the same exact canonical JSON as the Python writer.
+Missing, malformed, unsafe or locked authority refuses admission. There is no
+empty-registry fallback or startup provisioning.
+
+For a **new installation only**, provision an existing private directory once
+from the repository root (initialization refuses to overwrite a registry):
+
+```python
+import runpy
+from pathlib import Path
+registry = runpy.run_path('Scripts/account-erasure/decisions.py')
+registry['initialize'](Path('/absolute/private/current-authority'))
+```
+
+Never provision a fresh authority to recover an existing installation: recover
+its independently retained current registry. Its integrity/freshness depends on
+the trusted operator retaining the correct directory; an arbitrary old copied
+registry cannot prove freshness. No data account is erased by initialization.
+
+The CLI checks the actor before starting/importing. Live composition requires
+an authority and repeats the check for readiness, authenticated HTTP dispatch,
+publication/recovery and watch steps. A decision denies admission even if the
+database has not yet been fenced, including a base loaded from an old archive.
+Public liveness stays available. A writer holding the registry lock temporarily
+causes admission to fail closed; it does not block the request event loop.
+
+`SQD-001` passes eleven process/HTTP checks, including missing authority and an
+independent decision without a PostgreSQL fence. Its eight Swift checks include
+real readiness and five authority cases covering canonical format, new decisions,
+other actors, unknown/duplicate keys, oversize, missing files, public permissions,
+symlinks/hardlinks/FIFO and concurrent writer-lock refusal/recovery.
+This remains point-in-time admission. Work already admitted must still be joined
+before full account erasure; this component does not cancel an external effect
+or claim memory or local payload cleanup.

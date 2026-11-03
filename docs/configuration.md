@@ -62,3 +62,9 @@ is configured, not that inference quality or provider availability has been
 qualified. With no read host, POST runs returns 503 while persisted status/replay
 remain accessible. The capability route rejects query parameters and request
 bodies, uses the existing actor boundary and returns no credentials or questions.
+
+The native `check-config`, `serve` and `consolidate` commands also require
+`SQUIDRA_ERASURE_AUTHORITY_DIRECTORY`: the canonical absolute path of the current
+host-owned private registry retained independently of database backups. It must
+already exist; startup never initializes or resets it. See
+[data lifecycle](data-lifecycle.md) for provisioning and admission semantics.

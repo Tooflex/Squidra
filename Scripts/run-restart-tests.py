@@ -183,6 +183,11 @@ def main():
     require(binary.is_file(), 'Built server executable missing')
     first = second = None
     with tempfile.TemporaryDirectory(prefix='squidra-restart-') as directory:
+        authority_dir = Path(directory).resolve() / ('authority-' + __import__('uuid').uuid4().hex)
+        authority_dir.mkdir(mode=0o700)
+        (authority_dir / 'authority.lock').touch(mode=0o600)
+        (authority_dir / 'decisions.json').touch(mode=0o600)
+        (authority_dir / 'decisions.json').write_text('{"actors":[],"schemaVersion":1}\n')
         descriptor = Path(directory) / 'fixture.json'
         env['SQUIDRA_RESTART_DESCRIPTOR_PATH'] = str(descriptor)
 
@@ -194,7 +199,7 @@ def main():
             fixture = json.loads(descriptor.read_text())
             require(fixture['schemaVersion'] == '1', 'Unsupported restart fixture')
             passed('restart_fixture_seeded')
-            env.update(SQUIDRA_PORT='0', SQUIDRA_PROFILE='offline', SQUIDRA_AUTH_TOKEN=secrets.token_hex(32),
+            env.update(SQUIDRA_ERASURE_AUTHORITY_DIRECTORY=str(authority_dir), SQUIDRA_PORT='0', SQUIDRA_PROFILE='offline', SQUIDRA_AUTH_TOKEN=secrets.token_hex(32),
                        SQUIDRA_ACTOR_ID=fixture['actorId'], SQUIDRA_UI_ORIGIN='http://localhost:3000',
                        SQUIDRA_DB_PORT=port, SQUIDRA_DB_USER='squidra', SQUIDRA_DB_PASSWORD=credentials['POSTGRES_PASSWORD'], SQUIDRA_DB_NAME='squidra')
             request_ids = set()

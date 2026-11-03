@@ -16,6 +16,7 @@ enum ServerMain {
             print("SQUIDRA_DB_PORT, SQUIDRA_DB_USER, SQUIDRA_DB_PASSWORD and SQUIDRA_DB_NAME.")
             print("consolidate imports a bounded local JSON batch using the same actor/database configuration.")
             print("Optional: SQUIDRA_PORT (default 8080), SQUIDRA_PROFILE (offline default; meta-qualification opt-in).")
+            print("serve, check-config and consolidate require SQUIDRA_ERASURE_AUTHORITY_DIRECTORY (current independent registry).")
             print("Optional: SQUIDRA_RUN_DIRECTORY (existing private local directory for run recovery).")
             print("Optional synthetic import: SQUIDRA_SYNTHETIC_IMPORT=1 with SQUIDRA_SYNTHETIC_FIXTURE,")
             print("SQUIDRA_SYNTHETIC_CAMERA_ID, SQUIDRA_SYNTHETIC_SCENE_ID and SQUIDRA_SYNTHETIC_COORDINATE_FRAME_ID.")
@@ -32,19 +33,24 @@ enum ServerMain {
         }
         do {
             let configuration = try ServerConfiguration(environment: ProcessInfo.processInfo.environment)
+            let authority = try ErasureAuthority(environment: ProcessInfo.processInfo.environment)
+            guard try authority.admits(configuration.boundary.actorID) else { throw ErasureAuthority.Invalid.unavailable }
+            if arguments == ["check-config"] { print("SQUIDRA configuration valid"); return 0 }
             if importing {
-                let result = try await ConsolidationImportCommand.run(configuration: configuration, path: arguments[2])
+                let result = try await ConsolidationImportCommand.run(configuration: configuration, path: arguments[2], authority: authority)
                 FileHandle.standardOutput.write(result + Data("\n".utf8)); return 0
             }
-            if arguments == ["check-config"] { print("SQUIDRA configuration valid"); return 0 }
             let ownership = try configuration.localRunDirectory.map {
                 try LocalRunOwnership.acquire(directory:$0,actorID:configuration.boundary.actorID)
             }
             defer { ownership?.releaseAfterJoiningWorkers() }
             // Hummingbird ServiceLifecycle handles SIGINT/SIGTERM, drains requests,
             // and then shuts down the owned client pool. No direct signal handler.
-            try await ServerComposition.live(configuration: configuration,localOwnership:ownership).runService()
+            try await ServerComposition.live(authority:authority,configuration: configuration,localOwnership:ownership).runService()
             return 0
+        } catch is ErasureAuthority.Invalid {
+            FileHandle.standardError.write(Data("SQUIDRA account authority unavailable or admission denied.\n".utf8))
+            return 1
         } catch {
             // Never print configuration values, raw errors, SQL or connection strings.
             let message = importing ? "SQUIDRA could not import the batch. Check the input, actor configuration and local database.\n" : "SQUIDRA could not start or complete shutdown. Check configuration and local dependencies.\n"

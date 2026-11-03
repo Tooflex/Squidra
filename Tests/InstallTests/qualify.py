@@ -58,6 +58,11 @@ def stop(p):
 
 try:
     with tempfile.TemporaryDirectory(prefix='squidra-install-') as directory:
+        authority_dir = Path(directory).resolve() / ('authority-' + __import__('uuid').uuid4().hex)
+        authority_dir.mkdir(mode=0o700)
+        (authority_dir / 'authority.lock').touch(mode=0o600)
+        (authority_dir / 'decisions.json').touch(mode=0o600)
+        (authority_dir / 'decisions.json').write_text('{"actors":[],"schemaVersion":1}\n')
         temp=Path(directory);prefix=temp/'installed'
         try:pkg.install(archive,prefix,'0'*64);raise AssertionError('Bad hash accepted')
         except ValueError:pass
@@ -97,7 +102,7 @@ try:
             assert binding.startswith('127.0.0.1:');port=int(binding.split(':')[1])
             with socket.create_connection(('127.0.0.1',port),timeout=5):pass
             run(['bash','Scripts/dev-db.sh','migrate'],cwd=root,env=dict(os.environ,SQUIDRA_DB_CONTAINER=name,SQUIDRA_CONTAINER_ENGINE=engine))
-        service_env=dict(env,SQUIDRA_PROFILE='offline',SQUIDRA_AUTH_TOKEN=secrets.token_hex(32),SQUIDRA_ACTOR_ID=str(uuid.uuid4()),SQUIDRA_UI_ORIGIN='http://localhost:3000',SQUIDRA_PORT='0',SQUIDRA_DB_PORT=str(port),SQUIDRA_DB_USER='squidra',SQUIDRA_DB_PASSWORD=password,SQUIDRA_DB_NAME='squidra')
+        service_env=dict(env,SQUIDRA_ERASURE_AUTHORITY_DIRECTORY=str(authority_dir),SQUIDRA_PROFILE='offline',SQUIDRA_AUTH_TOKEN=secrets.token_hex(32),SQUIDRA_ACTOR_ID=str(uuid.uuid4()),SQUIDRA_UI_ORIGIN='http://localhost:3000',SQUIDRA_PORT='0',SQUIDRA_DB_PORT=str(port),SQUIDRA_DB_USER='squidra',SQUIDRA_DB_PASSWORD=password,SQUIDRA_DB_NAME='squidra')
         process=subprocess.Popen([str(prefix/'bin/squidra'),'serve'],cwd=directory,env=service_env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
         try:
             bound=wait_banner(process,'SQUIDRA listening 127.0.0.1:')

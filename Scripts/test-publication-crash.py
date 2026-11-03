@@ -74,6 +74,11 @@ def get(http_port, path, token):
         connection.close()
 
 with tempfile.TemporaryDirectory(prefix='squidra-publication-crash-') as temp:
+    authority_dir = Path(temp).resolve() / ('authority-' + __import__('uuid').uuid4().hex)
+    authority_dir.mkdir(mode=0o700)
+    (authority_dir / 'authority.lock').touch(mode=0o600)
+    (authority_dir / 'decisions.json').touch(mode=0o600)
+    (authority_dir / 'decisions.json').write_text('{"actors":[],"schemaVersion":1}\n')
     marker = Path(temp) / 'committed.json'
     env.pop('SQUIDRA_RUN_DIRECTORY', None)
     if owned:
@@ -108,7 +113,7 @@ with tempfile.TemporaryDirectory(prefix='squidra-publication-crash-') as temp:
         manifest = json.loads(marker.read_text())
         print('SQUIDRA_TEST_PASS:' + prefix + '_continuation', flush=True)
     token = secrets.token_hex(32)
-    server_env = dict(env, SQUIDRA_PROFILE='offline', SQUIDRA_PORT='0', SQUIDRA_ACTOR_ID=manifest['actor'],
+    server_env = dict(env, SQUIDRA_ERASURE_AUTHORITY_DIRECTORY=str(authority_dir), SQUIDRA_PROFILE='offline', SQUIDRA_PORT='0', SQUIDRA_ACTOR_ID=manifest['actor'],
                       SQUIDRA_AUTH_TOKEN=token, SQUIDRA_UI_ORIGIN='http://localhost:3000',
                       SQUIDRA_DB_PORT=port, SQUIDRA_DB_USER='squidra', SQUIDRA_DB_NAME='squidra',
                       SQUIDRA_DB_PASSWORD=credentials['POSTGRES_PASSWORD'])
