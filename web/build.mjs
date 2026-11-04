@@ -8,3 +8,5 @@ await copyFile('src/approvals/index.html', 'dist/approvals/index.html');
 await copyFile('src/import/index.html', 'dist/import/index.html');
 
 await copyFile('src/questions/index.html', 'dist/questions/index.html');
+
+await copyFile('src/ask/index.html', 'dist/ask/index.html');

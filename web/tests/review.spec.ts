@@ -4,7 +4,7 @@ const token = 'a'.repeat(64); // Authored public fixture; never a user credentia
 const summary = () => ({ id: proposal, subjectId: subject, version: 0, predicate: 'key.color', critical: true, state: 'pending' });
 const preview = () => ({ schemaVersion: '1', journalId: journal, journalVersion: 1, proposal: summary(), value: 'red', validFrom: '1970-01-01T00:00:00.000000Z', sourceIds: [memory], conflictingProposalIds: [], evidence: [{ memoryId: memory, sourceIds: [memory], quotation: '<script>window.compromised=true</script>', originalText: 'Original source <img src=x onerror="window.compromised=true">' }] });
 async function login(page: Page) {
-  await page.goto('/'); await page.getByLabel('Jeton de session').fill(token); await page.getByLabel('Identifiant du journal').fill(journal); await page.getByRole('button', { name: 'Consulter les propositions' }).click();
+  await page.goto('/review'); await page.getByLabel('Jeton de session').fill(token); await page.getByLabel('Identifiant du journal').fill(journal); await page.getByRole('button', { name: 'Consulter les propositions' }).click();
 }
 async function fixture(page: Page, decisionStatus = 200) {
   const posts: unknown[] = [], headers: string[] = []; let value = preview();
@@ -64,7 +64,7 @@ test('unavailability and malformed data never become empty or approved results',
 });
 test('off-host destinations are refused before a credential request', async ({ page }) => {
   let requests = 0; await page.route('https://example.com/**', route => { requests++; return route.abort(); });
-  await page.goto('/'); await page.getByLabel('Adresse du serveur').fill('https://example.com'); await page.getByLabel('Jeton de session').fill(token); await page.getByLabel('Identifiant du journal').fill(journal); await page.getByRole('button', { name: 'Consulter les propositions' }).click();
+  await page.goto('/review'); await page.getByLabel('Adresse du serveur').fill('https://example.com'); await page.getByLabel('Jeton de session').fill(token); await page.getByLabel('Identifiant du journal').fill(journal); await page.getByRole('button', { name: 'Consulter les propositions' }).click();
   await expect(page.getByRole('alert')).toContainText('adresse HTTP locale'); expect(requests).toBe(0);
 });
 test('logout prevents a late preview from reopening the session', async ({ page }) => {

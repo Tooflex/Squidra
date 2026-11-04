@@ -10,7 +10,7 @@ try {
   const page = await browser.newPage();
   const failures = []; page.on('pageerror', () => failures.push('pageerror'));
   async function open(journal, token = process.env.SQUIDRA_WEB_TOKEN) {
-    await page.goto(process.env.SQUIDRA_WEB_ORIGIN);
+    await page.goto(process.env.SQUIDRA_WEB_ORIGIN+'/review');
     await page.getByLabel('Adresse du serveur').fill(process.env.SQUIDRA_API_ORIGIN);
     await page.getByLabel('Jeton de session').fill(token);
     await page.getByLabel('Identifiant du journal').fill(journal);

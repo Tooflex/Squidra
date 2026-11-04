@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
-const files = new Map([['/', ['index.html', 'text/html; charset=utf-8']], ['/app.js', ['app.js', 'text/javascript; charset=utf-8']], ['/style.css', ['style.css', 'text/css; charset=utf-8']]]);
+const files = new Map([['/', ['ask/index.html', 'text/html; charset=utf-8']], ['/review', ['index.html', 'text/html; charset=utf-8']], ['/app.js', ['app.js', 'text/javascript; charset=utf-8']], ['/style.css', ['style.css', 'text/css; charset=utf-8']]]);
 files.set('/timeline', ['timeline/index.html', 'text/html; charset=utf-8']);
 files.set('/timeline/app.js', ['timeline/app.js', 'text/javascript; charset=utf-8']);
 files.set('/approvals', ['approvals/index.html', 'text/html; charset=utf-8']);
@@ -10,6 +10,8 @@ files.set('/import/app.js', ['import/app.js', 'text/javascript; charset=utf-8'])
 files.set('/questions', ['questions/index.html', 'text/html; charset=utf-8']);
 files.set('/questions/app.js', ['questions/app.js', 'text/javascript; charset=utf-8']);
 files.set('/questions/protocol.js', ['questions/protocol.js', 'text/javascript; charset=utf-8']);
+files.set('/ask', ['ask/index.html', 'text/html; charset=utf-8']);
+files.set('/ask/app.js', ['ask/app.js', 'text/javascript; charset=utf-8']);
 const server = http.createServer(async (request, response) => {
   const entry = files.get(request.url);
   const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',

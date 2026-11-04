@@ -33,3 +33,15 @@ el('question-form').addEventListener('submit',event=>{event.preventDefault();if(
 el('continue').addEventListener('click',()=>void perform(read));
 el('new-question').addEventListener('click',()=>{if(busy)return;clearRun();el('error').hidden=true;el('question-form').hidden=!enabled;el<HTMLButtonElement>('submit-question').disabled=!enabled;el('status').textContent='Nouvelle question. Le run précédent n’est pas annulé par cette action.';el('entity').focus();});
 el('logout').addEventListener('click',disconnect);window.addEventListener('pagehide',disconnect);
+
+const tokenInput=el<HTMLInputElement>('token'),toggle=el<HTMLButtonElement>('toggle-token'),qbox=el<HTMLTextAreaElement>('question');
+toggle.addEventListener('click',()=>{const shown=tokenInput.type==='text';tokenInput.type=shown?'password':'text';toggle.textContent=shown?'Afficher':'Masquer';toggle.setAttribute('aria-pressed',String(!shown));});
+const count=()=>{const n=new TextEncoder().encode(qbox.value).length;el('counter').textContent=n>3500?`Question : ${n} / 4096 octets.`:'';};
+qbox.addEventListener('input',count);count();
+qbox.addEventListener('keydown',event=>{if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();el<HTMLButtonElement>('submit-question').click();}});
+el('example').addEventListener('click',()=>{qbox.value='Où était cet objet au 2026-11-01T12:00:00.123456Z, connu au 2026-11-01T12:00:01.654321Z ?';count();qbox.focus();});
+el('logout').addEventListener('click',()=>{tokenInput.type='password';toggle.textContent='Afficher';toggle.setAttribute('aria-pressed','false');count();});
+tokenInput.focus();
+
+const setStep=()=>{const step=!el('connection').hidden?1:!el('question-form').hidden?2:3;document.querySelectorAll('#stepper li').forEach(li=>{const n=Number((li as HTMLElement).dataset.step);if(n===step)li.setAttribute('aria-current','step');else li.removeAttribute('aria-current');li.classList.toggle('done',n<step);});};
+new MutationObserver(setStep).observe(document.body,{subtree:true,attributes:true,attributeFilter:['hidden']});setStep();

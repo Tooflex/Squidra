@@ -14,7 +14,7 @@ npm run build --prefix web
 npm run serve --prefix web
 ```
 
-Open `http://127.0.0.1:3000`. If that port is occupied, choose another explicitly,
+Open `http://127.0.0.1:3000` (assistant: composer, camera, Meta questions); the consolidation review is at `/review`. If that port is occupied, choose another explicitly,
 for example `SQUIDRA_WEB_PORT=3001 npm run serve --prefix web`. The static server
 binds only 127.0.0.1 and serves three fixed built assets with no-store, nosniff,
 no-referrer and a CSP. It never reads environment credentials or serves arbitrary
